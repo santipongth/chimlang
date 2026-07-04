@@ -1,0 +1,85 @@
+# segments.yaml — สัดส่วน segment อย่างง่ายสำหรับ persona factory (M3)
+# ⚠️ ไฟล์สังเคราะห์: สัดส่วนเป็นค่าประมาณเพื่อการพัฒนา/ทดสอบ ไม่ใช่ข้อมูลสำมะโนจริง
+# ก่อนใช้จริงให้ปรับน้ำหนักอ้างอิงสำมะโน สสช. / สำรวจภาวะเศรษฐกิจครัวเรือน (ดู PRD หัวข้อ 9)
+# ขอบเขต: ประชากรกรุงเทพฯ-ปริมณฑลวัยผู้ใหญ่ (สอดคล้อง scenario corpus ค่าธรรมเนียมรถติด)
+
+meta:
+  version: 0.1-draft
+  drafted_by: claude (2026-07-05)
+  population_scope: กรุงเทพฯ และปริมณฑล อายุ 18 ปีขึ้นไป
+  channel_types: [line_closed_group, public_feed, algo_feed, offline_wom]
+  notes: >
+    share ต้องรวมกันได้ 1.0 | channel_mix ต่อ segment รวมกันได้ 1.0
+    cultural priors อยู่ในช่วง 0-1 (มากขึ้น = พฤติกรรมนั้นเด่นขึ้น)
+    voice_activity = แนวโน้มโพสต์/แสดงออก (ใช้แยกผู้แสดงออก vs ผู้สังเกตการณ์ — รากฐาน TRUST-07)
+
+segments:
+  - id: young_urban
+    name: คนเมืองรุ่นใหม่ (18-30 ปี ในเมือง)
+    share: 0.16
+    commute: [ขนส่งสาธารณะ, มอเตอร์ไซค์]
+    income_band: ล่าง-กลาง
+    channel_mix: {algo_feed: 0.45, public_feed: 0.30, line_closed_group: 0.15, offline_wom: 0.10}
+    voice_activity: 0.7
+    cultural_priors: {kreng_jai: 0.35, say_do_gap: 0.30, sarcasm_meme: 0.75, sensitivity_awareness: 0.55}
+    traits: [ไวต่อกระแส, ใช้มีม/ประชดเป็นภาษาหลัก, เปลี่ยนใจตามหลักฐานได้ถ้าสื่อสารตรง]
+
+  - id: working_commuter
+    name: วัยทำงานชานเมืองเข้าเมือง (31-45 ปี)
+    share: 0.22
+    commute: [รถยนต์ส่วนตัว, รถไฟฟ้า+จอดแล้วจร]
+    income_band: กลาง
+    channel_mix: {public_feed: 0.30, line_closed_group: 0.30, algo_feed: 0.25, offline_wom: 0.15}
+    voice_activity: 0.4
+    cultural_priors: {kreng_jai: 0.55, say_do_gap: 0.50, sarcasm_meme: 0.45, sensitivity_awareness: 0.60}
+    traits: [คิดจากภาระค่าใช้จ่ายครัวเรือนก่อน, บ่นในกลุ่มปิดมากกว่าโพสต์สาธารณะ]
+
+  - id: office_inner_city
+    name: พนักงานออฟฟิศในแนวรถไฟฟ้า
+    share: 0.14
+    commute: [รถไฟฟ้า, เดิน]
+    income_band: กลาง-บน
+    channel_mix: {public_feed: 0.35, algo_feed: 0.30, line_closed_group: 0.25, offline_wom: 0.10}
+    voice_activity: 0.5
+    cultural_priors: {kreng_jai: 0.50, say_do_gap: 0.40, sarcasm_meme: 0.55, sensitivity_awareness: 0.65}
+    traits: [เปรียบเทียบกับต่างประเทศบ่อย, สนใจความโปร่งใสของการใช้เงิน]
+
+  - id: gig_transport_workers
+    name: ไรเดอร์/ขนส่ง/อาชีพที่รถคือเครื่องมือทำกิน
+    share: 0.10
+    commute: [มอเตอร์ไซค์, รถกระบะ]
+    income_band: ล่าง
+    channel_mix: {line_closed_group: 0.35, algo_feed: 0.30, offline_wom: 0.20, public_feed: 0.15}
+    voice_activity: 0.6
+    cultural_priors: {kreng_jai: 0.40, say_do_gap: 0.35, sarcasm_meme: 0.60, sensitivity_awareness: 0.45}
+    traits: [รวมตัวเร็วเมื่อกระทบปากท้อง, ไม่ไว้ใจคำสัญญานโยบาย, สื่อสารแรงและได้ความเห็นใจจากสาธารณะ]
+
+  - id: small_business
+    name: ผู้ค้ารายย่อย/เจ้าของกิจการเล็กในเมือง
+    share: 0.12
+    commute: [รถกระบะ, มอเตอร์ไซค์, เดิน]
+    income_band: ล่าง-กลาง
+    channel_mix: {offline_wom: 0.35, line_closed_group: 0.30, algo_feed: 0.20, public_feed: 0.15}
+    voice_activity: 0.3
+    cultural_priors: {kreng_jai: 0.60, say_do_gap: 0.55, sarcasm_meme: 0.40, sensitivity_awareness: 0.50}
+    traits: [รับข่าวจากการบอกต่อในตลาด/ชุมชน, ข้อมูลคลาดเคลื่อนแพร่ง่าย, ตัดสินจากผลกระทบต่อยอดขาย]
+
+  - id: elderly_community
+    name: ผู้สูงอายุในชุมชน (60+ ปี)
+    share: 0.18
+    commute: [เดิน, รถเมล์, ลูกหลานขับให้]
+    income_band: หลากหลาย
+    channel_mix: {line_closed_group: 0.45, offline_wom: 0.35, public_feed: 0.10, algo_feed: 0.10}
+    voice_activity: 0.15
+    cultural_priors: {kreng_jai: 0.75, say_do_gap: 0.60, sarcasm_meme: 0.15, sensitivity_awareness: 0.70}
+    traits: [เชื่อข้อความที่ส่งต่อใน LINE ครอบครัวสูง, แก้ข่าว (correction) เข้าถึงช้า, เสียงแทบไม่ปรากฏบนแพลตฟอร์มสาธารณะ]
+
+  - id: suburban_no_transit
+    name: ครัวเรือนนอกแนวขนส่งสาธารณะ
+    share: 0.08
+    commute: [รถยนต์ส่วนตัว, มอเตอร์ไซค์]
+    income_band: กลาง-ล่าง
+    channel_mix: {line_closed_group: 0.35, public_feed: 0.25, offline_wom: 0.25, algo_feed: 0.15}
+    voice_activity: 0.25
+    cultural_priors: {kreng_jai: 0.60, say_do_gap: 0.55, sarcasm_meme: 0.35, sensitivity_awareness: 0.50}
+    traits: [ไม่มีทางเลือกเดินทางจริง, รู้สึกถูกนโยบายเมืองมองข้าม, กลุ่ม Facebook หมู่บ้านคือพื้นที่หลัก]
