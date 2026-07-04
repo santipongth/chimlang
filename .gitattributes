@@ -1,0 +1,5 @@
+# normalize line endings — โค้ดและเอกสารใช้ LF ทุกแพลตฟอร์ม (กัน CRLF noise บน Windows)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
