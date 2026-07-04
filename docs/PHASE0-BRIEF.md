@@ -18,11 +18,11 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] Thai mini-benchmark คัดเลือก crowd model — รันแล้ว 5 ก.ค. 2026: crowd = qwen3.5-flash-02-23 (22/24), analyst = qwen3-235b-a22b-2507 (ผลเต็มใน ADR-0001; qwen-2.5-7b เดิมตกที่ 3/24)
 
 ### M1 — PoC: Hindcast Data Cutoff (สัปดาห์ 2–4) ⚠️ Gate ของทั้งโครงการ
-- [ ] เลือกเหตุการณ์อดีต 1 เหตุการณ์จาก data/samples/hindcast/ (มีข้อมูลก่อนเหตุการณ์ + ผลจริง)
-- [ ] Retrieval filter: block เอกสาร/ข้อมูลที่ timestamp หลังวัน cutoff ทุก layer
-- [ ] Prompt-level filter: system prompt กำกับ agent ไม่ให้ใช้ความรู้หลัง cutoff จาก training data
-- [ ] **Adversarial leak test**: ชุดคำถามล่อ ≥ 30 ข้อที่พยายามให้ agent เผยความรู้หลัง cutoff แล้ววัด leak rate — เกณฑ์ผ่าน: ≤ 2% (ตาม AC ของ TRUST-03)
-- [ ] รายงานผล PoC: ผ่าน/ไม่ผ่าน + ข้อเสนอ (เช่น ต้องใช้ model cutoff เก่า หรือ fine-tune) — **หยุดรอการตัดสินใจจากผู้ใช้ก่อนไป M2**
+- [x] เลือกเหตุการณ์อดีต 1 เหตุการณ์จาก data/samples/hindcast/ — ใช้ 2565-bkk-governor-election (cutoff 20 พ.ค. 2565)
+- [x] Retrieval filter: block เอกสาร/ข้อมูลที่ timestamp หลังวัน cutoff ทุก layer — fail-closed + gate `hindcast_mode` กลาง (trust/hindcast, core/run_context)
+- [x] Prompt-level filter: system prompt ไทยตรึง agent ณ วัน cutoff + ห้ามใช้ความรู้หลัง cutoff
+- [x] **Adversarial leak test**: 33 ข้อ 6 กลยุทธ์ + LLM judge — **รอบ 1: ดิบ 21.2% ไม่ผ่าน / human review ชี้ leak แท้ 0–2 ข้อ ปัญหาหลักอยู่ที่ judge** (บั๊ก JSON + ตัดสินเข้มเกินเกณฑ์)
+- [x] รายงานผล PoC: docs/reports/M1-hindcast-poc-round1.md — เสนอ 3 ทางเลือก — **⏸️ หยุดรอการตัดสินใจจากผู้ใช้ก่อนไป M2**
 
 ### M2 — Ingestion & Knowledge Graph (SIM-01)
 - [ ] Ingest ข่าว/เอกสารจาก data/samples/corpus/ → entity & relationship extraction → Neo4j
