@@ -1,0 +1,36 @@
+# --- secrets (ห้าม commit เด็ดขาด) ---
+.env
+credentials.json
+token.json
+
+# --- temp / intermediates ---
+.tmp/
+*.log
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# --- node / web ---
+node_modules/
+web/dist/
+
+# --- ide / os ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- data: ไฟล์ใหญ่/ไบนารีใน samples (ไฟล์ .md/.yaml ขนาดเล็ก commit ได้) ---
+data/samples/**/*.zip
+data/samples/**/*.gz
+data/samples/**/*.parquet
+data/samples/**/*.sqlite
