@@ -1,0 +1,11 @@
+# ราคา model — USD ต่อ 1M tokens (fail-closed: model ที่ไม่อยู่ในตารางนี้รันไม่ได้)
+#
+# ⚠️ ค่าด้านล่างเป็น PLACEHOLDER — ต้องตรวจกับหน้า pricing จริงของ OpenRouter
+# ตอนยืนยัน model slug ใน M0 (ADR-0001) ก่อน run ที่ใช้เงินจริงทุกครั้ง
+models:
+  "qwen/qwen-flash":
+    input_usd_per_m: 0.10   # TODO ยืนยันราคา + slug จริงบน OpenRouter
+    output_usd_per_m: 0.40  # TODO
+  "qwen/qwen-max":
+    input_usd_per_m: 1.60   # TODO ยืนยันราคา + slug จริงบน OpenRouter
+    output_usd_per_m: 6.40  # TODO

@@ -8,6 +8,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 
 ## โครงสร้าง repo (เป้าหมาย)
 
+- `core/` — โครงสร้างร่วม: config, LLM adapter (SIM-07), cost estimator + budget guard
 - `api/` — backend service (REST API, orchestration)
 - `simulation/` — agent runtime, persona factory, social fabric channels
 - `graphlayer/` — GraphRAG ingestion, knowledge graph, entity/relationship mapping
@@ -18,12 +19,13 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - `docs/` — PRD, ADR, brief
 - `tests/` — unit + integration tests
 
-## คำสั่งหลัก (เติมค่าจริงหลัง scaffold เสร็จ — อย่าลบ section นี้)
+## คำสั่งหลัก (อย่าลบ section นี้)
 
-- Setup: `make setup`
-- Run dev: `make dev`
-- Test: `make test` — ต้องผ่านก่อน commit ทุกครั้ง
-- Lint/format: `make lint`
+- Setup: `make setup` = `uv sync`
+- Run dev: `make dev` = `docker compose up -d` (postgres+pgvector, neo4j, redis)
+- Test: `make test` = `uv run pytest -q` — ต้องผ่านก่อน commit ทุกครั้ง
+- Lint/format: `make lint` = `uv run ruff check . && uv run ruff format --check .`
+- เครื่อง Windows ที่ไม่มี `make`: รันคำสั่งฝั่งขวาโดยตรง (Makefile เป็น canonical สำหรับ CI/Linux)
 
 ## กฎเหล็ก Governance (IMPORTANT — ห้ามละเมิดไม่ว่ากรณีใด)
 

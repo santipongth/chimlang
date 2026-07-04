@@ -1,0 +1,51 @@
+# dev stack ทั้งชุด (TECH-DECISIONS D9) — `make dev` / `docker compose up -d`
+# รหัสผ่านด้านล่างใช้เฉพาะ dev local เท่านั้น (production แยก config + secrets จริง)
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: chimlang-postgres
+    environment:
+      POSTGRES_USER: chimlang
+      POSTGRES_PASSWORD: chimlang
+      POSTGRES_DB: chimlang
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chimlang -d chimlang"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: chimlang-neo4j
+    environment:
+      # ตั้ง NEO4J_PASSWORD=chimlang_dev ใน .env ให้ตรงกัน
+      NEO4J_AUTH: neo4j/chimlang_dev
+    ports:
+      - "7474:7474" # browser UI
+      - "7687:7687" # bolt
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: chimlang-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  neo4jdata:
