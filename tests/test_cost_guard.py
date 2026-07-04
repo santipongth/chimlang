@@ -66,6 +66,7 @@ def test_unknown_model_pricing_fails_closed():
 
 
 def test_pricing_yaml_in_repo_loads():
-    # ไฟล์ config/pricing.yaml จริงต้อง parse ได้เสมอ (กัน format พังเงียบๆ)
+    # ไฟล์ config/pricing.yaml จริงต้อง parse ได้ และมีราคาของ model ที่เลือกใช้จริง (ADR-0001)
     registry = PricingRegistry.from_yaml()
-    assert registry.cost_usd("qwen/qwen-flash", 1_000_000, 0) > 0
+    assert registry.cost_usd("qwen/qwen3.5-flash-02-23", 1_000_000, 0) > 0
+    assert registry.cost_usd("qwen/qwen3-235b-a22b-2507", 1_000_000, 0) > 0

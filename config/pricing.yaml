@@ -1,11 +1,17 @@
 # ราคา model — USD ต่อ 1M tokens (fail-closed: model ที่ไม่อยู่ในตารางนี้รันไม่ได้)
 #
-# ⚠️ ค่าด้านล่างเป็น PLACEHOLDER — ต้องตรวจกับหน้า pricing จริงของ OpenRouter
-# ตอนยืนยัน model slug ใน M0 (ADR-0001) ก่อน run ที่ใช้เงินจริงทุกครั้ง
+# ราคาดึงจาก OpenRouter /models API เมื่อ 5 ก.ค. 2026 — ตรวจซ้ำเป็นระยะ
+# (ราคา OpenRouter เปลี่ยนได้; ถ้า run ไหน cost จริงเพี้ยนจาก estimate เกิน 2 เท่า ให้อัปเดตไฟล์นี้)
 models:
-  "qwen/qwen-flash":
-    input_usd_per_m: 0.10   # TODO ยืนยันราคา + slug จริงบน OpenRouter
-    output_usd_per_m: 0.40  # TODO
-  "qwen/qwen-max":
-    input_usd_per_m: 1.60   # TODO ยืนยันราคา + slug จริงบน OpenRouter
-    output_usd_per_m: 6.40  # TODO
+  # crowd tier — ผู้ชนะ Thai mini-benchmark 5 ก.ค. 2026 (ดู ADR-0001)
+  "qwen/qwen3.5-flash-02-23":
+    input_usd_per_m: 0.065
+    output_usd_per_m: 0.260
+  # analyst tier — ใช้เป็น judge ใน leak test ด้วย
+  "qwen/qwen3-235b-a22b-2507":
+    input_usd_per_m: 0.090
+    output_usd_per_m: 0.100
+  # ตัวสำรอง crowd (อันดับสองใน benchmark — ถูกกว่าเล็กน้อย แต่พลาดข้อประชด)
+  "qwen/qwen3-30b-a3b-instruct-2507":
+    input_usd_per_m: 0.048
+    output_usd_per_m: 0.193

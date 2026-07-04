@@ -15,7 +15,7 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] โครง repo ตาม CLAUDE.md + docker-compose (postgres, neo4j, redis) — compose config ตรวจผ่านแล้ว (image จะ pull ตอน `make dev` ครั้งแรก)
 - [x] LLM adapter layer (OpenAI-compatible, tiered models จาก D5) + cost estimator + budget cap — `core/llm/` พร้อม unit tests 13 ข้อผ่าน
 - [x] CI: lint + test + `make` targets ครบตามที่ประกาศใน CLAUDE.md — workflow ที่ `.github/workflows/ci.yml` (จะรันจริงเมื่อ push ขึ้น GitHub)
-- [ ] ⏳ Thai mini-benchmark คัดเลือก crowd model (script + ชุดคำถาม 12 ข้อพร้อมแล้ว — **รอ API key ใน .env**): `uv run python scripts/thai_benchmark.py --models <slug1> <slug2>`
+- [x] Thai mini-benchmark คัดเลือก crowd model — รันแล้ว 5 ก.ค. 2026: crowd = qwen3.5-flash-02-23 (22/24), analyst = qwen3-235b-a22b-2507 (ผลเต็มใน ADR-0001; qwen-2.5-7b เดิมตกที่ 3/24)
 
 ### M1 — PoC: Hindcast Data Cutoff (สัปดาห์ 2–4) ⚠️ Gate ของทั้งโครงการ
 - [ ] เลือกเหตุการณ์อดีต 1 เหตุการณ์จาก data/samples/hindcast/ (มีข้อมูลก่อนเหตุการณ์ + ผลจริง)
