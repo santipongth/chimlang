@@ -208,8 +208,13 @@ def test_citizen_impact_rejects_free_text(client):
 
 
 def test_citizen_feedback_endpoint(client):
-    r = client.post("/citizen/feedback.json", json={"segment_id": "test-api", "stance": "เห็นด้วย"})
-    if r.status_code == 500:
-        pytest.skip("PostgreSQL ไม่พร้อม")
+    import psycopg
+
+    try:
+        r = client.post(
+            "/citizen/feedback.json", json={"segment_id": "test-api", "stance": "เห็นด้วย"}
+        )
+    except psycopg.OperationalError:
+        pytest.skip("PostgreSQL ไม่พร้อม (TestClient re-raise exception จาก endpoint)")
     assert r.status_code == 200
     assert "20 คน" in r.json()["k_anonymity_note"]
