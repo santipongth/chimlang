@@ -18,7 +18,7 @@ scope PRD Phase 3 = CIT-01..04 | Scale = ยกเลิก cap 10 (คำสั
 - [x] CIT-02 Portal ฉบับประชาชน (`GET /citizen/portal.html`): ภาษาง่าย + อธิบายว่าทำไมตัวเลขเป็นช่วง
 - [x] CIT-03 Feedback Loop (`POST /citizen/feedback.json`): เก็บแค่ (segment, stance จากลิสต์ปิด) — **k-anonymity: aggregate ปล่อยเมื่อ n ≥ 20 เท่านั้น** (test: 19 เสียง = กัก, 20 = ปล่อย)
 - [x] CIT-04 disclaimer ถาวรทุก output (ค่าคงที่เดียว, portal มีหัว+ท้าย, test ครอบ)
-- [ ] คิวถัดไป: inject aggregate feedback กลับเข้า simulation รอบใหม่ (ครึ่งหลังของ CIT-03) + แสดงต่อสาธารณะว่าเสียงจริงเปลี่ยนผลจำลองอย่างไร
+- [x] CIT-03 ครึ่งหลัง: `apply_feedback_round()` — เสียงค้าน/กังวล (เฉพาะที่ผ่าน k-anonymity) เป็น prior ของ sim รอบใหม่ → portal แสดงคู่ "ก่อน/หลังรับเสียงจริง" เสมอ (โปร่งใส); `inject_feedback_to_memory()` เขียน aggregate เข้า Living Memory เป็น real_event
 
 ## สายที่ 3 — P3-Q: เก็บคุณภาพ (บางส่วน 6 ก.ค. 2026)
 

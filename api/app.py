@@ -266,11 +266,13 @@ def citizen_portal() -> str:
     from simulation.citizen import (
         CitizenInputs,
         FeedbackPool,
+        apply_feedback_round,
         build_impact_twin,
         render_citizen_portal,
     )
 
     settings = get_settings()
+    factory = PersonaFactory()
     sample = CitizenInputs(
         income_band="15k-30k",
         region="ชานเมือง",
@@ -280,11 +282,15 @@ def citizen_portal() -> str:
         household_size=3,
     )
     twin = build_impact_twin(
-        sample, PersonaFactory(), max_agents=settings.max_agents_per_run, seed=settings.default_seed
+        sample, factory, max_agents=settings.max_agents_per_run, seed=settings.default_seed
     )
     pool = FeedbackPool(settings.postgres_url)
     pool.setup()
-    md = render_citizen_portal("มาตรการค่าธรรมเนียมรถติด กทม.", twin, pool.aggregates())
+    aggregates = pool.aggregates()
+    effect = apply_feedback_round(
+        aggregates, factory, max_agents=settings.max_agents_per_run, seed=settings.default_seed
+    )
+    md = render_citizen_portal("มาตรการค่าธรรมเนียมรถติด กทม.", twin, aggregates, effect)
     return (
         "<!doctype html><html lang='th'><head><meta charset='utf-8'></head>"
         "<body><pre style='white-space:pre-wrap;font-family:system-ui'>"

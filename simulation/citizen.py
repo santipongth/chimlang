@@ -209,7 +209,91 @@ class FeedbackPool:
         return sorted(seg for seg, cnt in rows if cnt < K_ANONYMITY)
 
 
-def render_citizen_portal(title: str, twin: ImpactTwin, aggregates: list[dict]) -> str:
+@dataclass(frozen=True)
+class FeedbackEffect:
+    """CIT-03 ครึ่งหลัง — เสียงจริงเปลี่ยนผลจำลองอย่างไร (แสดงต่อสาธารณะ)"""
+
+    disagree_share: float  # สัดส่วนเสียงไม่เห็นด้วย/กังวล จาก aggregate ที่ปล่อยแล้ว
+    concern_without_feedback: tuple[float, float]
+    concern_with_feedback: tuple[float, float]
+
+
+def disagree_share_from(aggregates: list[dict]) -> float | None:
+    """สัดส่วนเสียง 'ไม่เห็นด้วย' + 'กังวล' จาก aggregate ที่ผ่าน k-anonymity แล้วเท่านั้น"""
+    total = sum(a["count"] for a in aggregates)
+    if total == 0:
+        return None
+    negative = sum(a["count"] for a in aggregates if a["stance"] != "เห็นด้วย")
+    return negative / total
+
+
+def apply_feedback_round(
+    aggregates: list[dict],
+    factory: PersonaFactory,
+    *,
+    agents: int = 100,
+    max_agents: int,
+    seed: int,
+    rounds: int = 20,
+) -> FeedbackEffect | None:
+    """รัน sim คู่ (ไม่มี/มีเสียงจริงเป็น prior) — เสียงจริง preseed ระดับความกังวลตั้งต้น
+
+    คืน None ถ้ายังไม่มี aggregate ที่ผ่าน k-anonymity (ไม่มีเสียงจริงให้ inject)
+    """
+    from simulation.engine import FabricSimulation, Message
+    from simulation.warroom import _preseed_believers
+
+    share = disagree_share_from(aggregates)
+    if share is None:
+        return None
+    rumor_text = "ข่าวลือ: จะเก็บค่าธรรมเนียมมอเตอร์ไซค์ทุกคัน"
+
+    def concern_range(with_prior: bool) -> tuple[float, float]:
+        rates = []
+        for s in range(4):
+            personas = factory.sample(agents, seed=seed + s, max_agents=max_agents)
+            sim = FabricSimulation(personas, seed=seed + s)
+            if with_prior:
+                sim.preseed(
+                    Message("rumor", "rumor", rumor_text, 0, "public_feed"),
+                    _preseed_believers(personas, share),
+                )
+            else:
+                sim.inject(Message("rumor", "rumor", rumor_text, 1, "public_feed"))
+            result = sim.run(rounds)
+            rates.append(
+                sum(1 for st in result.states.values() if st.believed.get("rumor"))
+                / len(result.states)
+            )
+        return (min(rates), max(rates))
+
+    return FeedbackEffect(
+        disagree_share=share,
+        concern_without_feedback=concern_range(False),
+        concern_with_feedback=concern_range(True),
+    )
+
+
+def inject_feedback_to_memory(aggregates: list[dict], memory, workspace: str) -> int:
+    """บันทึก aggregate (ที่ผ่าน k-anonymity แล้วเท่านั้น) เข้า Living Memory เป็นเหตุการณ์จริง"""
+    written = 0
+    for a in aggregates:
+        memory.remember(
+            workspace,
+            "real_event",
+            f"เสียงประชาชน (aggregate ≥{K_ANONYMITY} คน) กลุ่ม {a['segment_id']}: "
+            f"{a['stance']} {a['count']}/{a['n_total']}",
+        )
+        written += 1
+    return written
+
+
+def render_citizen_portal(
+    title: str,
+    twin: ImpactTwin,
+    aggregates: list[dict],
+    effect: "FeedbackEffect | None" = None,
+) -> str:
     """CIT-02 — หน้า portal ฉบับประชาชน: ภาษาง่าย + ช่วงความไม่แน่นอน + disclaimer ถาวร"""
     b_lo, b_hi = twin.concern_baseline
     a_lo, a_hi = twin.concern_after_response
@@ -237,5 +321,18 @@ def render_citizen_portal(title: str, twin: ImpactTwin, aggregates: list[dict]) 
         ]
     else:
         lines.append("_ยังไม่มีกลุ่มใดถึงเกณฑ์ 20 เสียง — ความเห็นถูกเก็บไว้อย่างปลอดภัยจนกว่าจะถึงเกณฑ์_")
+    if effect is not None:
+        wo_lo, wo_hi = effect.concern_without_feedback
+        w_lo, w_hi = effect.concern_with_feedback
+        lines += [
+            "",
+            "## เสียงจริงเปลี่ยนผลจำลองอย่างไร (CIT-03)",
+            "",
+            f"- เสียงไม่เห็นด้วย/กังวลจากประชาชนจริง: **{effect.disagree_share:.0%}** "
+            "→ ถูกป้อนเป็นจุดตั้งต้นของการจำลองรอบใหม่",
+            f"- ผลจำลอง**ก่อน**รับเสียงจริง: กังวล {wo_lo:.0%}–{wo_hi:.0%}",
+            f"- ผลจำลอง**หลัง**รับเสียงจริง: กังวล {w_lo:.0%}–{w_hi:.0%}",
+            "- ความโปร่งใส: เราแสดงทั้งสองตัวเลขเสมอ เพื่อให้เห็นว่าเสียงของคุณมีผลจริงต่อแบบจำลอง",
+        ]
     lines += ["", f"> ⚠️ {CITIZEN_DISCLAIMER}"]  # ปิดท้ายซ้ำ — ถาวรจริง (CIT-04)
     return "\n".join(lines)
