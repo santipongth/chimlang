@@ -2,6 +2,7 @@
 
 Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (Scenario Rehearsal) — จำลองปฏิกิริยาของสังคมไทยใน Digital Sandbox ก่อนตัดสินใจจริง
 
+- คู่มือ agent ทุกโมเดล + protocol ส่งมอบงานข้ามโมเดล: @AGENTS.md | สถานะล่าสุด: @docs/STATE.md (**อัปเดตก่อนจบทุก session**)
 - Spec ฉบับเต็ม: @docs/PRD-SANAM.md (PRD v1.1 — ชื่อชั่วคราวเดิม "SANAM" = ชิมลาง)
 - การตัดสินใจทางเทคนิค: @docs/TECH-DECISIONS.md (อ่านก่อนเลือก library/framework ใดๆ)
 - Scope ปัจจุบัน: **Phase 0 เท่านั้น** — ดู @docs/PHASE0-BRIEF.md ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
