@@ -18,7 +18,8 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 3 (Citizen + Scale + Quality) — เริ่ม 6 ก.ค. 2026 | โครงหลักครบทั้ง 3 สาย** — ดู docs/PHASE3-BRIEF.md (Phase 0-2 ปิดครบ)
+- เฟส: **Phase 4 (Production Readiness) — เริ่ม 6 ก.ค. 2026 | P4-M1 React UI เสร็จ** — ดู docs/PHASE4-BRIEF.md (Phase 0-3 ของ PRD ปิดครบ)
+- **Web UI ใช้ได้แล้ว**: `make api` → http://localhost:8000/app/ (dev แยก: `cd web && npm run dev`) — 2 คอลัมน์ sidebar+content, theme เขียวมรกต/พื้นสว่างตาม ref ผู้ใช้, TH/EN toggle, 5 หน้า (landing/wizard รันใหม่/dashboard/citizen/การจัดการรัน)
 - **⚡ CAP เปลี่ยนแล้ว (คำสั่งผู้ใช้ 6 ก.ค.): 1,000 agents/run** (rename เป็น `max_agents_per_run`) — deep 5,000 ต้องขอผู้ใช้ก่อน; `RUN_BUDGET_USD_CAP=5`/run
 - **Scale วัดจริงแล้ว**: multiverse 1,000×30×5u = 5.8 วิ | Standard run เต็มรูป $25.09 (thinking-on) / $0.82 (off) → **exit criteria cost ≤$80 ผ่าน ✅** (docs/reports/scale-measurement.md)
 - **✅ Re-calibrate เสร็จ (ADR-0003)**: scenario ระดับเมืองที่ scale ≥100 ใช้ rumor preseed 10% + 60 rounds + คำชี้แจง `broadcast_share=0.20` → delta scale-invariant (−15% ทั้ง n=100/1,000); `Message.broadcast_share` เพิ่มใน engine (default 0 = เดิม)
@@ -105,3 +106,4 @@
 - 2026-07-06 (Claude Fable 5): **Phase 3 เริ่ม (ผู้ใช้สั่ง 3 สายพร้อมกัน) — โครงหลักครบ**: (S) cap→1,000+rename+perf fix+วัดจริง: standard $25.09/$0.82 ผ่าน ≤$80✅, 1000×30×5u=5.8วิ, **finding: delta หด −16.5%→−1.2% ที่ scale ใหญ่ ต้อง re-calibrate**; (C) CIT-01..04: impact twin session-only (test พิสูจน์ไม่แตะ DB), portal, feedback k-anonymity≥20, disclaimer ถาวร; (Q) UTF-8 console จุดเดียว + /graph/indirect.json; tests 188 เขียว
 - 2026-07-06 (Claude Fable 5): **CIT-03 ครึ่งหลังเสร็จ = CIT-01..04 ครบเต็มข้อ** — เสียงจริง (ผ่าน k-anonymity) เป็น prior sim รอบใหม่, portal แสดงคู่ก่อน/หลังรับเสียง, inject เข้า Living Memory เป็น real_event; tests 191 เขียว
 - 2026-07-06 (Claude Fable 5): **Re-calibrate scale เสร็จ (ADR-0003)** — วินิจฉัย: seeder เดี่ยว penetration 92%→8% เมื่อ n โต + คำชี้แจงไหลจากคนเดียวผิดธรรมชาติ; แก้: preseed 10% + 60 rounds + `Message.broadcast_share=0.20` (โหมดสื่อมวลชนใหม่ใน engine) → delta −15% เท่ากันที่ n=100/1,000; tests 193 เขียว; แก้ CI ที่แดงจาก test skip ไม่สะอาด (บทเรียน: watch CI ด้วย SHA ไม่ใช่ --limit 1)
+- 2026-07-06 (Claude Fable 5): **เริ่ม Phase 4 + P4-M1 React UI เสร็จ** — Vite+React18+TS+Tailwind4, theme/layout ตาม ref ผู้ใช้ (sidebar+content 2 คอลัมน์, เขียวมรกต, serif heading, step wizard), i18n TH/EN ทุกหน้า, 5 หน้า รวม landing + การจัดการรัน (/runs.json ใหม่ + recent_runs()), FastAPI เสิร์ฟ dist ที่ /app; tests 196 เขียว; ถัดไป P4-M2 PDF export

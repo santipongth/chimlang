@@ -134,3 +134,43 @@ def test_dashboard_html_renders(client):
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "<h1>" in r.text
+
+
+def test_dashboard_agents_param_capped(client):
+    # P4-M1: ผู้เรียกขอ agents ได้ แต่ไม่เกิน cap ต่อ run — ค่าเล็กเพื่อความเร็ว
+    r = client.get("/dashboard.json", params={"agents": 20})
+    assert r.status_code == 200
+    r_bad = client.get("/dashboard.json", params={"agents": 3})
+    assert r_bad.status_code == 422  # ต่ำกว่า ge=10
+
+
+def test_runs_endpoint_lists_recent_runs(client):
+    import psycopg
+
+    try:
+        r = client.get("/runs.json")
+    except psycopg.OperationalError:
+        import pytest as _pytest
+
+        _pytest.skip("PostgreSQL ไม่พร้อม")
+    if r.status_code == 503:
+        import pytest as _pytest
+
+        _pytest.skip("PostgreSQL ไม่พร้อม")
+    body = r.json()
+    assert "runs" in body and "due" in body
+    if body["runs"]:
+        first = body["runs"][0]
+        assert {"run_id", "started", "predictions", "exported"} <= set(first)
+
+
+def test_web_dist_served_when_built(client):
+    from api.app import _WEB_DIST
+
+    if not _WEB_DIST.exists():
+        import pytest as _pytest
+
+        _pytest.skip("web/dist ยังไม่ build (npm run build)")
+    r = client.get("/app/")
+    assert r.status_code == 200
+    assert "ชิมลาง" in r.text  # title จาก index.html

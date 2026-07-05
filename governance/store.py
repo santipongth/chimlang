@@ -200,6 +200,26 @@ class GovernanceStore:
             DomainCalibration(domain=r[0], resolved=int(r[1]), mean_brier=float(r[2])) for r in rows
         ]
 
+    def recent_runs(self, limit: int = 30) -> list[dict]:
+        """สรุปรันล่าสุดจาก audit log (read-only) — สำหรับหน้าการจัดการรัน (P4-M1)"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT a.run_id, min(a.ts) AS started, "
+                "bool_or(a.action = 'report_exported') AS exported, "
+                "(SELECT count(*) FROM prediction_registry p WHERE p.run_id = a.run_id) AS preds "
+                "FROM audit_log a GROUP BY a.run_id ORDER BY started DESC LIMIT %s",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "run_id": r[0],
+                "started": r[1].isoformat(),
+                "exported": bool(r[2]),
+                "predictions": int(r[3]),
+            }
+            for r in rows
+        ]
+
     def predictions_for_run(self, run_id: str) -> int:
         with self._conn() as conn:
             row = conn.execute(

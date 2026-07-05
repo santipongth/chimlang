@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* theme ตามเว็บอ้างอิงของผู้ใช้ (6 ก.ค. 2026): พื้นสว่างโทนเย็น + primary เขียวมรกต + มุมโค้ง .75rem */
+@theme {
+  --color-background: oklch(99% 0.003 240);
+  --color-foreground: oklch(20% 0.03 250);
+  --color-card: oklch(100% 0 0);
+  --color-primary: oklch(70% 0.15 160);
+  --color-primary-strong: oklch(55% 0.14 160);
+  --color-primary-soft: oklch(95% 0.04 160);
+  --color-secondary: oklch(96% 0.01 240);
+  --color-muted: oklch(96.5% 0.008 240);
+  --color-muted-foreground: oklch(50% 0.02 250);
+  --color-accent: oklch(94% 0.05 200);
+  --color-destructive: oklch(62% 0.22 25);
+  --color-border: oklch(92% 0.008 240);
+  --color-sidebar: oklch(98% 0.005 240);
+  --radius: 0.75rem;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans Thai", sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+.font-display {
+  font-family: Georgia, "Times New Roman", "Noto Serif Thai", serif;
+}

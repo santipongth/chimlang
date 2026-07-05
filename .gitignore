@@ -35,3 +35,5 @@ data/samples/**/*.gz
 data/samples/**/*.parquet
 data/samples/**/*.sqlite
 toh-read.txt
+node_modules/
+web/dist/
