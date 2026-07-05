@@ -207,6 +207,47 @@ def dashboard_pdf(
     return FileResponse(out, media_type="application/pdf", filename=f"chimlang-{run_id}.pdf")
 
 
+class JobRequest(BaseModel):
+    subject: str
+    granularity: str = "aggregate"
+    agents: int = 100
+
+
+@app.post("/jobs/whatif")
+def submit_job(req: JobRequest) -> dict:
+    """P4-M3 — ส่ง simulation เข้าคิว (Celery) แทนการรอใน request (NFR-03)"""
+    from core.tasks import celery_app, whatif_dashboard_task
+
+    policy = ElectionPolicy(classify_scenario(req.subject))
+    try:
+        policy.require_aggregate(req.granularity)  # fail fast ก่อน enqueue
+    except ElectionModeError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    agents = min(max(req.agents, 10), get_settings().max_agents_per_run)
+
+    if celery_app.conf.task_always_eager:  # โหมด test — รันทันทีไม่ต้องมี broker
+        res = whatif_dashboard_task.apply(args=(req.subject, req.granularity, agents))
+        return {"job_id": res.id, "status": "SUCCESS", "result": res.get()}
+    try:
+        async_res = whatif_dashboard_task.delay(req.subject, req.granularity, agents)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"queue ไม่พร้อม (redis?): {e}") from e
+    return {"job_id": async_res.id, "status": async_res.status}
+
+
+@app.get("/jobs/{job_id}")
+def job_status(job_id: str) -> dict:
+    from core.tasks import celery_app
+
+    res = celery_app.AsyncResult(job_id)
+    body: dict = {"job_id": job_id, "status": res.status}
+    if res.successful():
+        body["result"] = res.result
+    elif res.failed():
+        body["error"] = str(res.result)
+    return body
+
+
 @app.get("/runs.json")
 def runs_json() -> dict:
     """หน้าการจัดการรัน (P4-M1): รันล่าสุด + คำทำนายที่ครบกำหนดรอ resolve"""

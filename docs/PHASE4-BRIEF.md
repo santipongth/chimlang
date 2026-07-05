@@ -21,8 +21,11 @@
 - [x] `GET /dashboard.pdf`: Executive Brief เป็น PDF — GOV-02 คุมครบ (individual=403, election aggregate ติดป้าย 3 ชนิด**ใน PDF จริง** ตรวจด้วย extract_text)
 - [x] tests +4 (รวม 200 เขียว)
 
-### P4-M3 — Queue จริง (Celery + Redis ตาม D7) + หลาย run พร้อมกัน (NFR-03)
-- [ ] simulation run เป็น async task + สถานะ/ผลผ่าน API
+### P4-M3 — Queue จริง (Celery + Redis ตาม D7) + หลาย run พร้อมกัน (NFR-03) ✅ (6 ก.ค. 2026)
+- [x] `core/tasks.py`: Celery app (broker/backend = redis จาก env) + task `whatif_dashboard` — worker: `make worker` (Windows ใช้ --pool=solo)
+- [x] `POST /jobs/whatif` (enqueue, election guard **ก่อน**เข้าคิว + clamp agents ที่ cap) + `GET /jobs/{id}` (สถานะ/ผล)
+- [x] Governance 2 ชั้น: ยิง task ตรงข้าม API ก็ยังโดน require_aggregate (test ครอบ)
+- [x] broker จริงเชื่อมได้ (smoke กับ redis ใน docker) | tests eager-mode +4 (รวม 204 เขียว) — worker เต็มวงจรทดสอบ manual
 
 ### P4-M4 — Auth + RBAC บังคับที่ API (GOV-06 เชื่อมจริง) + workspace isolation
 
