@@ -1,0 +1,3 @@
+# machine-readable ground truth — โหลดโดย scorer เท่านั้น ห้าม loader/agent แตะ
+leader_becomes_pm: false
+next_pm_from_second_party: true

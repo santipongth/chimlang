@@ -1,0 +1,23 @@
+event_id: 2566-general-election
+title: การเลือกตั้งทั่วไป 14 พฤษภาคม 2566
+event_date: "2023-05-14"
+cutoff_date: "2023-05-12"
+
+prediction_targets:
+  - id: mfp_most_seats
+    claim: "พรรคฝ่ายค้านสายก้าวหน้า (ผู้นำกระแสคนรุ่นใหม่) จะได้ ส.ส. มากที่สุด แซงพรรคฝ่ายค้านหลักเดิม"
+    type: binary
+    measurement: จำนวน ส.ส. รวมต่อพรรคตามประกาศ กกต.
+  - id: turnout_above_70
+    claim: "ผู้มาใช้สิทธิ์เกิน 70% ของผู้มีสิทธิ์"
+    type: binary
+    measurement: ตัวเลขผู้มาใช้สิทธิ์ทางการ
+
+measurement_method: |
+  เทียบคำทำนายทิศทาง (aggregate) กับ outcome.md — ห้ามใช้ข้อมูลหลัง cutoff ทุก layer (TRUST-03)
+  scenario เลือกตั้ง: output aggregate เท่านั้น ติดป้าย simulation_estimate / not_field_poll (GOV-02)
+
+notes: |
+  จุดเด่นของ case: โค้งสุดท้ายโพลหลายสำนักเพิ่งเริ่มชี้การแซงของพรรคสายก้าวหน้า
+  แต่ยังไม่มีฉันทามติ — ความไม่แน่นอนจริงสูง ต่างจาก case ผู้ว่าฯ กทม. ที่โพลนิ่งกว่า
+  เอกสาร before/ เป็นบทสรุปเรียบเรียงย้อนหลังจากข้อเท็จจริงสาธารณะก่อน cutoff

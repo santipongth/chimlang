@@ -1,0 +1,3 @@
+# machine-readable ground truth — โหลดโดย scorer เท่านั้น ห้าม loader/agent แตะ
+mfp_most_seats: true
+turnout_above_70: true

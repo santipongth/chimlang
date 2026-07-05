@@ -61,6 +61,7 @@ def render_whatif_report(
         "| กลุ่ม | เชื่อข่าวลือ (baseline) | เชื่อข่าวลือ (หลัง inject) |",
         "|---|---|---|",
     ]
+
     def seg_belief(result: RunResult, seg: str) -> float:
         members = [st for st in result.states.values() if st.persona.segment_name == seg]
         return sum(1 for st in members if st.believed.get(base_msg_id)) / max(1, len(members))
