@@ -24,9 +24,11 @@ REH-01/03/04/05, SIG-01..04, SIM-05/08/09/10/11, FAB-03/04 | **TRUST-08 defer** 
 - [x] Unit tests +9 (รวม 132 เขียว) — รวม test adapter param `reasoning`
 - **บทเรียนสำคัญ**: crowd model (qwen3.5-flash) เผา ~1,200 hidden thinking tokens/call (14.5 วิ) กับงานที่ตอบ 1 ประโยค — เพิ่ม `reasoning=False` ใน adapter สำหรับ path interactive (rehearsal/voice) → 0.5 วิ + ถูกลง 10 เท่า; งานคิดลึก (judge/hindcast/benchmark) คง default เดิมเพื่อไม่กระทบคุณภาพตาม ADR-0001
 
-### P2-M2 — Game Mode (REH-03)
-- [ ] เกมหลายตา: เราเดิน → strategic actor (คู่แข่ง/ฝ่ายค้าน) เดินตอบ → สังคม react (engine เดิม) ≥ 3 ตา
-- [ ] Decision tree สรุปเส้นทาง + ความเสี่ยงต่อทาง | governance ครบวงจร | unit tests
+### P2-M2 — Game Mode (REH-03) ✅ (6 ก.ค. 2026)
+- [x] `simulation/game.py`: เราเดิน → strategic actor (analyst tier, GOV-05 ใน prompt) เดินตอบ → สังคม react ผ่าน **engine กลไก deterministic** (ข้อความสองฝั่งแข่งกันแพร่ วัดสัดส่วนผู้เชื่อ) — ≥ 3 ตาบังคับที่ `decision_tree()`
+- [x] Decision tree: เส้นทางจริง + ทางเลือกที่ไม่ได้เดินต่อตา (analyst temp 0 + fail-closed เก็บข้อมูลเกมแม้ parse พัง) | CLI สด + `--moves` scripted
+- [x] ครบวงจร governance + demo จริง ($0.001): ฝ่ายค้านตอบโต้เชิงชั้น (เอกสารวิชาการ/คำถามเชิงกระบวนการ), ความเชื่อฝั่งเราไต่ 20%→40%→60% ตามการเดิน 3 ตา
+- [x] Unit tests +6 (รวม 138 เขียว)
 
 ### P2-M3 — Live War Room + Divergence Alarm (REH-04/05 + SIM-11)
 - [ ] Feed ข้อมูล aggregate (file/RSS) → sync โลกจำลอง → simulate ล่วงหน้า 48 ชม./รอบ
