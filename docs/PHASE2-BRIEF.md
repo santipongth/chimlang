@@ -37,10 +37,12 @@ REH-01/03/04/05, SIG-01..04, SIM-05/08/09/10/11, FAB-03/04 | **TRUST-08 defer** 
 - [x] Governance ครบ + prediction แบบ resolve ได้จริงใน 2 วัน (belief share จะอยู่ในช่วง envelope) — อาหารชั้นดีของ Calibration Engine
 - [x] Unit tests +8 (รวม 146 เขียว)
 
-### P2-M4 — Sim-to-Signal API + Out-of-Sample Harness (SIG-01..04)
-- [ ] Features พร้อมช่วง: Narrative Momentum/Dispersion, Consensus Fragility, Sentiment Divergence, Contrarian Pressure ฯลฯ
-- [ ] Metadata บังคับทุก response + rate limit + disclaimer field | GOV-02 ปิด signal (ต่อ guard เดิมเข้า endpoint)
-- [ ] Out-of-sample harness: train/test split enforcement + IC/hit rate เทียบ baseline
+### P2-M4 — Sim-to-Signal API + Out-of-Sample Harness (SIG-01..04) ✅ (6 ก.ค. 2026)
+- [x] `trust/signal.py`: 6 features จากกลไกจริง per-seed + CI95 (momentum/dispersion/sentiment divergence/contrarian/adoption/consensus fragility) — deterministic ต่อ seed
+- [x] SIG-03/04: metadata บังคับทุก response (run id/fragility/calibration note/provenance hash/model version) + disclaimer เชิงโครงสร้าง + rate limiter (429) ที่ `/signal.json`
+- [x] GOV-02 ที่ endpoint จริง: subject เลือกตั้ง → `guard_sim_to_signal()` → **403** (test ครอบ)
+- [x] `trust/signal_harness.py` (SIG-02): train/test split ตามเวลาเท่านั้น (กัน look-ahead), Spearman IC + hit rate เทียบ baseline (ทายข้างมากจาก train), **test set < 5 จุด = ปฏิเสธการสรุป** (fail-closed) — endpoint `/signal/oos-test.json`
+- [x] Unit tests +13 (รวม 159 เขียว) — รวม harness จับ feature มั่วไม่ให้ผ่าน baseline
 
 ### P2-M5 — Living Memory + Conversational Querying (SIM-05/08)
 - [ ] World state ต่อ workspace ใน pgvector + "reset world" | ผลรันก่อนหน้า/เหตุการณ์จริงซึมเข้า memory
