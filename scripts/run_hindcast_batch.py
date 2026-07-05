@@ -13,6 +13,7 @@ from pathlib import Path
 
 from core.config import get_settings
 from core.llm import BudgetGuard, CostEstimator, LLMAdapter, PricingRegistry, TierLoad
+from governance.election import ElectionPolicy, classify_scenario
 from trust.hindcast import load_event
 from trust.hindcast.predictor import event_passes, load_truth, predict_event
 
@@ -126,6 +127,14 @@ def main() -> None:
         f"- ต้นทุนจริง: ${guard.spent_usd:.4f}",
     ]
     report = "\n".join(lines)
+    # GOV-02: เหตุการณ์ hindcast หลายชุดเป็นเลือกตั้ง/การเมือง — บังคับ election labels
+    # ถ้าคำอธิบายเหตุการณ์เข้าข่าย (auto-classify จากชื่อ+claim)
+    scenario_text = " ".join(
+        e.title + " " + " ".join(t.get("claim", "") for t in e.prediction_targets)
+        for _, e, _ in events
+    )
+    policy = ElectionPolicy(classify_scenario(scenario_text))
+    report = policy.apply_labels(report)
     out = ROOT / ".tmp" / f"hindcast-batch-{datetime.now():%Y%m%d-%H%M%S}.md"
     out.parent.mkdir(exist_ok=True)
     out.write_text(report, encoding="utf-8")

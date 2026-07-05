@@ -39,11 +39,11 @@
 - [x] ผลจริง ($0.014): 10 ประเด็น top risk **25/25 = IO ปั่น "เงินไปไหน"** สอดคล้อง corpus (57% ไม่เชื่อการใช้เงิน) + นักกฎหมายเจอช่องบังคับใช้โดยไม่ผ่านข้อบัญญัติ
 - [x] Unit tests +6 (รวม 103 เขียว)
 
-### P1-M5 — Governance เฟสสอง (GOV-02/05/06)
-- [ ] Election mode: auto-classify + manual flag → บังคับ aggregate-only + ป้าย 3 ชนิด + ปิด Sim-to-Signal
-- [ ] GOV-05: ไม่มี code path สร้างคอนเทนต์ชักจูง + test กันถดถอย
-- [ ] GOV-06: RBAC ขั้นต่ำ (create/run/export/admin) ระดับ API layer
-- [ ] Unit tests: classifier, ป้ายบังคับ, สิทธิ์
+### P1-M5 — Governance เฟสสอง (GOV-02/05/06) ✅ (5 ก.ค. 2026)
+- [x] Election mode (`governance/election.py`): auto-classify 16 คำสำคัญ + manual flag → `require_aggregate()` block ระดับ individual, `guard_sim_to_signal()` ปิด signal, `apply_labels()` แปะ 3 ป้าย (simulation_estimate/not_field_poll/aggregate_only) — เชื่อมจริงใน `run_hindcast_batch` (auto-detect เหตุการณ์เลือกตั้ง)
+- [x] GOV-05: `guard_no_persuasion_content()` block คำขอสร้างสคริปต์หาเสียง/โฆษณา/คำขวัญ — test กันถดถอย (คำขอ insight ต้องผ่าน)
+- [x] GOV-06: RBAC (`governance/rbac.py`) viewer/analyst/operator/admin × create/run/export/admin; election mode ปลดล็อกเฉพาะ admin ที่ verify แล้ว
+- [x] Unit tests +11 (รวม 114 เขียว)
 
 ### P1-M6 — Executive Dashboard (DASH-01..04)
 - [ ] Executive Brief ≤ 3 บรรทัด + Risk Heatmap + Scenario Comparison + Synthetic Voices (voice layer)

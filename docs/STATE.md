@@ -5,12 +5,12 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 1 (Trust MVP) | P1-M1..M4 เสร็จแล้ว — เหลือ M5 (Election mode/GOV-05/RBAC) + M6 (Executive Dashboard)** — ดู docs/PHASE1-BRIEF.md
+- เฟส: **Phase 1 (Trust MVP) | P1-M1..M5 เสร็จแล้ว — เหลือ M6 (Executive Dashboard) ปิดเฟส** — ดู docs/PHASE1-BRIEF.md
 - **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
 - test: 90 ข้อเขียว | ต้นทุนสะสม ~$0.48 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป: **P1-M5 (GOV-02/05/06)**: election mode auto-classify + ป้ายบังคับ 3 ชนิด + ปิด Sim-to-Signal, GOV-05 regression test, RBAC ขั้นต่ำ — จากนั้น P1-M6 (DASH-01..04 เป็น HTML+API)
+- ถัดไป: **P1-M6 (Executive Dashboard, DASH-01..04)** ปิด Phase 1: Executive Brief ≤3 บรรทัด + Risk Heatmap (ต่อจาก red team) + Scenario Comparison (ต่อจาก what-if fork) + Synthetic Voices (voice layer) → HTML + REST (FastAPI ใน api/); ทุก output ผ่าน watermark + fragility label; DASH-01 AC = ต้องมี fragility+confidence เสมอ ห้ามตัวเลขเดี่ยว
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
