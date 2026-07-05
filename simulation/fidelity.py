@@ -63,7 +63,7 @@ def plan_run(preset_name: str, settings: Settings, pricing: PricingRegistry) -> 
             )
         ]
     )
-    allowed = preset.agents <= settings.max_agents_dev
+    allowed = preset.agents <= settings.max_agents_per_run
     return RunPlan(
         preset=preset,
         est_cost_usd=estimate.total_usd,
@@ -71,8 +71,8 @@ def plan_run(preset_name: str, settings: Settings, pricing: PricingRegistry) -> 
         blocked_reason=None
         if allowed
         else (
-            f"agents {preset.agents} เกิน cap ช่วงพัฒนา ({settings.max_agents_dev}) — "
-            "ผู้ใช้เป็นผู้สั่งขยายเมื่อระบบเสร็จครบทุกเฟส"
+            f"agents {preset.agents} เกิน cap ต่อ run ({settings.max_agents_per_run}) — "
+            "ระดับนี้ต้องขออนุมัติผู้ใช้ก่อน"
         ),
     )
 

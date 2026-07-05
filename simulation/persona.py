@@ -2,7 +2,7 @@
 
 - สัดส่วน segment ตาม share (largest remainder ให้ n เล็กยังรักษาสัดส่วน)
 - cultural priors (เกรงใจ / say-do gap / ประชด) + voice_activity + channel mix ต่อตัว (FAB-02/05)
-- cap guard: เกิน max_agents_dev = ปฏิเสธ (คำสั่งผู้ใช้ — ดู AGENTS.md)
+- cap guard: เกิน max_agents_per_run = ปฏิเสธ (คำสั่งผู้ใช้ — ดู AGENTS.md)
 """
 
 from dataclasses import dataclass
@@ -19,8 +19,8 @@ DEFAULT_SEGMENTS_PATH = (
 class AgentCapExceededError(RuntimeError):
     def __init__(self, requested: int, cap: int):
         super().__init__(
-            f"ขอ {requested} agents แต่ข้อจำกัดช่วงพัฒนาอยู่ที่ {cap} "
-            "(คำสั่งผู้ใช้ 5 ก.ค. 2026 — ต้องได้รับอนุญาตจากผู้ใช้ก่อนเกิน)"
+            f"ขอ {requested} agents แต่ cap ต่อ run อยู่ที่ {cap} "
+            "(ขยายเป็น 1,000 เมื่อ 6 ก.ค. 2026 — เกินกว่านี้ต้องได้รับอนุญาตจากผู้ใช้ก่อน)"
         )
 
 

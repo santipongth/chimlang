@@ -70,14 +70,14 @@ def main() -> None:
 
     adapter = LLMAdapter(settings, pricing, guard)
     netizens = PersonaFactory().sample(
-        N_NETIZENS, seed=settings.default_seed, max_agents=settings.max_agents_dev
+        N_NETIZENS, seed=settings.default_seed, max_agents=settings.max_agents_per_run
     )
     session = RehearsalSession(
         adapter,
         scenario,
         netizens,
         seed=settings.default_seed,
-        max_agents=settings.max_agents_dev,
+        max_agents=settings.max_agents_per_run,
     )
 
     print(

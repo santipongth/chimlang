@@ -51,7 +51,7 @@ def render_benchmark_page(
         "## Hindcast benchmark (TRUST-03)",
         "",
         f"- รันเมื่อ: {hc['ran_at']} | agents/target: {hc['agents_per_target']} "
-        f"(ภายใต้ cap พัฒนา ≤ {hc['max_agents_dev']}) | ต้นทุน: ${hc['spent_usd']:.4f}",
+        f"(ภายใต้ cap พัฒนา ≤ {hc['max_agents_per_run']}) | ต้นทุน: ${hc['spent_usd']:.4f}",
         f"- ผล: **ผ่าน {hc['passed']}/{hc['total_events']} เหตุการณ์** "
         f"(เกณฑ์เฟส: ≥ {hc['pass_required']})",
         "",

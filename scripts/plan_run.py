@@ -11,7 +11,7 @@ from simulation.fidelity import PRESETS, plan_run
 def main() -> None:
     settings = get_settings()
     pricing = PricingRegistry.from_yaml()
-    print(f"Fidelity Dial (cap ช่วงพัฒนา: ≤ {settings.max_agents_dev} agents)\n")
+    print(f"Fidelity Dial (cap ช่วงพัฒนา: ≤ {settings.max_agents_per_run} agents)\n")
     print(f"{'preset':<10} {'agents':>6} {'rounds':>6} {'universes':>9} {'est cost':>10}  สถานะ")
     for name in PRESETS:
         plan = plan_run(name, settings, pricing)

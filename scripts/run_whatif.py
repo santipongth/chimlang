@@ -36,7 +36,7 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
-    n = settings.max_agents_dev
+    n = settings.max_agents_per_run
     factory = PersonaFactory()
 
     config = {

@@ -18,14 +18,19 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 2 (Rehearsal & Signal) — ครบทุก milestone P2-M1..M6 (6 ก.ค. 2026)** 🎉 exit criteria เชิงเทคนิคผ่าน 6/6 (ดู PHASE2-BRIEF สรุปปิดเฟส) — เหลือแค่ calibration ≥15% ที่ต้องรอ predictions ครบกำหนดจริง (คิวแรก 8 ก.ค.)
+- เฟส: **Phase 3 (Citizen + Scale + Quality) — เริ่ม 6 ก.ค. 2026 | โครงหลักครบทั้ง 3 สาย** — ดู docs/PHASE3-BRIEF.md (Phase 0-2 ปิดครบ)
+- **⚡ CAP เปลี่ยนแล้ว (คำสั่งผู้ใช้ 6 ก.ค.): 1,000 agents/run** (rename เป็น `max_agents_per_run`) — deep 5,000 ต้องขอผู้ใช้ก่อน; `RUN_BUDGET_USD_CAP=5`/run
+- **Scale วัดจริงแล้ว**: multiverse 1,000×30×5u = 5.8 วิ | Standard run เต็มรูป $25.09 (thinking-on) / $0.82 (off) → **exit criteria cost ≤$80 ผ่าน ✅** (docs/reports/scale-measurement.md)
+- **⚠️ Finding สำคัญ**: delta ที่ n=1,000 = −1.2% vs −16.5% ที่ n=10 — พลวัตเปลี่ยนตาม scale ต้อง re-calibrate พารามิเตอร์ channel/กลุ่มก่อนเชื่อผลเชิงปริมาณที่ scale ใหม่
+- Citizen Mode ใช้ได้แล้ว: POST /citizen/impact.json (session-only), /citizen/portal.html, /citizen/feedback.json (k-anonymity ≥20) — disclaimer ถาวรทุก output
+- calibration ≥15% ยังรอ predictions ครบกำหนดจริง (คิวแรก 8 ก.ค. — `scripts/resolve_predictions.py`)
 - API layer: FastAPI `api/app.py` (`make api`) — /dashboard.json /dashboard.html /health
 - **บทเรียนใหม่ (6 ก.ค.)**: qwen3.5-flash เผา ~1,200 hidden thinking tokens/call — `adapter.chat(reasoning=False)` สำหรับ path interactive/สั้น (เร็วขึ้น 29x ถูกลง 10x); ห้ามปิดกับ judge/hindcast/benchmark (คุณภาพที่วัดไว้ใช้ thinking)
 - **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
 - test: **123 ข้อเขียว** | ต้นทุนสะสม ~$0.55 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป (รอผู้ใช้สั่ง): **Phase 3 (Citizen Mode — CIT-01..04)** ตาม Release Plan / **ขยาย scale** (ยกเลิก cap 10 → วัด cost จริง + calibrate กับข้อมูลสำรวจจริง) / **เก็บงานคุณภาพ** (React UI, TRUST-08 panel, semantic memory) — ระหว่างนี้: 8 ก.ค. resolve prediction คิวแรกจาก war room ได้ (`scripts/resolve_predictions.py`)
+- ถัดไป: (1) re-calibrate พารามิเตอร์แพร่ที่ scale 1,000 (finding ข้างบน — ควรทำก่อนใช้ผลจริง) (2) CIT-03 ครึ่งหลัง: inject aggregate feedback กลับเข้า sim + แสดงผลต่อสาธารณะ (3) 8 ก.ค. resolve predictions คิวแรก (4) งานคุณภาพค้าง: React UI, calibrate segments กับสำมะโนจริง (ต้องการแหล่งข้อมูลจากผู้ใช้), TRUST-08 panel, semantic memory
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
@@ -96,3 +101,4 @@
 - 2026-07-06 (Claude Fable 5): **P2-M4 เสร็จ** — Sim-to-Signal: 6 features กลไกจริง + CI95, metadata/disclaimer บังคับ, rate limit 429, GOV-02 → 403 ที่ /signal.json; OOS harness (SIG-02): split ตามเวลา + IC/hit rate เทียบ baseline + ตัวอย่างเล็ก = ปฏิเสธ; tests 159 เขียว; ถัดไป P2-M5 Living Memory
 - 2026-07-06 (Claude Fable 5): **P2-M5 เสร็จ** — Living Memory (WorldMemory ใน PG, PII gate ทุกข้อความ, workspace isolation, reset+audit): run 2 เริ่มจากสถานะที่โลกจำ (20%→40%); SIM-08 ask: คำตอบต้อง cite trail จริง index ถูกตรวจ ไม่มี citation = ธงเตือน; tests 168 เขียว; ถัดไป P2-M6 ปิดเฟส
 - 2026-07-06 (Claude Fable 5): **P2-M6 เสร็จ = Phase 2 ครบทุก milestone** — influence graph ระดับ segment (test กัน agent id หลุด), impact waterfall 2-3 hop (30 entities จริงจาก Neo4j; เกือบซ้ำบทเรียน shortestPath M2), media agent 3 stance, rumor mutation ใน closed group; exit criteria 6/6; tests 179 เขียว; ถัดไป Phase 3 / scale / เก็บคุณภาพ (รอผู้ใช้)
+- 2026-07-06 (Claude Fable 5): **Phase 3 เริ่ม (ผู้ใช้สั่ง 3 สายพร้อมกัน) — โครงหลักครบ**: (S) cap→1,000+rename+perf fix+วัดจริง: standard $25.09/$0.82 ผ่าน ≤$80✅, 1000×30×5u=5.8วิ, **finding: delta หด −16.5%→−1.2% ที่ scale ใหญ่ ต้อง re-calibrate**; (C) CIT-01..04: impact twin session-only (test พิสูจน์ไม่แตะ DB), portal, feedback k-anonymity≥20, disclaimer ถาวร; (Q) UTF-8 console จุดเดียว + /graph/indirect.json; tests 188 เขียว

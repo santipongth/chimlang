@@ -37,7 +37,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=int, default=30)
     args = parser.parse_args()
-    n = get_settings().max_agents_dev  # เคารพ cap ช่วง dev
+    n = get_settings().max_agents_per_run  # เคารพ cap ช่วง dev
 
     t50_closed, t50_public = [], []
     claim1_holds = claim1_usable = 0

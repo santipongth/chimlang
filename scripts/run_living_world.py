@@ -66,7 +66,9 @@ def main() -> None:
     )
 
     personas = PersonaFactory().sample(
-        settings.max_agents_dev, seed=settings.default_seed, max_agents=settings.max_agents_dev
+        settings.max_agents_per_run,
+        seed=settings.default_seed,
+        max_agents=settings.max_agents_per_run,
     )
     sim = FabricSimulation(personas, seed=settings.default_seed + len(recalled))
     if prior_belief is not None:

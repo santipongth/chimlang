@@ -1,6 +1,17 @@
 """การตั้งค่าจาก environment (.env) — secrets อยู่ใน env เท่านั้น ห้าม hardcode"""
 
+import sys
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Windows console default = cp1252 พิมพ์ไทยพัง — บังคับ UTF-8 ที่จุดเดียว
+# (ทุก script import core.config อยู่แล้ว จึงไม่ต้องตั้ง PYTHONIOENCODING อีกต่อไป)
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass  # stream ถูก redirect/ปิด — ข้ามได้
 
 
 class Settings(BaseSettings):
@@ -15,8 +26,9 @@ class Settings(BaseSettings):
     # --- Cost guard / reproducibility ---
     run_budget_usd_cap: float = 5.0
     default_seed: int = 42
-    # ข้อจำกัดช่วงพัฒนา (คำสั่งผู้ใช้ 5 ก.ค. 2026): ทุก simulation run ≤ 10 agents
-    max_agents_dev: int = 10
+    # cap ต่อ run: ผู้ใช้สั่งขยาย scale 6 ก.ค. 2026 (เดิม 10 ช่วง Phase 0-2) → 1,000 (standard)
+    # ระดับ deep (5,000) ยังต้องขออนุมัติผู้ใช้ก่อน — BudgetGuard เป็นด่านต้นทุนจริงเสมอ
+    max_agents_per_run: int = 1000
 
     # --- Datastores ---
     postgres_url: str = "postgresql://chimlang:chimlang@localhost:5432/chimlang"

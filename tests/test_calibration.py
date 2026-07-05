@@ -103,7 +103,7 @@ def test_benchmark_page_shows_failures_too(tmp_path):
     hc = {
         "ran_at": "2026-07-05",
         "agents_per_target": 5,
-        "max_agents_dev": 10,
+        "max_agents_per_run": 10,
         "pass_required": 3,
         "passed": 4,
         "total_events": 5,

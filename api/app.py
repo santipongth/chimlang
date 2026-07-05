@@ -62,12 +62,38 @@ def health() -> dict:
     return {"status": "ok", "service": "chimlang-api"}
 
 
-def _run_dashboard(subject: str, granularity: str) -> Dashboard:
+@app.get("/graph/indirect.json")
+def graph_indirect(
+    a: str = Query(...), b: str = Query(...), max_hops: int = Query(3, le=4)
+) -> dict:
+    """SIM-10 — ความสัมพันธ์ทางอ้อมระหว่าง 2 entities จาก knowledge graph (หนี้เทคนิค Phase 0)"""
+    from graphlayer.store import Neo4jStore
+
+    settings = get_settings()
+    try:
+        store = Neo4jStore(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+        path = store.query_indirect(a, b, max_hops=max_hops)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"knowledge graph ไม่พร้อม: {e}") from e
+    if path is None:
+        raise HTTPException(
+            status_code=404, detail=f"ไม่พบเส้นทางระหว่าง '{a}' กับ '{b}' ใน {max_hops} hops"
+        )
+    return {
+        "nodes": list(path.nodes),
+        "relations": list(path.relations),
+        "hops": len(path.relations),
+        "note": "ทุก node/edge มี provenance ย้อนถึงเอกสารต้นทางใน graph (NFR-08)",
+    }
+
+
+def _run_dashboard(subject: str, granularity: str, agents: int = 100) -> Dashboard:
     settings = get_settings()
     policy = ElectionPolicy(classify_scenario(subject))
     policy.require_aggregate(granularity)  # GOV-02: individual ถูก block ใน election mode
 
-    n = settings.max_agents_dev
+    # default 100 (quick tier) — ผู้เรียกขอมากขึ้นได้แต่ไม่เกิน cap ต่อ run
+    n = min(agents, settings.max_agents_per_run)
     factory = PersonaFactory()
     fragility, outcomes = run_multiverse_whatif(
         factory,
@@ -138,7 +164,10 @@ def dashboard_html(
 
 
 @app.get("/signal.json")
-def signal_json(subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม.")) -> dict:
+def signal_json(
+    subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
+    agents: int = Query(100, ge=10),
+) -> dict:
     """SIG-01/03/04 — features พร้อมช่วง + metadata บังคับ; election = ปิด (GOV-02)"""
     if not signal_rate_limiter.allow():
         raise HTTPException(status_code=429, detail="rate limit: signal endpoint (SIG-04)")
@@ -149,7 +178,7 @@ def signal_json(subject: str = Query("มาตรการค่าธรรม
         raise HTTPException(status_code=403, detail=str(e)) from e
 
     settings = get_settings()
-    n = settings.max_agents_dev
+    n = min(agents, settings.max_agents_per_run)
     fragility, outcomes = run_multiverse_whatif(
         PersonaFactory(),
         n_agents=n,
@@ -175,6 +204,92 @@ def signal_json(subject: str = Query("มาตรการค่าธรรม
         provenance_source=DEFAULT_SEGMENTS_PATH,
     )
     return bundle.to_dict()
+
+
+class CitizenImpactRequest(BaseModel):
+    """CIT-01: ตัวเลือกปิดทั้งหมด ≤ 10 ฟิลด์ — ไม่มี free text โดยโครงสร้าง"""
+
+    income_band: str
+    region: str
+    commute: str
+    occupation: str
+    age_band: str
+    household_size: int
+
+
+@app.post("/citizen/impact.json")
+def citizen_impact(req: CitizenImpactRequest) -> dict:
+    """Personal Impact Twin — session-only: ไม่บันทึกอินพุตใดๆ ลง DB (CIT-01/NFR-04)"""
+    from simulation.citizen import CitizenInputs, InvalidCitizenInputError, build_impact_twin
+
+    settings = get_settings()
+    try:
+        inputs = CitizenInputs(**req.model_dump())
+    except InvalidCitizenInputError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    twin = build_impact_twin(
+        inputs,
+        PersonaFactory(),
+        max_agents=settings.max_agents_per_run,
+        seed=settings.default_seed,
+    )
+    return twin.to_dict()  # มี CITIZEN_DISCLAIMER เสมอ (CIT-04)
+
+
+class CitizenFeedbackRequest(BaseModel):
+    segment_id: str
+    stance: str
+
+
+@app.post("/citizen/feedback.json")
+def citizen_feedback(req: CitizenFeedbackRequest) -> dict:
+    """CIT-03 — รับความเห็น (segment+stance เท่านั้น); aggregate ปล่อยเมื่อ n ≥ 20"""
+    from simulation.citizen import CITIZEN_DISCLAIMER, FeedbackPool, InvalidCitizenInputError
+
+    settings = get_settings()
+    pool = FeedbackPool(settings.postgres_url)
+    pool.setup()
+    try:
+        pool.add(req.segment_id, req.stance)
+    except InvalidCitizenInputError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return {
+        "status": "รับความเห็นแล้ว",
+        "k_anonymity_note": "ความเห็นจะแสดงต่อสาธารณะเมื่อกลุ่มของคุณมีผู้ตอบครบ 20 คน",
+        "disclaimer": CITIZEN_DISCLAIMER,
+    }
+
+
+@app.get("/citizen/portal.html", response_class=HTMLResponse)
+def citizen_portal() -> str:
+    """CIT-02 — portal ฉบับประชาชน (ภาษาง่าย + ช่วง + disclaimer ถาวร)"""
+    from simulation.citizen import (
+        CitizenInputs,
+        FeedbackPool,
+        build_impact_twin,
+        render_citizen_portal,
+    )
+
+    settings = get_settings()
+    sample = CitizenInputs(
+        income_band="15k-30k",
+        region="ชานเมือง",
+        commute="รถยนต์ส่วนตัว",
+        occupation="พนักงานออฟฟิศ",
+        age_band="31-45",
+        household_size=3,
+    )
+    twin = build_impact_twin(
+        sample, PersonaFactory(), max_agents=settings.max_agents_per_run, seed=settings.default_seed
+    )
+    pool = FeedbackPool(settings.postgres_url)
+    pool.setup()
+    md = render_citizen_portal("มาตรการค่าธรรมเนียมรถติด กทม.", twin, pool.aggregates())
+    return (
+        "<!doctype html><html lang='th'><head><meta charset='utf-8'></head>"
+        "<body><pre style='white-space:pre-wrap;font-family:system-ui'>"
+        f"{md}</pre></body></html>"
+    )
 
 
 class OOSRequest(BaseModel):

@@ -57,7 +57,7 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 | Exit criteria | ผล |
 |---|---|
 | (1) hindcast ภายในผ่าน ≥ 3/5 เหตุการณ์ | **ผ่าน 4/5 ✅** (ทายถูก 9/10 targets, ดูข้อจำกัด training-data contamination ใน M4) |
-| (2) ต้นทุน Standard run ≤ $80 | **ยังวัดตรงไม่ได้** (cap dev ≤ 10 agents) — ประมาณการจาก token log: กลไกแพร่ $0, voice ที่ ~10–30% ของ agent-rounds context สั้น ≈ $3–17/run แต่ถ้า voice ทุก agent ทุก round ด้วย context ยาวจะเกิน → ต้องออกแบบ voice budget ต่อ run แล้ววัดจริงเมื่อยกเลิก cap |
+| (2) ต้นทุน Standard run ≤ $80 | **ผ่าน ✅ (6 ก.ค. 2026 หลังยกเลิก cap)** — วัดต้นทุน voice จริง/call แล้ว extrapolate: standard เต็มรูป $25.09 (thinking-on) / $0.82 (thinking-off); เวลากลไก 1,000×30×5u = 5.8 วิ — ดู docs/reports/scale-measurement.md |
 | (3) กฎ governance 3 ข้อทำงานจริงพร้อม test | **ผ่าน ✅** — PII detector (M2), watermark + audit + registry (M5) ทั้งหมด fail-closed + มี test ยิงของจริง |
 
 ต้นทุนสะสมทั้งเฟส ~$0.31 | tests 77 ข้อ | คำตอบ Open Question #1 ของ PRD: retrieval+prompt filter เพียงพอสำหรับ Phase 0 (ไม่ต้องใช้ model cutoff เก่า) โดยมีเงื่อนไข re-verify ตาม docs/reports/M1-hindcast-poc-final.md

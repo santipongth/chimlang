@@ -21,7 +21,7 @@ RUMOR = "ข่าวลือ: เขาว่ากันว่าจะเก
 
 def main() -> None:
     settings = get_settings()
-    n = settings.max_agents_dev
+    n = settings.max_agents_per_run
     personas = PersonaFactory().sample(n, seed=settings.default_seed, max_agents=n)
 
     sim = FabricSimulation(personas, seed=settings.default_seed)

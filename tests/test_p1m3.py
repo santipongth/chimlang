@@ -98,11 +98,14 @@ def test_plan_costs_scale_and_standard_under_target(pricing):
     assert standard.est_cost_usd < 50
 
 
-def test_cap_blocks_everything_above_dev(pricing):
+def test_cap_policy_after_scale_up(pricing):
+    """นโยบาย 6 ก.ค. 2026: dev/quick/standard (≤1,000) รันได้ — deep (5,000) ต้องขอผู้ใช้ก่อน"""
     s = _settings()
-    assert plan_run("dev", s, pricing).allowed_under_cap
-    for name in ("quick", "standard", "deep"):
+    for name in ("dev", "quick", "standard"):
         plan = plan_run(name, s, pricing)
-        assert not plan.allowed_under_cap
-        with pytest.raises(PlanBlockedError):
-            ensure_plan_allowed(plan)
+        assert plan.allowed_under_cap, name
+        ensure_plan_allowed(plan)  # ไม่ raise
+    deep = plan_run("deep", s, pricing)
+    assert not deep.allowed_under_cap
+    with pytest.raises(PlanBlockedError):
+        ensure_plan_allowed(deep)

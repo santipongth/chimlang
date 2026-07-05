@@ -28,9 +28,9 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
-    if args.agents > settings.max_agents_dev:
+    if args.agents > settings.max_agents_per_run:
         raise SystemExit(
-            f"agents ต่อ target ({args.agents}) เกิน cap ช่วง dev ({settings.max_agents_dev})"
+            f"agents ต่อ target ({args.agents}) เกิน cap ช่วง dev ({settings.max_agents_per_run})"
         )
 
     event_dirs = sorted(
@@ -61,14 +61,14 @@ def main() -> None:
     structured = {
         "ran_at": f"{datetime.now():%Y-%m-%d %H:%M}",
         "agents_per_target": args.agents,
-        "max_agents_dev": settings.max_agents_dev,
+        "max_agents_per_run": settings.max_agents_per_run,
         "pass_required": PASS_REQUIRED,
         "events": [],
     }
     lines = [
         "# ผล Hindcast Batch — exit criteria Phase 0 (ผ่าน ≥ 3/5 เหตุการณ์)",
         f"- วันที่: {datetime.now():%Y-%m-%d %H:%M} | agents/target: {args.agents} "
-        f"(cap dev ≤ {settings.max_agents_dev})",
+        f"(cap dev ≤ {settings.max_agents_per_run})",
         "- เกณฑ์ต่อเหตุการณ์ (เข้ม): ทำนายทิศถูก **ครบทุก target** | agent ตอบเสีย = ไม่นับเสียง (fail-closed)",
         "- ⚠️ scenario เลือกตั้ง/การเมือง: ผลเป็น simulation_estimate ระดับ aggregate"
         " — not_field_poll (GOV-02)",

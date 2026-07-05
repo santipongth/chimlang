@@ -65,7 +65,9 @@ def main() -> None:
 
     adapter = LLMAdapter(settings, pricing, guard)
     personas = PersonaFactory().sample(
-        settings.max_agents_dev, seed=settings.default_seed, max_agents=settings.max_agents_dev
+        settings.max_agents_per_run,
+        seed=settings.default_seed,
+        max_agents=settings.max_agents_per_run,
     )
     session = GameSession(adapter, scenario, personas, seed=settings.default_seed)
 

@@ -106,6 +106,7 @@ class FabricSimulation:
         self._seed = seed
         self._states = {p.agent_id: AgentState(persona=p) for p in personas}
         self._order = sorted(self._states)  # ลำดับ deterministic
+        self._index = {aid: i for i, aid in enumerate(self._order)}
         self._messages: list[Message] = []
         self._trail: list[dict] = []
         self._channels = {
@@ -159,7 +160,8 @@ class FabricSimulation:
             self._log(0, aid, message, message.seed_channel, "preseeded")
 
     def _neighbors(self, agent_id: str) -> list[str]:
-        i = self._order.index(agent_id)
+        # index map แทน list.index — จำเป็นเมื่อ scale ถึง 1,000 agents (เดิม O(n) ต่อ call)
+        i = self._index[agent_id]
         return [self._order[j] for j in (i - 1, i + 1) if 0 <= j < len(self._order)]
 
     def _log(self, round_no: int, agent_id: str, msg: Message, channel: str, action: str) -> None:

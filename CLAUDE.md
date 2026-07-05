@@ -46,7 +46,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - **Traceability**: ทุกตัวเลข aggregate ต้องย้อนถึง reasoning trail ระดับ agent ได้ — เก็บ trail เสมอ อย่า optimize ทิ้ง (NFR-08)
 - **LLM calls ผ่าน adapter layer เดียว** (OpenAI-compatible) — ห้าม hardcode provider หรือ model name ในโค้ด business logic (SIM-07)
 - **Cost guard**: ทุก run คำนวณ cost estimate ก่อนเริ่ม และเคารพ `RUN_BUDGET_USD_CAP` จาก env — เกิน cap ให้ abort พร้อมรายงาน
-- **ข้อจำกัดตลอดการพัฒนา (คำสั่งผู้ใช้ 5 ก.ค. 2026)**: ทุก simulation run ใช้ **agent ไม่เกิน 10 ตัว จนกว่าระบบจะเสร็จสมบูรณ์ครบทุกเฟส** — ผู้ใช้จะสั่งขยายเองเมื่อพร้อม ห้ามเพิ่ม/bypass cap ในทุกเฟส
+- **Cap ต่อ run (อัปเดต 6 ก.ค. 2026 — ผู้ใช้สั่งขยาย scale)**: จาก 10 → **ไม่เกิน 1,000 agents/run** (ระดับ standard); ระดับ deep 5,000 ยังต้องขออนุมัติผู้ใช้ก่อน — BudgetGuard + `RUN_BUDGET_USD_CAP` เป็นด่านต้นทุนจริงทุก run เสมอ
 - ภาษาไทยเป็น first-class: agent reasoning และ test fixtures ใช้ข้อความไทยจริง ระวัง tokenizer/encoding ทุกจุดที่ประมวลผลข้อความ
 - Secrets อยู่ใน `.env` เท่านั้น (ดู `.env.example`) — ห้าม commit, ห้าม log, ห้ามใส่ในไฟล์นี้
 
