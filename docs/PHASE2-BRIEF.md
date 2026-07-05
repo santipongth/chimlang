@@ -44,9 +44,11 @@ REH-01/03/04/05, SIG-01..04, SIM-05/08/09/10/11, FAB-03/04 | **TRUST-08 defer** 
 - [x] `trust/signal_harness.py` (SIG-02): train/test split ตามเวลาเท่านั้น (กัน look-ahead), Spearman IC + hit rate เทียบ baseline (ทายข้างมากจาก train), **test set < 5 จุด = ปฏิเสธการสรุป** (fail-closed) — endpoint `/signal/oos-test.json`
 - [x] Unit tests +13 (รวม 159 เขียว) — รวม harness จับ feature มั่วไม่ให้ผ่าน baseline
 
-### P2-M5 — Living Memory + Conversational Querying (SIM-05/08)
-- [ ] World state ต่อ workspace ใน pgvector + "reset world" | ผลรันก่อนหน้า/เหตุการณ์จริงซึมเข้า memory
-- [ ] ถามต่อจากโลกจำลอง — คำตอบอ้าง reasoning trail จริง (NFR-08)
+### P2-M5 — Living Memory + Conversational Querying (SIM-05/08) ✅ (6 ก.ค. 2026)
+- [x] `simulation/memory.py` (WorldMemory, PostgreSQL ตาม D4): kind = real_event/sim_result/user_note, workspace isolation, `latest_belief()` → run ถัดไป preseed จากสถานะที่โลกจำได้, `reset_world()` + audit บังคับ — **ทุกข้อความผ่าน PII detector ก่อนบันทึก** (กฎเหล็กข้อ 1); คอลัมน์ embedding จองไว้ ยังไม่เปิดใช้ (semantic search = งานตอน scale จริง)
+- [x] Demo ต่อเนื่องจริง: run 1 จบ 20% → run 2 อ่านความจำ เริ่มที่ 20% → จบ 40%
+- [x] `simulation/ask.py` (SIM-08): analyst เห็นเฉพาะ trail ที่กรองแล้ว, คำตอบต้อง cite [เลข] เหตุการณ์จริง — อ้าง index มั่วถูกตัด, ไม่มี citation = ติดธง "อย่าใช้ตัดสินใจ" (fail-closed); demo ตอบพร้อมหลักฐาน 4 เหตุการณ์ตรวจสอบได้
+- [x] Unit tests +9 (รวม 168 เขียว)
 
 ### P2-M6 — Influence Graph + Impact Waterfall + Media/Rumor (SIM-09/10, FAB-03/04)
 - [ ] Hub nodes + cluster map **ระดับ segment เท่านั้น** (กฎเหล็กข้อ 7) | Impact Waterfall ต่อยอด `query_indirect`

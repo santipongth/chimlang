@@ -18,14 +18,14 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 2 (Rehearsal & Signal) — เริ่ม 6 ก.ค. 2026 (ผู้ใช้ approve แผน) | P2-M1..M4 เสร็จ — เหลือ M5 (Living Memory) + M6 (Influence Graph)** — ดู docs/PHASE2-BRIEF.md
+- เฟส: **Phase 2 (Rehearsal & Signal) — เริ่ม 6 ก.ค. 2026 (ผู้ใช้ approve แผน) | P2-M1..M5 เสร็จ — เหลือ M6 (Influence Graph + Media/Rumor) ปิดเฟส** — ดู docs/PHASE2-BRIEF.md
 - API layer: FastAPI `api/app.py` (`make api`) — /dashboard.json /dashboard.html /health
 - **บทเรียนใหม่ (6 ก.ค.)**: qwen3.5-flash เผา ~1,200 hidden thinking tokens/call — `adapter.chat(reasoning=False)` สำหรับ path interactive/สั้น (เร็วขึ้น 29x ถูกลง 10x); ห้ามปิดกับ judge/hindcast/benchmark (คุณภาพที่วัดไว้ใช้ thinking)
 - **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
 - test: **123 ข้อเขียว** | ต้นทุนสะสม ~$0.55 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป: **P2-M5 (Living Memory + Conversational Querying — SIM-05/08)**: world state ต่อ workspace ใน pgvector + reset world; ถามต่อจากโลกจำลองโดยคำตอบอ้าง reasoning trail จริง (NFR-08); จากนั้น M6 influence graph + media/rumor ปิดเฟส (ดู PHASE2-BRIEF)
+- ถัดไป: **P2-M6 (Influence Graph + Impact Waterfall + Media/Rumor — SIM-09/10, FAB-03/04) ปิดเฟส**: hub nodes + cluster map ระดับ segment เท่านั้น (กฎเหล็กข้อ 7), impact waterfall ต่อยอด `query_indirect` ใน graphlayer, สำนักข่าว agent (editorial stance) + rumor mutation ใน closed group (ดู PHASE2-BRIEF)
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
@@ -94,3 +94,4 @@
 - 2026-07-06 (Claude Fable 5): **P2-M2 เสร็จ** — Game Mode (REH-03): strategic actor (analyst) เดินตอบ, สังคม react ผ่าน engine กลไก deterministic (สองข้อความแข่งกันแพร่), ≥3 ตาบังคับ, decision tree มีทางเลือกที่ไม่ได้เดิน; demo จริง $0.001 ความเชื่อฝั่งเราไต่ 20→40→60%; tests 138 เขียว; ถัดไป P2-M3 War Room
 - 2026-07-06 (Claude Fable 5): **P2-M3 เสร็จ** — War Room + Divergence Alarm: `preseed()` sync โลกจำลองกับค่าจริง, forecast envelope 48 ชม. (5 seeds, กลไก $0), alarm เมื่อหลุดซอง > 0.02 (demo: 95% หลุด [40,80] → ยิงจริง); SIM-11 gate ที่ load_feed (hindcast block + test), PII check ทุก note; prediction สั้น (due 2 วัน) เข้าคิว calibration; tests 146 เขียว; ถัดไป P2-M4 Sim-to-Signal
 - 2026-07-06 (Claude Fable 5): **P2-M4 เสร็จ** — Sim-to-Signal: 6 features กลไกจริง + CI95, metadata/disclaimer บังคับ, rate limit 429, GOV-02 → 403 ที่ /signal.json; OOS harness (SIG-02): split ตามเวลา + IC/hit rate เทียบ baseline + ตัวอย่างเล็ก = ปฏิเสธ; tests 159 เขียว; ถัดไป P2-M5 Living Memory
+- 2026-07-06 (Claude Fable 5): **P2-M5 เสร็จ** — Living Memory (WorldMemory ใน PG, PII gate ทุกข้อความ, workspace isolation, reset+audit): run 2 เริ่มจากสถานะที่โลกจำ (20%→40%); SIM-08 ask: คำตอบต้อง cite trail จริง index ถูกตรวจ ไม่มี citation = ธงเตือน; tests 168 เขียว; ถัดไป P2-M6 ปิดเฟส
