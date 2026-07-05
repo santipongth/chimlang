@@ -21,8 +21,8 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] เลือกเหตุการณ์อดีต 1 เหตุการณ์จาก data/samples/hindcast/ — ใช้ 2565-bkk-governor-election (cutoff 20 พ.ค. 2565)
 - [x] Retrieval filter: block เอกสาร/ข้อมูลที่ timestamp หลังวัน cutoff ทุก layer — fail-closed + gate `hindcast_mode` กลาง (trust/hindcast, core/run_context)
 - [x] Prompt-level filter: system prompt ไทยตรึง agent ณ วัน cutoff + ห้ามใช้ความรู้หลัง cutoff
-- [x] **Adversarial leak test**: 33 ข้อ 6 กลยุทธ์ + LLM judge — **รอบ 1: ดิบ 21.2% ไม่ผ่าน / human review ชี้ leak แท้ 0–2 ข้อ ปัญหาหลักอยู่ที่ judge** (บั๊ก JSON + ตัดสินเข้มเกินเกณฑ์)
-- [x] รายงานผล PoC: docs/reports/M1-hindcast-poc-round1.md — เสนอ 3 ทางเลือก — **⏸️ หยุดรอการตัดสินใจจากผู้ใช้ก่อนไป M2**
+- [x] **Adversarial leak test**: 33 ข้อ 6 กลยุทธ์ + LLM judge — 3 รอบ: 21.2% → 3.0% → 3.0% (อัตโนมัติ) / human review รอบสุดท้าย: **leak แท้ 0 ข้อจาก 99 คำตอบ**
+- [x] รายงานผล PoC + คำตัดสิน: **✅ ผ่าน gate โดยมติผู้ใช้ 5 ก.ค. 2026 (human review)** — docs/reports/M1-hindcast-poc-final.md (ข้อค้างสุดท้ายเป็น bug ใน leak_if ของโจทย์ a1 เอง; หนี้เทคนิคบันทึกไว้ทำใน M4)
 
 ### M2 — Ingestion & Knowledge Graph (SIM-01)
 - [ ] Ingest ข่าว/เอกสารจาก data/samples/corpus/ → entity & relationship extraction → Neo4j
