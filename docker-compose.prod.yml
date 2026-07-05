@@ -1,0 +1,83 @@
+# Production stack — self-hosted (P4-M5, มติผู้ใช้ 6 ก.ค. 2026: ข้อมูลอยู่ในเครื่องเอง)
+#
+#   1) คัดลอก .env.example → .env.prod แล้วตั้งค่า: LLM key, NEO4J/POSTGRES password จริง,
+#      AUTH_ENABLED=true + API_KEYS (GOV-06 — production ห้ามปิด auth)
+#   2) docker compose -f docker-compose.prod.yml up -d --build
+#   3) เปิด http://<host>:8000/app/
+#
+# หมายเหตุ: ใช้คนละ volume กับ dev (pgdata_prod ฯลฯ) — ไม่ทับข้อมูล dev
+services:
+  api:
+    build: .
+    container_name: chimlang-api
+    env_file: .env.prod
+    environment:
+      POSTGRES_URL: postgresql://chimlang:${POSTGRES_PASSWORD:-chimlang}@postgres:5432/chimlang
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health',timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build: .
+    container_name: chimlang-worker
+    command: ["uv", "run", "--no-sync", "celery", "-A", "core.tasks.celery_app", "worker", "-l", "info"]
+    env_file: .env.prod
+    environment:
+      POSTGRES_URL: postgresql://chimlang:${POSTGRES_PASSWORD:-chimlang}@postgres:5432/chimlang
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: chimlang
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chimlang}
+      POSTGRES_DB: chimlang
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chimlang -d chimlang"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-chimlang_dev}
+    volumes:
+      - neo4jdata_prod:/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata_prod:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata_prod:
+  neo4jdata_prod:
+  redisdata_prod:

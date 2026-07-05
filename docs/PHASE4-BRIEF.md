@@ -34,9 +34,25 @@
 - [x] Citizen endpoints สาธารณะโดยเจตนา (persona P4 ของ PRD) — test ยืนยัน
 - [x] tests +7 (รวม 211 เขียว) | workspace isolation ระดับ tenant → เลื่อนไป M5/M6 (ผูกกับ deployment)
 
-### P4-M5 — Deployment: docker production + ตัดสินใจ cloud/region (D9 ค้าง, ผูก PDPA/NFR-04 — ต้องถามผู้ใช้)
+### P4-M5 — Deployment ✅ (6 ก.ค. 2026) — **มติผู้ใช้: self-hosted docker (D9 ปิดแล้ว)**
+- [x] `Dockerfile` multi-stage (node build UI → python slim + uv --no-dev) — API/worker ใช้ image เดียว; uvicorn ย้ายเป็น dependency หลัก (เดิมอยู่ dev group ทำ container พังตอน start — จับได้จาก smoke)
+- [x] `docker-compose.prod.yml`: api + worker + postgres/neo4j/redis, volume แยกจาก dev, restart policy + healthcheck, `.env.prod` (บังคับเปิด AUTH ใน production)
+- [x] **Smoke จริงผ่านทั้ง container**: /health 200, /app/ 200, รัน simulation ใน container 200
+- [x] วิธี deploy อยู่หัวไฟล์ compose — ข้อมูลอยู่ในเครื่องผู้ใช้ทั้งหมด (PDPA-friendly)
 
-### P4-M6 — เก็บตก NFR: UI ไทย/อังกฤษ (NFR-09), security review, availability
+### P4-M6 — เก็บตก NFR ✅ (6 ก.ค. 2026)
+- [x] NFR-09: PDF รายงาน 2 ภาษา (`/dashboard.pdf?lang=th|en` — หัวข้อแปล, เนื้อ insight จาก sim ไทย) — UI TH/EN มีแล้วจาก M1
+- [x] NFR-05 ขั้นต่ำ: security headers middleware (nosniff/X-Frame-Options/Referrer-Policy) + `docs/reports/security-review.md` (self-review ตรงไปตรงมา: อะไรบังคับแล้ว/อะไรยังไม่ทำ เช่น pen test อิสระ, TLS = reverse proxy)
+- [x] NFR-06: `/health/deep` รายงานสถานะ postgres/redis/neo4j รายตัวสำหรับ monitoring
+- [x] tests +3 (รวม 214 เขียว)
+
+---
+
+## สรุปปิด Phase 4 (6 ก.ค. 2026) — ครบทุก milestone M1..M6
+
+ระบบพร้อมใช้จริงแบบ self-hosted: React UI (TH/EN) + PDF ไทย + async queue + auth/RBAC +
+docker production (smoke ผ่านจริง) + security self-review | tests 214 เขียว
+**ค้างเพื่อ GA สาธารณะ** (บันทึกใน security-review): TLS reverse proxy, pen test อิสระ, SSO, multi-tenant
 
 ## กติกาที่สืบทอด
 

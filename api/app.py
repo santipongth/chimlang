@@ -67,9 +67,51 @@ RUMOR = "ข่าวลือ: จะเก็บค่าธรรมเนี
 EVENT = "กทม. แถลงชี้แจงทางการ: ร่างมาตรการยกเว้นมอเตอร์ไซค์ทุกประเภท"
 
 
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """M6 (NFR-05 ขั้นต่ำ): ป้องกัน MIME sniffing / clickjacking — TLS เป็นหน้าที่ reverse proxy"""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    return response
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "chimlang-api"}
+
+
+@app.get("/health/deep")
+def health_deep() -> dict:
+    """M6 (NFR-06): สถานะ dependency รายตัวสำหรับ monitoring — ล่มตัวไหนบอกตรงๆ"""
+    settings = get_settings()
+    components: dict[str, str] = {}
+    try:
+        import psycopg
+
+        with psycopg.connect(settings.postgres_url, connect_timeout=3) as conn:
+            conn.execute("SELECT 1")
+        components["postgres"] = "ok"
+    except Exception as e:
+        components["postgres"] = f"down: {type(e).__name__}"
+    try:
+        from core.tasks import celery_app
+
+        with celery_app.connection() as conn:
+            conn.ensure_connection(max_retries=1, timeout=3)
+        components["redis"] = "ok"
+    except Exception as e:
+        components["redis"] = f"down: {type(e).__name__}"
+    try:
+        from graphlayer.store import Neo4jStore
+
+        Neo4jStore(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password).verify()
+        components["neo4j"] = "ok"
+    except Exception as e:
+        components["neo4j"] = f"down: {type(e).__name__}"
+    overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
+    return {"status": overall, "components": components}
 
 
 @app.get("/graph/indirect.json")
@@ -174,9 +216,10 @@ def dashboard_pdf(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     granularity: str = Query("aggregate"),
     agents: int = Query(100, ge=10),
+    lang: str = Query("th", pattern="^(th|en)$"),
     principal: Principal = Depends(get_principal),
 ):
-    """P4-M2 — Executive Brief เป็น PDF (ผ่านจุด export เดียว + watermark สองชั้น)"""
+    """P4-M2 — Executive Brief เป็น PDF (จุด export เดียว + watermark) | lang=th/en (NFR-09)"""
     require(principal, Permission.RUN)
     require(principal, Permission.EXPORT)
     if ElectionPolicy(classify_scenario(subject)).active:
@@ -191,18 +234,31 @@ def dashboard_pdf(
         raise HTTPException(status_code=403, detail=str(e)) from e
 
     lo, hi = dash.brief.headline_range
+    # NFR-09: หัวข้อรายงาน 2 ภาษา (เนื้อ insight มาจาก simulation ภาษาไทยเสมอ)
+    th = lang == "th"
     lines = [
         f"# Executive Brief: {dash.subject}",
         "",
         f"Fragility {dash.brief.fragility_index}/100 — {dash.brief.confidence_label}",
-        f"ช่วงผลหลัก: [{lo:+.0%}, {hi:+.0%}] (แสดงเป็นช่วงเสมอ — TRUST-09)",
+        (
+            f"ช่วงผลหลัก: [{lo:+.0%}, {hi:+.0%}] (แสดงเป็นช่วงเสมอ — TRUST-09)"
+            if th
+            else f"Headline range: [{lo:+.0%}, {hi:+.0%}] (always an interval — TRUST-09)"
+        ),
         "",
-        "## ประเด็นหลัก",
+        "## ประเด็นหลัก" if th else "## Key findings",
     ]
     lines += [f"- {ln.text}" for ln in dash.brief.lines]
-    lines += ["", "## เปรียบเทียบ scenario (สัดส่วนผู้เชื่อรายกลุ่ม)", ""]
+    lines += [
+        "",
+        "## เปรียบเทียบ scenario (สัดส่วนผู้เชื่อรายกลุ่ม)"
+        if th
+        else "## Scenario comparison (belief share by segment)",
+        "",
+    ]
     segs = sorted({s for sc in dash.scenarios for s in sc.belief_by_segment})
-    lines.append("| กลุ่ม | " + " | ".join(sc.name for sc in dash.scenarios) + " |")
+    head = "กลุ่ม" if th else "Segment"
+    lines.append(f"| {head} | " + " | ".join(sc.name for sc in dash.scenarios) + " |")
     lines.append("|---|" + "---|" * len(dash.scenarios))
     for seg in segs:
         row = " | ".join(f"{sc.belief_by_segment.get(seg, 0):.0%}" for sc in dash.scenarios)

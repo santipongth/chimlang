@@ -1,0 +1,12 @@
+.git
+.venv
+.tmp
+__pycache__
+**/__pycache__
+web/node_modules
+web/dist
+node_modules
+.env
+toh-read.txt
+.pytest_cache
+.ruff_cache
