@@ -26,6 +26,7 @@ class Message:
     text: str
     start_round: int
     seed_channel: str  # ช่องทางที่ข้อความถูกปล่อยครั้งแรก
+    counters: str | None = None  # msg_id ของข่าวที่ข้อความนี้หักล้าง (belief revision)
 
 
 @dataclass
@@ -141,6 +142,11 @@ class FabricSimulation:
         st.believed[msg.msg_id] = believed
         if believed:
             self._log(round_no, p.agent_id, msg, channel, "believed")
+            if msg.counters and st.believed.get(msg.counters):
+                # belief revision: เชื่อข่าวหักล้าง → เลิกเชื่อ+เลิกแชร์ข่าวเดิม
+                st.believed[msg.counters] = False
+                st.sharing[msg.counters] = False
+                self._log(round_no, p.agent_id, msg, channel, f"revised:{msg.counters}")
             share_prob = p.voice_activity
             if channel == "line_closed_group":
                 # เกรงใจกดการแสดงออกสาธารณะ แต่ในกลุ่มปิดกล้าส่งต่อมากขึ้น (say-do gap)
