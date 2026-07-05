@@ -24,10 +24,11 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] **Adversarial leak test**: 33 ข้อ 6 กลยุทธ์ + LLM judge — 3 รอบ: 21.2% → 3.0% → 3.0% (อัตโนมัติ) / human review รอบสุดท้าย: **leak แท้ 0 ข้อจาก 99 คำตอบ**
 - [x] รายงานผล PoC + คำตัดสิน: **✅ ผ่าน gate โดยมติผู้ใช้ 5 ก.ค. 2026 (human review)** — docs/reports/M1-hindcast-poc-final.md (ข้อค้างสุดท้ายเป็น bug ใน leak_if ของโจทย์ a1 เอง; หนี้เทคนิคบันทึกไว้ทำใน M4)
 
-### M2 — Ingestion & Knowledge Graph (SIM-01)
-- [ ] Ingest ข่าว/เอกสารจาก data/samples/corpus/ → entity & relationship extraction → Neo4j
-- [ ] PII detector ใน pipeline นำเข้า พร้อม block + แจ้งเตือน (GOV-01) + test cases ภาษาไทย (ชื่อคน เบอร์ เลขบัตร)
-- [ ] Query API: ถามความสัมพันธ์ทางอ้อมระหว่าง entity ได้
+### M2 — Ingestion & Knowledge Graph (SIM-01) ✅ (5 ก.ค. 2026)
+- [x] Ingest ข่าว/เอกสารจาก data/samples/corpus/ → entity & relationship extraction → Neo4j — 13/13 ไฟล์, 114 entities (หลัง normalize ชื่อพ้อง)/~129 relations, provenance ไฟล์+วันที่ทุก node/edge, ต้นทุน $0.003/รอบ
+- [x] PII detector ใน pipeline นำเข้า พร้อม block + แจ้งเตือน (GOV-01) + test cases ภาษาไทย (ชื่อคน เบอร์ เลขบัตรตรวจ checksum จริง อีเมล) — pipeline ปฏิเสธรันถ้า detector ถูกปิด
+- [x] Query API: ถามความสัมพันธ์ทางอ้อมระหว่าง entity ได้ — `Neo4jStore.query_indirect()` 2–3 hop (ตัวอย่างจริง: ค่าธรรมเนียมรถติด → กลุ่มไรเดอร์ → แรงงานนอกระบบ) | REST endpoint ค่อยห่อใน M4 ตอนทำรายงาน
+- หมายเหตุ: extraction มี non-determinism เล็กน้อยแม้ pin seed (OpenRouter best-effort) — entity ชุดหลักคงที่ แต่ตัวรองอาจต่างระหว่างรอบ; บันทึกเป็นข้อจำกัดของ NFR-07 ระดับ ingestion (snapshot graph หลัง ingest คือตัว freeze จริง)
 
 ### M3 — Agent Runtime + Thai Social Fabric v1 (SIM-02/03, FAB-01/02/05)
 - [ ] Persona factory: สร้าง agent 100–1,000 ตัวจาก segment config (น้ำหนักอ้างอิง data/samples/population/)

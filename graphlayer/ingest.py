@@ -11,6 +11,7 @@ from core.config import Settings
 from core.llm import LLMAdapter
 from governance.pii import PIIDetector, load_allowlist
 from graphlayer.extraction import ExtractionError, extract
+from graphlayer.normalize import normalize_extraction
 from graphlayer.store import Neo4jStore
 from trust.hindcast.filters import extract_doc_date
 
@@ -64,7 +65,7 @@ def ingest_corpus(
         else:
             doc_date = extract_doc_date(doc_path.name)
             try:
-                ex = extract(adapter, text, seed=settings.default_seed)
+                ex = normalize_extraction(extract(adapter, text, seed=settings.default_seed))
             except ExtractionError as e:
                 results.append(
                     IngestResult(doc=doc_path.name, status="failed_extraction", detail=str(e))
