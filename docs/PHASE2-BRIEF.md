@@ -30,10 +30,12 @@ REH-01/03/04/05, SIG-01..04, SIM-05/08/09/10/11, FAB-03/04 | **TRUST-08 defer** 
 - [x] ครบวงจร governance + demo จริง ($0.001): ฝ่ายค้านตอบโต้เชิงชั้น (เอกสารวิชาการ/คำถามเชิงกระบวนการ), ความเชื่อฝั่งเราไต่ 20%→40%→60% ตามการเดิน 3 ตา
 - [x] Unit tests +6 (รวม 138 เขียว)
 
-### P2-M3 — Live War Room + Divergence Alarm (REH-04/05 + SIM-11)
-- [ ] Feed ข้อมูล aggregate (file/RSS) → sync โลกจำลอง → simulate ล่วงหน้า 48 ชม./รอบ
-- [ ] Divergence metric + alarm เมื่อโลกจริงหลุดทุก scenario (ทดสอบด้วย inject ความเบี่ยง)
-- [ ] SIM-11 external retrieval: เปิดเฉพาะ war room — hindcast ยังปิดตาย (กฎเหล็กข้อ 2 + leak test เดิมต้องเขียว)
+### P2-M3 — Live War Room + Divergence Alarm (REH-04/05 + SIM-11) ✅ (6 ก.ค. 2026)
+- [x] `simulation/warroom.py`: feed aggregate (yaml, ค่า 0-1 เท่านั้น) → `FabricSimulation.preseed()` sync โลกจำลองตรงค่าจริง → forecast 48 ชม. (12 rounds × 5 seeds = envelope) — กลไกล้วน $0, deterministic
+- [x] Divergence: ค่าจริงหลุด envelope เกิน tolerance 0.02 → 🚨 alarm ("มีตัวแปรที่ยังไม่ถูก model") — demo จริง: t+36 กระโดด 95% หลุดซอง [40%,80%] alarm ยิง, t+12 (หลุด 2% = noise) ไม่ยิง
+- [x] SIM-11 gate จริง: `load_feed()` เรียก `ensure_external_retrieval_allowed(ctx)` — hindcast_mode = raise (test ครอบ); note ใน feed ผ่าน PII detector, พบ = block ทั้ง feed (GOV-01)
+- [x] Governance ครบ + prediction แบบ resolve ได้จริงใน 2 วัน (belief share จะอยู่ในช่วง envelope) — อาหารชั้นดีของ Calibration Engine
+- [x] Unit tests +8 (รวม 146 เขียว)
 
 ### P2-M4 — Sim-to-Signal API + Out-of-Sample Harness (SIG-01..04)
 - [ ] Features พร้อมช่วง: Narrative Momentum/Dispersion, Consensus Fragility, Sentiment Divergence, Contrarian Pressure ฯลฯ

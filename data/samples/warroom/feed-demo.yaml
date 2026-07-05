@@ -1,0 +1,17 @@
+# feed จำลองสำหรับ war room demo — ค่า aggregate เท่านั้น (สัดส่วนผู้เชื่อ narrative 0-1)
+# สถานการณ์สมมติ: ดราม่า "ค่าธรรมเนียมรถติดเก็บเงินเข้ากระเป๋าใคร" กำลังลาม
+# หมายเหตุ: t_hour 36 ตั้งใจให้กระโดดแรง (มีตัวแปรใหม่นอกโมเดล เช่น คนดังโพสต์)
+#           เพื่อทดสอบว่า Divergence Alarm ยิงจริง — ห้ามแก้ค่านี้ให้ระบบดูดี
+observations:
+  - t_hour: 0
+    metric: belief_share
+    value: 0.30
+    note: "สัดส่วนเสียงลบจาก social listening รายชั่วโมง (aggregate)"
+  - t_hour: 12
+    metric: belief_share
+    value: 0.42
+    note: "กระแสเพิ่มช้าๆ ตามคาด"
+  - t_hour: 36
+    metric: belief_share
+    value: 0.95
+    note: "กระโดดผิดปกติ — ต้นเหตุยังไม่ชัดจากข้อมูล aggregate"

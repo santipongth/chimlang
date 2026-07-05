@@ -125,6 +125,23 @@ class FabricSimulation:
     def inject(self, message: Message) -> None:
         self._messages.append(message)
 
+    def preseed(self, message: Message, believer_ids: set[str]) -> None:
+        """sync สถานะเริ่มต้นกับโลกจริง (war room REH-04): agent ที่ระบุเชื่อข้อความนี้แล้ว
+
+        ใช้ start_round=0 — run() จะไม่ปล่อยข้อความซ้ำ (loop เริ่ม round 1) แต่แพร่ต่อ
+        จากผู้แชร์ที่ preseed ไว้; การแชร์ของผู้เชื่อสุ่มตาม voice_activity (deterministic ต่อ seed)
+        """
+        if message.start_round != 0:
+            raise ValueError("preseed ต้องใช้ message ที่ start_round=0 (กันปล่อยซ้ำใน run)")
+        self._messages.append(message)
+        for aid in sorted(believer_ids):
+            st = self._states[aid]
+            st.heard[message.msg_id] = 0
+            st.heard_via[message.msg_id] = message.seed_channel
+            st.believed[message.msg_id] = True
+            st.sharing[message.msg_id] = self._rng.random() < st.persona.voice_activity
+            self._log(0, aid, message, message.seed_channel, "preseeded")
+
     def _neighbors(self, agent_id: str) -> list[str]:
         i = self._order.index(agent_id)
         return [self._order[j] for j in (i - 1, i + 1) if 0 <= j < len(self._order)]
