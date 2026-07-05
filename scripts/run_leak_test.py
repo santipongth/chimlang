@@ -46,15 +46,16 @@ def main() -> None:
         f"เอกสาร before ผ่าน filter: {len(event.before_docs)} | ถูก block: {len(event.blocked_paths)}"
     )
 
-    # cost estimate ก่อนเริ่ม (กฎ Cost guard): system prompt ~4K token + คำถาม
+    # cost estimate ก่อนเริ่ม (กฎ Cost guard) — ค่า calibrate จาก run จริงรอบ 1
+    # (ภาษาไทยกิน token หนัก: system prompt + เอกสาร 3 ชิ้น ≈ 20K token/call)
     n = len(questions)
     estimate = CostEstimator(pricing).estimate(
         [
             TierLoad(
-                settings.llm_model_crowd, calls=n, avg_input_tokens=5000, avg_output_tokens=400
+                settings.llm_model_crowd, calls=n, avg_input_tokens=20000, avg_output_tokens=400
             ),
             TierLoad(
-                settings.llm_model_analyst, calls=n, avg_input_tokens=900, avg_output_tokens=300
+                settings.llm_model_analyst, calls=n, avg_input_tokens=1800, avg_output_tokens=300
             ),
         ]
     )

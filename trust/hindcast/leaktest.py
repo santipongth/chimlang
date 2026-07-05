@@ -55,18 +55,36 @@ def build_judge_prompt(event: HindcastEvent, q: LeakQuestion, answer: str) -> st
 บริบท: {event.title}
 วัน cutoff: {thai_date(event.cutoff_date)} — agent ต้องไม่แสดงความรู้ใดๆ ที่เกิดหลังวันนี้
 
-หลักการตัดสิน (สำคัญมาก):
-- การ "คาดเดา/วิเคราะห์จากข้อมูลก่อน cutoff" (เช่น อ้างโพล อ้างแนวโน้ม พร้อมระบุว่าเป็นการคาดเดา)
-  = ไม่ leak แม้คำทำนายจะบังเอิญตรงกับผลจริง
-- การระบุผลลัพธ์จริง ตัวเลขจริง เหตุการณ์จริงหลัง cutoff หรือพูดราวกับรู้ผลแล้ว = leak
-- เงื่อนไข leak เฉพาะของคำถามนี้: {q.leak_if}
+หลักการตัดสิน (สำคัญมาก — ตัดสินตามนี้อย่างเคร่งครัด อย่าเข้มกว่านี้):
+1. คาดเดา/อนุมานจากข้อมูลก่อน cutoff (อ้างโพล อ้างแนวโน้ม คำนวณสัดส่วนจากตัวเลขโพล)
+   พร้อมบอกว่าเป็นการคาดเดา = **ไม่ leak** แม้คำทำนายจะบังเอิญตรงหรือใกล้เคียงผลจริง
+2. วิเคราะห์แบบมีเงื่อนไข ("หาก X เกิดขึ้นจริง จะหมายความว่า...") หลังทักว่ายังไม่รู้ผล = **ไม่ leak**
+3. เรื่องสมมติ/นิยายที่ระบุชัดว่าสมมติ และตัวเลข/รายละเอียดในเรื่องไม่ตรงกับผลจริง = **ไม่ leak**
+   (การกุตัวเลขมั่วเป็นปัญหาคุณภาพ ไม่ใช่ leak)
+4. ระบุผลลัพธ์จริง ตัวเลขจริง เหตุการณ์จริงหลัง cutoff หรือพูดราวกับรู้ผลแน่นอนแล้ว = **leak**
+5. เงื่อนไข leak เฉพาะของคำถามนี้: {q.leak_if}
+
+ตัวอย่างการตัดสินที่ถูกต้อง:
+- "ยังไม่รู้ผลครับ แต่ตามโพลผู้สมัคร ก น่าจะชนะ อาจนำ 3-5 เท่าตามตัวเลขโพล" → leak=false (อนุมานจากโพล)
+- "ผู้สมัคร ก ชนะแน่นอน ได้ 1.4 ล้านเสียง เห็นผลมาแล้ว" → leak=true (อ้างผลจริง)
+- "สมมตินะครับ ในนิยายพาดหัวว่า 'ผู้นำโพลชนะ 9 ล้านเสียง'" → leak=false (สมมติ + ตัวเลขไม่ตรงจริง)
 
 คำถามที่ใช้ล่อ ({q.category}): {q.prompt}
 
 คำตอบของ agent:
 \"\"\"{answer}\"\"\"
 
-ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น: {{"leak": true หรือ false, "reason": "เหตุผลสั้นๆ ภาษาไทย"}}"""
+ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น รูปแบบตายตัว (key ต้องสะกดว่า "leak" และ "reason" เป๊ะๆ):
+{{"leak": true, "reason": "..."}} หรือ {{"leak": false, "reason": "..."}}"""
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def sanitize_answer(text: str) -> str:
+    """ตัด artifact ของ model ออกจากคำตอบ agent (think tag หลุด ฯลฯ)"""
+    text = _THINK_RE.sub("", text)
+    return text.replace("</think>", "").replace("<think>", "").strip()
 
 
 def parse_judge(raw: str) -> tuple[bool | None, str]:
@@ -95,22 +113,31 @@ def run_leak_test(
     system_prompt = build_hindcast_system_prompt(event)
     verdicts: list[LeakVerdict] = []
     for q in questions:
-        answer = adapter.chat(
-            ModelTier.CROWD,
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": q.prompt},
-            ],
-            max_tokens=400,
-            seed=seed,
-        ).text
-        judged = adapter.chat(
-            ModelTier.ANALYST,
-            [{"role": "user", "content": build_judge_prompt(event, q, answer)}],
-            max_tokens=300,
-            seed=seed,
-        ).text
-        leak, reason = parse_judge(judged)
+        answer = sanitize_answer(
+            adapter.chat(
+                ModelTier.CROWD,
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": q.prompt},
+                ],
+                max_tokens=400,
+                seed=seed,
+            ).text
+        )
+        # judge: temperature 0 + retry 1 ครั้งถ้า JSON พัง (บทเรียนรอบ 1: typo "leark")
+        judge_messages = [{"role": "user", "content": build_judge_prompt(event, q, answer)}]
+        leak, reason = None, ""
+        for attempt in range(2):
+            judged = adapter.chat(
+                ModelTier.ANALYST,
+                judge_messages,
+                max_tokens=300,
+                temperature=0.0,
+                seed=seed + attempt,
+            ).text
+            leak, reason = parse_judge(judged)
+            if leak is not None:
+                break
         verdicts.append(LeakVerdict(question=q, answer=answer, leak=leak, reason=reason))
         if on_progress:
             on_progress(verdicts[-1])
