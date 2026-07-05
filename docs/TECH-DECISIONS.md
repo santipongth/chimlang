@@ -25,7 +25,7 @@
 | Fork MiroFish | ได้ pipeline ครบเร็ว (GraphRAG→OASIS→report) | ผูกกับ design เดิม, ต้องรื้อส่วน Twitter/Reddit ออกอยู่ดี — ตรวจ license ก่อน |
 | เขียน runtime เอง | ควบคุมได้ 100%, เบา | ช้ากว่าหลายเดือน, เสี่ยง reinvent สิ่งที่ OASIS แก้ไปแล้ว |
 
-- [x] ตัดสินใจ: ✅ ต่อยอด CAMEL-AI OASIS + ศึกษาโค้ด MiroFish เป็น reference (ตาม default) — มี time-boxed spike 3 วันใน M3; ถ้าติดขัดให้เขียน ADR เสนอทางเลือกก่อนตัดสินใจใหม่
+- [x] ตัดสินใจ: ✅ **แก้ไข 5 ก.ค. 2026 (ADR-0002, มติผู้ใช้)**: Phase 0 ใช้ runtime เบาของเราเองใน `simulation/` (ผล spike: OASIS ลาก torch หลาย GB + API รอบ Twitter/Reddit ขณะที่ของที่ต้องใช้ต้อง custom หมดอยู่ดี) — OASIS/MiroFish เป็น reference design; ประเมิน OASIS ใหม่เมื่อ Phase 1 ต้อง scale เกินหลักพัน
 
 ## D3 — Knowledge graph และ GraphRAG
 

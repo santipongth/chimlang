@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from core.llm import LLMAdapter, ModelTier
+from core.text import sanitize_llm_text as sanitize_answer  # ย้ายไป core เพื่อใช้ร่วมกับ M3
 from trust.hindcast.loader import HindcastEvent
 from trust.hindcast.prompt import build_hindcast_system_prompt, thai_date
 
@@ -79,15 +80,6 @@ def build_judge_prompt(event: HindcastEvent, q: LeakQuestion, answer: str) -> st
 
 ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น รูปแบบตายตัว (key ต้องสะกดว่า "leak" และ "reason" เป๊ะๆ):
 {{"leak": true, "reason": "..."}} หรือ {{"leak": false, "reason": "..."}}"""
-
-
-_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
-
-
-def sanitize_answer(text: str) -> str:
-    """ตัด artifact ของ model ออกจากคำตอบ agent (think tag หลุด ฯลฯ)"""
-    text = _THINK_RE.sub("", text)
-    return text.replace("</think>", "").replace("<think>", "").strip()
 
 
 def parse_judge(raw: str) -> tuple[bool | None, str]:

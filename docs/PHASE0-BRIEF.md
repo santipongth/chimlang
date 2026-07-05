@@ -30,11 +30,12 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] Query API: ถามความสัมพันธ์ทางอ้อมระหว่าง entity ได้ — `Neo4jStore.query_indirect()` 2–3 hop (ตัวอย่างจริง: ค่าธรรมเนียมรถติด → กลุ่มไรเดอร์ → แรงงานนอกระบบ) | REST endpoint ค่อยห่อใน M4 ตอนทำรายงาน
 - หมายเหตุ: extraction มี non-determinism เล็กน้อยแม้ pin seed (OpenRouter best-effort) — entity ชุดหลักคงที่ แต่ตัวรองอาจต่างระหว่างรอบ; บันทึกเป็นข้อจำกัดของ NFR-07 ระดับ ingestion (snapshot graph หลัง ingest คือตัว freeze จริง)
 
-### M3 — Agent Runtime + Thai Social Fabric v1 (SIM-02/03, FAB-01/02/05)
-- [ ] Persona factory: สร้าง agent 100–1,000 ตัวจาก segment config (น้ำหนักอ้างอิง data/samples/population/)
-- [ ] ช่องทาง 4 แบบ: closed group (LINE-like), public feed, algorithmic feed, offline word-of-mouth — แต่ละแบบมีพารามิเตอร์การแพร่ต่างกัน
-- [ ] Cultural priors เป็นพารามิเตอร์ของ agent: เกรงใจ / say-do gap / การประชด
-- [ ] Benchmark ตาม AC ของ FAB-01: rumor แพร่ใน closed group ช้ากว่า public feed และ correction เข้า closed group ช้ากว่า
+### M3 — Agent Runtime + Thai Social Fabric v1 (SIM-02/03, FAB-01/02/05) ✅ (5 ก.ค. 2026)
+- [x] **Runtime**: เขียนเองตาม ADR-0002 (มติผู้ใช้หลัง spike พบ OASIS ลาก torch หลาย GB + API รอบ Twitter/Reddit) — `simulation/engine.py` round-based, deterministic เต็มรูปต่อ seed
+- [x] Persona factory จาก segment config — largest-remainder รักษาสัดส่วนที่ n เล็ก + **cap guard ≤ 10 บังคับระดับโค้ด** (สเปคเดิม 100–1,000 รอผู้ใช้ยกเลิก cap ช่วง dev)
+- [x] ช่องทาง 4 แบบพารามิเตอร์ต่างกัน (`simulation/channels.py`) — closed group เป็น small-world 2 กลุ่ม/คนข้าม segment (บทเรียน 3 รอบ benchmark: กลุ่มตาม segment เล็กเกิน → clique โดดไม่มีสะพาน → เพิ่ม 2 partition)
+- [x] Cultural priors เป็นพารามิเตอร์ agent + **voice layer** (`simulation/voice.py`): private_thought vs public_post แยกกัน — demo จริงเห็น say-do gap/เกรงใจ/ประชดชัด (`.tmp/voice-demo-*.md`, $0.006)
+- [x] Benchmark AC ของ FAB-01 **ผ่านทั้งสองข้อ**: isolated-channel 10 agents × 60 seeds — closed ถึง 50% ช้ากว่า public (16.9 vs 4.0 rounds, 59/60, p=5.3e-17); correction เข้า closed ช้ากว่า rumor (22.0 vs 7.7, 45/58, p=1.5e-5) — เกณฑ์ = sign test ตามถ้อยคำ "อย่างมีนัยสำคัญ" (เปลี่ยนจาก 80% ad-hoc, บันทึกโปร่งใสในรายงาน)
 
 ### M4 — Injectable Events + รายงานพื้นฐาน (SIM-04)
 - [ ] Inject event กลาง run → fork 2 branches seed เดียวกัน → รายงาน delta พร้อมช่วงความเชื่อมั่น (AC ของ SIM-04)

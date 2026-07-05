@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     # --- Cost guard / reproducibility ---
     run_budget_usd_cap: float = 5.0
     default_seed: int = 42
+    # ข้อจำกัดช่วงพัฒนา (คำสั่งผู้ใช้ 5 ก.ค. 2026): ทุก simulation run ≤ 10 agents
+    max_agents_dev: int = 10
 
     # --- Datastores ---
     postgres_url: str = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
