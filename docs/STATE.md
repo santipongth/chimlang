@@ -5,12 +5,13 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 1 (Trust MVP) | P1-M1..M5 เสร็จแล้ว — เหลือ M6 (Executive Dashboard) ปิดเฟส** — ดู docs/PHASE1-BRIEF.md
+- เฟส: **Phase 1 (Trust MVP) — ครบทุก milestone P1-M1..M6 (5 ก.ค. 2026)** 🎉 exit criteria ผ่านครบ 4/4 (ดู PHASE1-BRIEF สรุปปิดเฟส)
+- API layer เริ่มแล้ว: FastAPI `api/app.py` (`make api` / `uvicorn api.app:app`) — /dashboard.json /dashboard.html /health
 - **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
 - test: 90 ข้อเขียว | ต้นทุนสะสม ~$0.48 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป: **P1-M6 (Executive Dashboard, DASH-01..04)** ปิด Phase 1: Executive Brief ≤3 บรรทัด + Risk Heatmap (ต่อจาก red team) + Scenario Comparison (ต่อจาก what-if fork) + Synthetic Voices (voice layer) → HTML + REST (FastAPI ใน api/); ทุก output ผ่าน watermark + fragility label; DASH-01 AC = ต้องมี fragility+confidence เสมอ ห้ามตัวเลขเดี่ยว
+- ถัดไป: **Phase 2 หรือขยาย scale** (รอผู้ใช้สั่ง) — Phase 2 = Rehearsal สด (REH-01/03/04/05), Sim-to-Signal + out-of-sample harness, war room, living memory (SIM-05); หรือผู้ใช้สั่งยกเลิก cap 10 agents เพื่อวัด exit criteria cost จริง (Standard ประเมิน ~$2.49 แล้ว) + scale ทดสอบ 100–1,000 agents
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
@@ -74,3 +75,4 @@
 - 2026-07-05 (Claude Fable 5): **M4 เสร็จ** — SIM-04 fork+belief revision (delta −18.0% CI ไม่คร่อม 0), รายงาน what-if ครบ field บังคับ, hindcast 5 ชุด + batch **ผ่าน 4/5 (exit criteria #1 ✅)**, leak test True-DTAC 0.0%, แก้ leak_if a1; เหลือ M5 ปิดเฟส
 - 2026-07-05 (Claude Fable 5): **M5 เสร็จ = Phase 0 ครบทุก milestone** — watermark (fail-closed, จุด export เดียว), audit log + prediction registry append-only ด้วย PostgreSQL trigger (test ยิง SQL ตรง), ครบวงจรใน run_whatif (audit→predict→finalize→watermark export ยืนยัน record ใน DB); governance store อยู่ governance/store.py, watermark อยู่ governance/watermark.py
 - 2026-07-05 (Claude Fable 5): **เริ่ม Phase 1 + P1-M1..M3 เสร็จ** — fragility (5 universes, TRUST-05 บังคับจริง), calibration engine (Brier + resolution append-only + benchmark page มี variance note), provenance cards + silent majority + fidelity dial (standard ≈ $2.49); **GitHub push + CI เขียว** (`santipongth/chimlang`); ถัดไป P1-M4 Red Team Swarm
+- 2026-07-05 (Claude Fable 5): **P1-M4..M6 เสร็จ = Phase 1 ครบทุก milestone** — Red Team Swarm (5 บทบาท, Attack Surface Report, GOV-05 guard), governance เฟสสอง (election mode auto-classify + no-persuasion + RBAC), Executive Dashboard (DASH-01..04) + FastAPI (/dashboard.json|html, election block ที่ API); exit criteria Phase 1 ผ่าน 4/4; tests 123 เขียว; ถัดไป Phase 2 หรือขยาย scale (รอผู้ใช้)

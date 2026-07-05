@@ -45,11 +45,25 @@
 - [x] GOV-06: RBAC (`governance/rbac.py`) viewer/analyst/operator/admin × create/run/export/admin; election mode ปลดล็อกเฉพาะ admin ที่ verify แล้ว
 - [x] Unit tests +11 (รวม 114 เขียว)
 
-### P1-M6 — Executive Dashboard (DASH-01..04)
-- [ ] Executive Brief ≤ 3 บรรทัด + Risk Heatmap + Scenario Comparison + Synthetic Voices (voice layer)
-- [ ] รูปแบบ: HTML report + REST API (FastAPI ใน api/) — full web UI (React) เป็นงานถัดไปหลังเฟสนี้
-- [ ] ทุก output ผ่าน watermark + fragility label (DASH-01 AC)
-- [ ] Unit tests + integration ครบ
+### P1-M6 — Executive Dashboard (DASH-01..04) ✅ (5 ก.ค. 2026)
+- [x] DASH-01 Executive Brief ≤ 3 บรรทัด (บังคับด้วย `__post_init__`) + fragility + **headline เป็นช่วงเสมอ ไม่ใช่ตัวเลขเดี่ยว** (AC)
+- [x] DASH-02 Risk Heatmap (ต่อยอด Red Team, band สูง/กลาง/ต่ำ) + DASH-03 Scenario Comparison (ต่อยอด what-if fork รายกลุ่ม) + DASH-04 Synthetic Voices + voice/population share
+- [x] FastAPI (`api/app.py`): `/health`, `/dashboard.json`, `/dashboard.html` — HTML self-contained มี watermark banner; election scenario + granularity individual → **403** (GOV-02 บังคับที่ API)
+- [x] Unit tests +9 (รวม 123 เขียว) รวม REST integration ด้วย TestClient
+
+---
+
+## สรุปปิด Phase 1 (5 ก.ค. 2026) — milestones ครบ P1-M1..M6
+
+| Exit criteria (เชิงเทคนิค) | ผล |
+|---|---|
+| (1) Fragility coverage 100% | **ผ่าน ✅** — ทุก what-if รัน 5 universes, รายงานฝัง fragility + label เสมอ, TRUST-05 ลด confidence/ระงับตัวเลขเดี่ยวจริง |
+| (2) Calibration pipeline ทำงานจริง | **ผ่าน ✅** — resolution append-only + Brier + dashboard รายโดเมน (dashboard เติมเมื่อ prediction ครบกำหนด 4 ส.ค.) |
+| (3) Public benchmark page (ผ่าน+ไม่ผ่าน) อัตโนมัติ | **ผ่าน ✅** — `docs/reports/public-benchmark.md` ผ่าน watermark |
+| (4) GOV-02/05/06 บังคับระดับโค้ด + test | **ผ่าน ✅** — election mode/no-persuasion/RBAC + บังคับที่ API |
+
+tests 123 เขียว | ต้นทุนสะสมทั้งโปรเจกต์ ~$0.55 | ยังอยู่ภายใต้ cap 10 agents ตลอด
+**งานถัดไปเป็นของ Phase 2+** (Rehearsal สด REH-01/03/04/05, Sim-to-Signal, war room, living memory) หรือขยาย scale ตามที่ผู้ใช้สั่ง
 
 ## กติกาที่สืบทอดจาก Phase 0 (ดู AGENTS.md)
 
