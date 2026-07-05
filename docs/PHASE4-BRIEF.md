@@ -27,7 +27,12 @@
 - [x] Governance 2 ชั้น: ยิง task ตรงข้าม API ก็ยังโดน require_aggregate (test ครอบ)
 - [x] broker จริงเชื่อมได้ (smoke กับ redis ใน docker) | tests eager-mode +4 (รวม 204 เขียว) — worker เต็มวงจรทดสอบ manual
 
-### P4-M4 — Auth + RBAC บังคับที่ API (GOV-06 เชื่อมจริง) + workspace isolation
+### P4-M4 — Auth + RBAC บังคับที่ API (GOV-06 เชื่อมจริง) ✅ (6 ก.ค. 2026)
+- [x] `api/auth.py`: API key ผ่าน `X-API-Key` — `API_KEYS=คีย์:ผู้ใช้:role[:verified],...`; รายการเสีย = คีย์ใช้ไม่ได้ (fail-closed); `AUTH_ENABLED=false` (dev default) = dev-admin
+- [x] บังคับที่ endpoint: run (dashboard/signal/jobs) ต้องสิทธิ์ RUN, PDF ต้อง EXPORT, runs/graph ต้อง authenticate — viewer รันไม่ได้ (403), analyst export ไม่ได้ (403)
+- [x] **Election scenario ต้อง admin ที่ verified เท่านั้น** แม้ granularity aggregate (GOV-02+GOV-06) — admin ธรรมดายังโดน 403
+- [x] Citizen endpoints สาธารณะโดยเจตนา (persona P4 ของ PRD) — test ยืนยัน
+- [x] tests +7 (รวม 211 เขียว) | workspace isolation ระดับ tenant → เลื่อนไป M5/M6 (ผูกกับ deployment)
 
 ### P4-M5 — Deployment: docker production + ตัดสินใจ cloud/region (D9 ค้าง, ผูก PDPA/NFR-04 — ต้องถามผู้ใช้)
 

@@ -18,7 +18,8 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 4 (Production Readiness) — เริ่ม 6 ก.ค. 2026 | P4-M1 React UI เสร็จ** — ดู docs/PHASE4-BRIEF.md (Phase 0-3 ของ PRD ปิดครบ)
+- เฟส: **Phase 4 (Production Readiness) | P4-M1..M4 เสร็จ (UI/PDF/Queue/Auth) — เหลือ M5 Deployment (ต้องถามผู้ใช้เรื่อง cloud/region) + M6 เก็บตก NFR** — ดู docs/PHASE4-BRIEF.md
+- PDF: `GET /dashboard.pdf` (ฟอนต์ Sarabun ฝัง, watermark ทุกหน้า+metadata) | Queue: `make worker` + POST /jobs/whatif | Auth: `AUTH_ENABLED=true` + `API_KEYS` ใน env (dev ปิดอยู่)
 - **Web UI ใช้ได้แล้ว**: `make api` → http://localhost:8000/app/ (dev แยก: `cd web && npm run dev`) — 2 คอลัมน์ sidebar+content, theme เขียวมรกต/พื้นสว่างตาม ref ผู้ใช้, TH/EN toggle, 5 หน้า (landing/wizard รันใหม่/dashboard/citizen/การจัดการรัน)
 - **⚡ CAP เปลี่ยนแล้ว (คำสั่งผู้ใช้ 6 ก.ค.): 1,000 agents/run** (rename เป็น `max_agents_per_run`) — deep 5,000 ต้องขอผู้ใช้ก่อน; `RUN_BUDGET_USD_CAP=5`/run
 - **Scale วัดจริงแล้ว**: multiverse 1,000×30×5u = 5.8 วิ | Standard run เต็มรูป $25.09 (thinking-on) / $0.82 (off) → **exit criteria cost ≤$80 ผ่าน ✅** (docs/reports/scale-measurement.md)
@@ -107,3 +108,4 @@
 - 2026-07-06 (Claude Fable 5): **CIT-03 ครึ่งหลังเสร็จ = CIT-01..04 ครบเต็มข้อ** — เสียงจริง (ผ่าน k-anonymity) เป็น prior sim รอบใหม่, portal แสดงคู่ก่อน/หลังรับเสียง, inject เข้า Living Memory เป็น real_event; tests 191 เขียว
 - 2026-07-06 (Claude Fable 5): **Re-calibrate scale เสร็จ (ADR-0003)** — วินิจฉัย: seeder เดี่ยว penetration 92%→8% เมื่อ n โต + คำชี้แจงไหลจากคนเดียวผิดธรรมชาติ; แก้: preseed 10% + 60 rounds + `Message.broadcast_share=0.20` (โหมดสื่อมวลชนใหม่ใน engine) → delta −15% เท่ากันที่ n=100/1,000; tests 193 เขียว; แก้ CI ที่แดงจาก test skip ไม่สะอาด (บทเรียน: watch CI ด้วย SHA ไม่ใช่ --limit 1)
 - 2026-07-06 (Claude Fable 5): **เริ่ม Phase 4 + P4-M1 React UI เสร็จ** — Vite+React18+TS+Tailwind4, theme/layout ตาม ref ผู้ใช้ (sidebar+content 2 คอลัมน์, เขียวมรกต, serif heading, step wizard), i18n TH/EN ทุกหน้า, 5 หน้า รวม landing + การจัดการรัน (/runs.json ใหม่ + recent_runs()), FastAPI เสิร์ฟ dist ที่ /app; tests 196 เขียว; ถัดไป P4-M2 PDF export
+- 2026-07-06 (Claude Fable 5): **P4-M2..M4 เสร็จ** — PDF export ผ่านจุด watermark เดียว (Sarabun ฝัง+shaping, metadata ตรวจกลับได้, GOV-02 label ใน PDF), Celery+Redis queue (POST /jobs/whatif + guard ก่อน enqueue + governance 2 ชั้น), Auth/RBAC (X-API-Key, viewer/analyst/operator/admin, election=admin verified เท่านั้น, citizen สาธารณะ); tests 211 เขียว; เหลือ M5 deployment (รอผู้ใช้ตัดสินใจ cloud) + M6

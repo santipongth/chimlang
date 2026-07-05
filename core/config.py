@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # --- Governance flags (default ปลอดภัย ห้ามปิดใน production) ---
     pii_detector_enabled: bool = True
     watermark_enabled: bool = True
+    # --- Auth/RBAC ที่ API (GOV-06, P4-M4) ---
+    # dev default = ปิด (ทุก request เป็น dev-admin) — production ต้องเปิด + ตั้ง API_KEYS
+    auth_enabled: bool = False
+    api_keys: str = ""  # "คีย์:ผู้ใช้:role[:verified],..." — role: viewer|analyst|operator|admin
 
 
 def get_settings(**overrides) -> Settings:

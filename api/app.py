@@ -11,10 +11,11 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from api.auth import get_principal, require, require_election
 from api.dashboard import (
     Dashboard,
     ScenarioColumn,
@@ -24,6 +25,7 @@ from api.dashboard import (
 from api.render import render_dashboard_html
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
+from governance.rbac import Permission, Principal
 from simulation.engine import Message
 from simulation.persona import DEFAULT_SEGMENTS_PATH, PersonaFactory
 from simulation.provenance import build_cards
@@ -72,7 +74,10 @@ def health() -> dict:
 
 @app.get("/graph/indirect.json")
 def graph_indirect(
-    a: str = Query(...), b: str = Query(...), max_hops: int = Query(3, le=4)
+    a: str = Query(...),
+    b: str = Query(...),
+    max_hops: int = Query(3, le=4),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
     """SIM-10 — ความสัมพันธ์ทางอ้อมระหว่าง 2 entities จาก knowledge graph (หนี้เทคนิค Phase 0)"""
     from graphlayer.store import Neo4jStore
@@ -152,7 +157,11 @@ def dashboard_json(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     granularity: str = Query("aggregate"),
     agents: int = Query(100, ge=10),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
+    require(principal, Permission.RUN)
+    if ElectionPolicy(classify_scenario(subject)).active:
+        require_election(principal)  # GOV-06: election เฉพาะ admin ที่ verify
     try:
         dash = _run_dashboard(subject, granularity, agents)
     except ElectionModeError as e:
@@ -165,8 +174,13 @@ def dashboard_pdf(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     granularity: str = Query("aggregate"),
     agents: int = Query(100, ge=10),
+    principal: Principal = Depends(get_principal),
 ):
     """P4-M2 — Executive Brief เป็น PDF (ผ่านจุด export เดียว + watermark สองชั้น)"""
+    require(principal, Permission.RUN)
+    require(principal, Permission.EXPORT)
+    if ElectionPolicy(classify_scenario(subject)).active:
+        require_election(principal)
     from fastapi.responses import FileResponse
 
     from governance.watermark import export_report
@@ -214,8 +228,11 @@ class JobRequest(BaseModel):
 
 
 @app.post("/jobs/whatif")
-def submit_job(req: JobRequest) -> dict:
+def submit_job(req: JobRequest, principal: Principal = Depends(get_principal)) -> dict:
     """P4-M3 — ส่ง simulation เข้าคิว (Celery) แทนการรอใน request (NFR-03)"""
+    require(principal, Permission.RUN)
+    if ElectionPolicy(classify_scenario(req.subject)).active:
+        require_election(principal)
     from core.tasks import celery_app, whatif_dashboard_task
 
     policy = ElectionPolicy(classify_scenario(req.subject))
@@ -236,7 +253,7 @@ def submit_job(req: JobRequest) -> dict:
 
 
 @app.get("/jobs/{job_id}")
-def job_status(job_id: str) -> dict:
+def job_status(job_id: str, principal: Principal = Depends(get_principal)) -> dict:
     from core.tasks import celery_app
 
     res = celery_app.AsyncResult(job_id)
@@ -249,7 +266,7 @@ def job_status(job_id: str) -> dict:
 
 
 @app.get("/runs.json")
-def runs_json() -> dict:
+def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     """หน้าการจัดการรัน (P4-M1): รันล่าสุด + คำทำนายที่ครบกำหนดรอ resolve"""
     from datetime import date
 
@@ -278,7 +295,11 @@ def runs_json() -> dict:
 def dashboard_html(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     granularity: str = Query("aggregate"),
+    principal: Principal = Depends(get_principal),
 ) -> str:
+    require(principal, Permission.RUN)
+    if ElectionPolicy(classify_scenario(subject)).active:
+        require_election(principal)
     try:
         dash = _run_dashboard(subject, granularity)
     except ElectionModeError as e:
@@ -290,8 +311,10 @@ def dashboard_html(
 def signal_json(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     agents: int = Query(100, ge=10),
+    principal: Principal = Depends(get_principal),
 ) -> dict:
     """SIG-01/03/04 — features พร้อมช่วง + metadata บังคับ; election = ปิด (GOV-02)"""
+    require(principal, Permission.RUN)
     if not signal_rate_limiter.allow():
         raise HTTPException(status_code=429, detail="rate limit: signal endpoint (SIG-04)")
     policy = ElectionPolicy(classify_scenario(subject))
