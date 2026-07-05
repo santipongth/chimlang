@@ -1,7 +1,20 @@
 # STATE.md — สถานะโครงการ (ไฟล์ส่งมอบข้ามโมเดล)
 
-> ไฟล์นี้คือ "ความจำกลาง" ของโครงการ — agent ทุกตัว (Claude/Codex/Kimi/อื่นๆ) อ่านก่อนเริ่ม
+> ไฟล์นี้คือ "ความจำกลาง" ของโครงการ — agent ทุกตัว (Claude/Codex/GLM/Kimi/อื่นๆ) อ่านก่อนเริ่ม
 > และ**อัปเดตก่อนจบทุก session** (protocol ใน AGENTS.md) | อัปเดตล่าสุด: 5 ก.ค. 2026
+
+## 🔵 เริ่มตรงนี้ (พรุ่งนี้/เมื่อกลับมา)
+
+1. อ่าน: `AGENTS.md` → ไฟล์นี้ (STATE.md) → `docs/PHASE1-BRIEF.md` (สรุปปิด Phase 1)
+2. sync โค้ดล่าสุด: `git pull` (ล่าสุด commit `179a861`, tree สะอาด, 24 commits)
+3. เปิด dev stack: `docker compose up -d` (postgres/neo4j/redis) — จำเป็นสำหรับ test governance
+4. ยืนยันสุขภาพระบบ: `uv run pytest -q` (ต้องได้ 123 passed) ก่อนเริ่มงานใหม่
+5. ต้องมี `.env` (มี OpenRouter API key) — ไม่อยู่ใน git ผู้ใช้เก็บเอง; model: crowd=qwen3.5-flash-02-23, analyst=qwen3-235b-a22b-2507
+6. **cap 10 agents ยังบังคับอยู่** — ห้าม bypass จนกว่าผู้ใช้สั่งขยาย
+7. เลือกงานถัดไปจาก "งานถัดไป" ด้านล่าง (Phase 2 / ขยาย scale / เก็บงานคุณภาพ) — ถ้า non-trivial เสนอ plan ให้ผู้ใช้ก่อน
+
+**หมายเหตุความต่อเนื่องข้ามโมเดล:** ความต่อเนื่องอยู่ที่ไฟล์เหล่านี้ + git history ไม่ใช่ที่บทสนทนา —
+เปิดเครื่องมือใหม่ (Codex/GLM) แล้วอ่าน 3 ไฟล์นี้ก็ทำงานต่อได้เต็มบริบท โดยไม่ต้องมีประวัติแชทเดิม
 
 ## สถานะปัจจุบัน (TL;DR)
 
@@ -9,7 +22,7 @@
 - API layer เริ่มแล้ว: FastAPI `api/app.py` (`make api` / `uvicorn api.app:app`) — /dashboard.json /dashboard.html /health
 - **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
-- test: 90 ข้อเขียว | ต้นทุนสะสม ~$0.48 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
+- test: **123 ข้อเขียว** | ต้นทุนสะสม ~$0.55 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
 - ถัดไป: **Phase 2 หรือขยาย scale** (รอผู้ใช้สั่ง) — Phase 2 = Rehearsal สด (REH-01/03/04/05), Sim-to-Signal + out-of-sample harness, war room, living memory (SIM-05); หรือผู้ใช้สั่งยกเลิก cap 10 agents เพื่อวัด exit criteria cost จริง (Standard ประเมิน ~$2.49 แล้ว) + scale ทดสอบ 100–1,000 agents
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
