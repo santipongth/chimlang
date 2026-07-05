@@ -21,7 +21,7 @@
 - เฟส: **Phase 3 (Citizen + Scale + Quality) — เริ่ม 6 ก.ค. 2026 | โครงหลักครบทั้ง 3 สาย** — ดู docs/PHASE3-BRIEF.md (Phase 0-2 ปิดครบ)
 - **⚡ CAP เปลี่ยนแล้ว (คำสั่งผู้ใช้ 6 ก.ค.): 1,000 agents/run** (rename เป็น `max_agents_per_run`) — deep 5,000 ต้องขอผู้ใช้ก่อน; `RUN_BUDGET_USD_CAP=5`/run
 - **Scale วัดจริงแล้ว**: multiverse 1,000×30×5u = 5.8 วิ | Standard run เต็มรูป $25.09 (thinking-on) / $0.82 (off) → **exit criteria cost ≤$80 ผ่าน ✅** (docs/reports/scale-measurement.md)
-- **⚠️ Finding สำคัญ**: delta ที่ n=1,000 = −1.2% vs −16.5% ที่ n=10 — พลวัตเปลี่ยนตาม scale ต้อง re-calibrate พารามิเตอร์ channel/กลุ่มก่อนเชื่อผลเชิงปริมาณที่ scale ใหม่
+- **✅ Re-calibrate เสร็จ (ADR-0003)**: scenario ระดับเมืองที่ scale ≥100 ใช้ rumor preseed 10% + 60 rounds + คำชี้แจง `broadcast_share=0.20` → delta scale-invariant (−15% ทั้ง n=100/1,000); `Message.broadcast_share` เพิ่มใน engine (default 0 = เดิม)
 - Citizen Mode ใช้ได้แล้ว: POST /citizen/impact.json (session-only), /citizen/portal.html, /citizen/feedback.json (k-anonymity ≥20) — disclaimer ถาวรทุก output
 - calibration ≥15% ยังรอ predictions ครบกำหนดจริง (คิวแรก 8 ก.ค. — `scripts/resolve_predictions.py`)
 - API layer: FastAPI `api/app.py` (`make api`) — /dashboard.json /dashboard.html /health
@@ -30,7 +30,8 @@
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
 - test: **123 ข้อเขียว** | ต้นทุนสะสม ~$0.55 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป: (1) re-calibrate พารามิเตอร์แพร่ที่ scale 1,000 (finding ข้างบน — ควรทำก่อนใช้ผลจริง) (2) CIT-03 ครึ่งหลัง: inject aggregate feedback กลับเข้า sim + แสดงผลต่อสาธารณะ (3) 8 ก.ค. resolve predictions คิวแรก (4) งานคุณภาพค้าง: React UI, calibrate segments กับสำมะโนจริง (ต้องการแหล่งข้อมูลจากผู้ใช้), TRUST-08 panel, semantic memory
+- ถัดไป: (1) 8 ก.ค. resolve predictions คิวแรก (`scripts/resolve_predictions.py` — ดูวิธีในหมายเหตุด้านล่าง) (2) งานคุณภาพค้างที่รอผู้ใช้: React UI (แค่สั่ง), calibrate segments กับสำมะโนจริง (รอไฟล์/ลิงก์จากผู้ใช้ → วาง data/samples/population/sources/), TRUST-08 panel (รอผู้ใช้ตัดสินใจ sourcing), semantic memory (เมื่อความจำโต)
+- **หมายเหตุ resolve predictions**: prediction ปัจจุบันมาจาก scenario สังเคราะห์ (corpus demo) — ไม่มีผลจริงภายนอกให้เทียบ; การ resolve ให้มีความหมายต้องเริ่มป้อนเหตุการณ์/นโยบายจริงเข้าระบบก่อน แล้วเมื่อครบกำหนดผู้ใช้ป้อนผลจริง: `uv run python scripts/resolve_predictions.py --id N --outcome true|false --note "แหล่งอ้างอิง"` → Brier สะสมอัตโนมัติ → rebuild benchmark page
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
@@ -103,3 +104,4 @@
 - 2026-07-06 (Claude Fable 5): **P2-M6 เสร็จ = Phase 2 ครบทุก milestone** — influence graph ระดับ segment (test กัน agent id หลุด), impact waterfall 2-3 hop (30 entities จริงจาก Neo4j; เกือบซ้ำบทเรียน shortestPath M2), media agent 3 stance, rumor mutation ใน closed group; exit criteria 6/6; tests 179 เขียว; ถัดไป Phase 3 / scale / เก็บคุณภาพ (รอผู้ใช้)
 - 2026-07-06 (Claude Fable 5): **Phase 3 เริ่ม (ผู้ใช้สั่ง 3 สายพร้อมกัน) — โครงหลักครบ**: (S) cap→1,000+rename+perf fix+วัดจริง: standard $25.09/$0.82 ผ่าน ≤$80✅, 1000×30×5u=5.8วิ, **finding: delta หด −16.5%→−1.2% ที่ scale ใหญ่ ต้อง re-calibrate**; (C) CIT-01..04: impact twin session-only (test พิสูจน์ไม่แตะ DB), portal, feedback k-anonymity≥20, disclaimer ถาวร; (Q) UTF-8 console จุดเดียว + /graph/indirect.json; tests 188 เขียว
 - 2026-07-06 (Claude Fable 5): **CIT-03 ครึ่งหลังเสร็จ = CIT-01..04 ครบเต็มข้อ** — เสียงจริง (ผ่าน k-anonymity) เป็น prior sim รอบใหม่, portal แสดงคู่ก่อน/หลังรับเสียง, inject เข้า Living Memory เป็น real_event; tests 191 เขียว
+- 2026-07-06 (Claude Fable 5): **Re-calibrate scale เสร็จ (ADR-0003)** — วินิจฉัย: seeder เดี่ยว penetration 92%→8% เมื่อ n โต + คำชี้แจงไหลจากคนเดียวผิดธรรมชาติ; แก้: preseed 10% + 60 rounds + `Message.broadcast_share=0.20` (โหมดสื่อมวลชนใหม่ใน engine) → delta −15% เท่ากันที่ n=100/1,000; tests 193 เขียว; แก้ CI ที่แดงจาก test skip ไม่สะอาด (บทเรียน: watch CI ด้วย SHA ไม่ใช่ --limit 1)

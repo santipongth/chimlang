@@ -27,6 +27,9 @@ class Message:
     start_round: int
     seed_channel: str  # ช่องทางที่ข้อความถูกปล่อยครั้งแรก
     counters: str | None = None  # msg_id ของข่าวที่ข้อความนี้หักล้าง (belief revision)
+    # broadcast_share > 0 = ปล่อยแบบสื่อมวลชน (แถลงข่าว/ข่าวทีวี) ถึงสัดส่วนนี้ของประชากรทันที
+    # ที่ start_round — จำเป็นที่ scale ใหญ่: คำชี้แจงทางการไม่ได้ไหลจากคนเดียว (calibration 6 ก.ค. 2026)
+    broadcast_share: float = 0.0
 
 
 @dataclass
@@ -218,6 +221,13 @@ class FabricSimulation:
                 if round_no < msg.start_round:
                     continue
                 if round_no == msg.start_round:
+                    if msg.broadcast_share > 0:
+                        # โหมดสื่อมวลชน: ถึงสัดส่วนประชากรทันที (สุ่ม deterministic ต่อ seed)
+                        k = max(1, round(msg.broadcast_share * n))
+                        reached = self._rng.sample(self._order, k)
+                        for aid in sorted(reached):
+                            self._expose(round_no, self._states[aid], msg, msg.seed_channel)
+                        continue
                     # ปล่อยข้อความ: ผู้แชร์คนแรกคือ agent ที่ voice สูงสุดใน seed channel
                     seeder = max(
                         self._order,

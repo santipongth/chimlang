@@ -72,3 +72,28 @@ def test_channel_params_encode_fab01_assumptions():
     assert CHANNELS["line_closed_group"].base_rate < CHANNELS["public_feed"].base_rate
     assert CHANNELS["line_closed_group"].trust > CHANNELS["public_feed"].trust
     assert CHANNELS["line_closed_group"].correction_factor < 1.0  # ข่าวแก้เข้ากลุ่มปิดยาก
+
+
+def test_broadcast_share_reaches_fraction_and_is_deterministic(factory):
+    """ADR-0003: broadcast mode (แถลงผ่านสื่อ) ถึง ~share ของประชากรทันที ณ start_round"""
+    personas = factory.sample(100, seed=9, max_agents=1000)
+
+    def run(seed):
+        sim = FabricSimulation(personas, seed=seed)
+        sim.inject(Message("ann", "correction", "แถลง", 1, "public_feed", broadcast_share=0.2))
+        return sim.run(1)
+
+    r1, r2 = run(9), run(9)
+    heard1 = {a for a, st in r1.states.items() if "ann" in st.heard}
+    heard2 = {a for a, st in r2.states.items() if "ann" in st.heard}
+    assert heard1 == heard2  # deterministic ต่อ seed
+    assert len(heard1) == 20  # 20% ของ 100
+    assert not any(e["action"] == "seeded" for e in r1.trail)  # ไม่มี seeder เดี่ยวในโหมดนี้
+
+
+def test_broadcast_zero_keeps_single_seeder_behavior(factory):
+    personas = factory.sample(50, seed=3, max_agents=1000)
+    sim = FabricSimulation(personas, seed=3)
+    sim.inject(Message("m", "rumor", "x", 1, "public_feed"))
+    r = sim.run(1)
+    assert sum(1 for e in r.trail if e["action"] == "seeded") == 1  # พฤติกรรมเดิมไม่เปลี่ยน

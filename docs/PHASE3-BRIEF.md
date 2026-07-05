@@ -10,7 +10,7 @@ scope PRD Phase 3 = CIT-01..04 | Scale = ยกเลิก cap 10 (คำสั
 - [x] Perf: `_neighbors` ใช้ index map (เดิม O(n) ต่อ call — หน่วงจริงที่ 1,000 agents)
 - [x] API endpoints รับ `agents` param (default 100 = quick) แทนการใช้ cap เป็นขนาด demo
 - [x] วัดจริง (`docs/reports/scale-measurement.md`): multiverse 1,000×30×5u ใช้ **5.8 วิ** (เป้า NFR-01 ≤2 ชม.); voice จริง $0.001115/call (thinking-on) / $0.000037 (off) → **Standard run เต็มรูป $25.09 / $0.82 — ผ่านทั้ง ≤$80 (exit Phase 0) และ ≤$50 (PRD) ✅** (extrapolation จากต้นทุน/call วัดจริง — prediction ใน registry รอ run เต็มยืนยัน)
-- [ ] **ข้อสังเกตสำคัญที่ต้องตามต่อ**: ที่ 1,000 agents ผล what-if delta = −1.2% (fragility 20) ต่างจาก −16.5% ที่ n=10 — พลวัตการแพร่เปลี่ยนตาม scale, พารามิเตอร์ channel/กลุ่ม LINE (GROUP_SIZE=4, สะพานข้ามกลุ่ม) ต้อง re-calibrate ที่ scale จริงก่อนเชื่อผลเชิงปริมาณ
+- [x] **Re-calibrate ที่ scale เสร็จ (ADR-0003)**: วินิจฉัย = seeder เดี่ยวไปไม่ถึงประชากรใหญ่ (penetration 92%→8%) + คำชี้แจงก็ไหลจากคนเดียว → สูตร calibrate: rumor preseed 10% + 60 rounds + correction `broadcast_share=0.20` (feature ใหม่ engine, default 0 ไม่กระทบ run เดิม) → **delta −15.0% (n=100) / −15.1% (n=1,000) scale-invariant** สอดคล้อง n=10 เดิม
 
 ## สายที่ 2 — P3-C: Citizen Mode (CIT-01..04) ✅ โครงหลัก (6 ก.ค. 2026)
 
