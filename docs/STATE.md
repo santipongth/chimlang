@@ -5,10 +5,11 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 0 — milestones ครบ M-1..M5 ทั้งหมด (5 ก.ค. 2026)** 🎉
-- exit criteria: #1 hindcast ≥3/5 → **ผ่าน 4/5 ✅** | #2 cost ≤$80 → รอวัดจริงเมื่อยกเลิก cap (ประมาณการ $3–17 แบบ voice-sparse) | #3 governance 3 ข้อ + test → **ผ่าน ✅**
-- test: 77 ข้อเขียว | ต้นทุนสะสม ~$0.31 จากงบ $50/เดือน | dev stack: docker compose (postgres+pgvector, neo4j, redis)
-- **งานถัดไปเป็นของ Phase 1** (Trust MVP: TRUST-01 เต็มรูป, Calibration Engine, Fragility, REH-02, DASH) — เริ่มเมื่อผู้ใช้สั่ง + ควรทบทวน cap 10 agents ก่อนวัด exit criteria #2
+- เฟส: **Phase 1 (Trust MVP) — เริ่ม 5 ก.ค. 2026 (มติผู้ใช้) | P1-M1 เสร็จแล้ว** — ดู docs/PHASE1-BRIEF.md
+- **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้ยืนยันซ้ำตอนเริ่ม Phase 1) — ผู้ใช้จะสั่งขยายเอง
+- Phase 0 ปิดครบ: exit #1 hindcast 4/5 ✅ | #2 cost — วัดได้หลังขยาย agents | #3 governance ✅
+- test: 84 ข้อเขียว | ต้นทุนสะสม ~$0.31 | GitHub push: gh CLI ติดตั้งแล้ว **รอผู้ใช้ `gh auth login`** แล้วค่อยสร้าง private repo + push
+- ถัดไป: P1-M2 (Calibration Engine + registry resolution + public benchmark page)
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
 ## แผนที่โค้ด (อะไรอยู่ไหน ทำไม)

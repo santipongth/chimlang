@@ -5,7 +5,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - คู่มือ agent ทุกโมเดล + protocol ส่งมอบงานข้ามโมเดล: @AGENTS.md | สถานะล่าสุด: @docs/STATE.md (**อัปเดตก่อนจบทุก session**)
 - Spec ฉบับเต็ม: @docs/PRD-SANAM.md (PRD v1.1 — ชื่อชั่วคราวเดิม "SANAM" = ชิมลาง)
 - การตัดสินใจทางเทคนิค: @docs/TECH-DECISIONS.md (อ่านก่อนเลือก library/framework ใดๆ)
-- Scope ปัจจุบัน: **Phase 0 เท่านั้น** — ดู @docs/PHASE0-BRIEF.md ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
+- Scope ปัจจุบัน: **Phase 1 (Trust MVP)** — ดู @docs/PHASE1-BRIEF.md (Phase 0 ปิดครบแล้ว: @docs/PHASE0-BRIEF.md) ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
 
 ## โครงสร้าง repo (เป้าหมาย)
 
@@ -46,7 +46,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - **Traceability**: ทุกตัวเลข aggregate ต้องย้อนถึง reasoning trail ระดับ agent ได้ — เก็บ trail เสมอ อย่า optimize ทิ้ง (NFR-08)
 - **LLM calls ผ่าน adapter layer เดียว** (OpenAI-compatible) — ห้าม hardcode provider หรือ model name ในโค้ด business logic (SIM-07)
 - **Cost guard**: ทุก run คำนวณ cost estimate ก่อนเริ่ม และเคารพ `RUN_BUDGET_USD_CAP` จาก env — เกิน cap ให้ abort พร้อมรายงาน
-- **ข้อจำกัดช่วงพัฒนา (คำสั่งผู้ใช้ 5 ก.ค. 2026)**: ทุก simulation run ใช้ **agent ไม่เกิน 10 ตัว** จนกว่าผู้ใช้จะยกเลิกข้อจำกัดนี้ — ต้องการเกินให้ถามก่อนทุกครั้ง
+- **ข้อจำกัดตลอดการพัฒนา (คำสั่งผู้ใช้ 5 ก.ค. 2026)**: ทุก simulation run ใช้ **agent ไม่เกิน 10 ตัว จนกว่าระบบจะเสร็จสมบูรณ์ครบทุกเฟส** — ผู้ใช้จะสั่งขยายเองเมื่อพร้อม ห้ามเพิ่ม/bypass cap ในทุกเฟส
 - ภาษาไทยเป็น first-class: agent reasoning และ test fixtures ใช้ข้อความไทยจริง ระวัง tokenizer/encoding ทุกจุดที่ประมวลผลข้อความ
 - Secrets อยู่ใน `.env` เท่านั้น (ดู `.env.example`) — ห้าม commit, ห้าม log, ห้ามใส่ในไฟล์นี้
 

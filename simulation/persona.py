@@ -38,12 +38,30 @@ class Persona:
 
 
 class PersonaFactory:
-    def __init__(self, segments_path: Path | str = DEFAULT_SEGMENTS_PATH):
-        raw = yaml.safe_load(Path(segments_path).read_text(encoding="utf-8"))
-        self.segments = raw["segments"]
+    def __init__(self, segments_path: Path | str = DEFAULT_SEGMENTS_PATH, *, segments=None):
+        if segments is not None:
+            self.segments = segments
+        else:
+            raw = yaml.safe_load(Path(segments_path).read_text(encoding="utf-8"))
+            self.segments = raw["segments"]
         total = sum(s["share"] for s in self.segments)
         if abs(total - 1.0) > 0.01:
             raise ValueError(f"share ของ segments รวมได้ {total} ต้องเป็น 1.0")
+
+    def perturb_shares(self, *, seed: int, pct: float = 0.10) -> "PersonaFactory":
+        """สร้าง factory ใหม่ที่สัดส่วน segment ถูกเขย่า ±pct แล้ว normalize (TRUST-04)
+
+        deterministic ต่อ seed — ใช้สร้าง parallel universe ที่สมมติฐาน population ต่างกันเล็กน้อย
+        """
+        rng = Random(seed)
+        jittered = [
+            {**s, "share": max(0.005, s["share"] * (1 + rng.uniform(-pct, pct)))}
+            for s in self.segments
+        ]
+        total = sum(s["share"] for s in jittered)
+        for s in jittered:
+            s["share"] = s["share"] / total
+        return PersonaFactory(segments=jittered)
 
     def allocate(self, n: int) -> dict[str, int]:
         """แบ่งจำนวน agent ต่อ segment แบบ largest remainder — deterministic"""

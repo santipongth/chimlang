@@ -32,6 +32,7 @@ def render_whatif_report(
     base_msg_id: str,
     event_text: str,
     rounds: int,
+    fragility=None,  # trust.universe.FragilityReport — บังคับใส่ใน pipeline จริง (coverage 100%)
 ) -> str:
     example = outcomes[0]
     lo, hi = estimate.ci95
@@ -42,11 +43,51 @@ def render_whatif_report(
         f"- event ที่ inject: {event_text} (round {example.inject_round})",
         f"- seeds: {len(outcomes)} | rounds: {rounds} | agents/run: {len(example.baseline.states)}",
         "",
-        "## Delta ของสัดส่วนผู้เชื่อข่าวลือ (variant − baseline)",
-        f"- ค่าเฉลี่ย: **{estimate.mean_delta:+.1%}** | ช่วงความเชื่อมั่น 95%: [{lo:+.1%}, {hi:+.1%}]",
+    ]
+    if fragility is not None and fragility.downgraded:
+        lines += [
+            f"> 🔻 **คำเตือน (TRUST-05): Fragility Index = {fragility.fragility_index}/100 — "
+            f"{fragility.confidence_label}** ข้อสรุปด้านล่างพลิกได้เมื่อสมมติฐานถูกเขย่า",
+            "",
+        ]
+    lines += ["## Delta ของสัดส่วนผู้เชื่อข่าวลือ (variant − baseline)"]
+    if fragility is not None and fragility.block_point_estimate:
+        # TRUST-05: fragility > 70 → ห้ามตัวเลขเดี่ยว — รายงานเฉพาะช่วง
+        lines.append(
+            f"- ช่วงประมาณการ 95%: [{lo:+.1%}, {hi:+.1%}] (ตัวเลขเดี่ยวถูกระงับอัตโนมัติ — fragility เกิน 70)"
+        )
+    else:
+        lines.append(
+            f"- ค่าเฉลี่ย: **{estimate.mean_delta:+.1%}** | ช่วงความเชื่อมั่น 95%: [{lo:+.1%}, {hi:+.1%}]"
+        )
+    lines += [
         f"- ทิศทางชัดเจนทางสถิติ: {sig}",
         "- ⚠️ ผลนี้เป็น simulation_estimate — บอกทิศทางและโครงสร้าง ไม่ใช่คำทำนายรับประกัน",
         "",
+    ]
+    if fragility is not None:
+        lines += [
+            "## Fragility (TRUST-04): ข้อสรุปทนต่อการเขย่าสมมติฐานแค่ไหน",
+            "",
+            f"- **Fragility Index: {fragility.fragility_index}/100** — "
+            f"{fragility.confidence_label}",
+            f"- ข้อสรุปเสียงข้างมากจาก {len(fragility.universes)} universes: "
+            f"**{fragility.majority_conclusion}**",
+            "",
+            "| universe | สมมติฐาน | delta เฉลี่ย | CI 95% | ข้อสรุป |",
+            "|---|---|---|---|---|",
+        ]
+        for u in fragility.universes:
+            ulo, uhi = u.estimate.ci95
+            assumption = (
+                "ฐาน (ไม่เขย่า)" if u.perturb_seed is None else f"เขย่า share ±10% (s{u.perturb_seed})"
+            )
+            lines.append(
+                f"| u{u.universe_id} | {assumption} | {u.estimate.mean_delta:+.1%} "
+                f"| [{ulo:+.1%}, {uhi:+.1%}] | {u.conclusion} |"
+            )
+        lines.append("")
+    lines += [
         "## Voice share vs Population share (baseline, seed แรก — TRUST-07)",
         "",
         "| กลุ่ม | population share | voice share |",

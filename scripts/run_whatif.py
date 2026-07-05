@@ -18,9 +18,9 @@ from core.config import get_settings
 from governance.store import GovernanceStore, Prediction
 from governance.watermark import export_report
 from simulation.engine import Message
-from simulation.experiment import run_whatif
 from simulation.persona import PersonaFactory
 from simulation.report import render_whatif_report
+from trust.universe import run_multiverse_whatif
 
 ROOT = Path(__file__).resolve().parents[1]
 RUMOR = "ข่าวลือ: จะเก็บค่าธรรมเนียมมอเตอร์ไซค์ด้วยคันละ 50 บาทต่อวัน"
@@ -58,27 +58,38 @@ def main() -> None:
         actor=getuser(), action="run_started", run_id=run_id, config_hash=config_hash
     )
 
-    estimate, outcomes = run_whatif(
-        lambda seed: factory.sample(n, seed=seed, max_agents=n),
-        seeds=list(range(args.seeds)),
+    # TRUST-04: ทุก what-if รัน ≥ 5 universes เสมอ (fragility coverage 100%)
+    fragility, outcomes = run_multiverse_whatif(
+        factory,
+        n_agents=n,
+        max_agents=n,
+        universes=5,
+        seeds_per_universe=args.seeds // 5 or 5,
         rounds=args.rounds,
         base_messages=[Message("rumor", "rumor", RUMOR, 1, "public_feed")],
         event=Message(
             "official", "correction", EVENT, args.inject_round, "public_feed", counters="rumor"
         ),
         target_msg_id="rumor",
+        base_seed=settings.default_seed,
+        on_progress=lambda u: print(
+            f"  universe {u.universe_id}: delta {u.estimate.mean_delta:+.1%} → {u.conclusion}"
+        ),
     )
+    estimate = fragility.universes[0].estimate  # สมมติฐานฐาน
 
     # prediction registry (TRUST-01): ทุก run ต้องมี record ตรวจสอบได้ ≥ 1
     lo, hi = estimate.ci95
     negative_share = sum(1 for d in estimate.per_seed if d < 0) / len(estimate.per_seed)
-    direction = "ลดลง" if estimate.mean_delta < 0 else "ไม่ลดลง"
+    direction = fragility.majority_conclusion
+    # TRUST-05: confidence ถูก downgrade ตาม fragility (พลิกง่าย = มั่นใจน้อยลง)
+    confidence = round(min(0.99, negative_share) * (1 - fragility.fragility_index / 100), 2)
     store.register_prediction(
         run_id,
         Prediction(
             claim=f"การแถลงชี้แจงทางการต่อข่าวลือลักษณะนี้จะทำให้สัดส่วนผู้เชื่อข่าวลือ{direction}",
             direction=direction,
-            confidence=round(min(0.99, negative_share), 2),
+            confidence=confidence,
             measurement="เทียบ belief rate ใน simulation ซ้ำด้วย population/parameter ชุดใหม่",
             due_date=date.today() + timedelta(days=30),
             model_version="mechanistic-engine@" + config_hash,
@@ -93,6 +104,7 @@ def main() -> None:
         base_msg_id="rumor",
         event_text=EVENT,
         rounds=args.rounds,
+        fragility=fragility,
     )
     # export ผ่าน watermark เท่านั้น (GOV-03) — enabled มาจาก env (default true ห้ามปิด prod)
     out = export_report(
@@ -109,7 +121,10 @@ def main() -> None:
         detail=str(out),
     )
     print(report)
-    print(f"\nrun_id: {run_id} | delta {estimate.mean_delta:+.1%} CI [{lo:+.1%}, {hi:+.1%}]")
+    print(
+        f"\nrun_id: {run_id} | delta {estimate.mean_delta:+.1%} CI [{lo:+.1%}, {hi:+.1%}] "
+        f"| fragility {fragility.fragility_index}/100"
+    )
     print(f"governance: audit 2 รายการ + prediction 1 รายการ | รายงาน (มี watermark): {out}")
 
 
