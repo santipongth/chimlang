@@ -5,8 +5,9 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 0** | milestone เสร็จ: M-1, M0, M1 (gate), M2, **M3** | **ถัดไป: M4** (Injectable Events + รายงาน)
-- test: 54 ข้อเขียว | ต้นทุนสะสม ~$0.19 จากงบ $50/เดือน | dev stack: docker compose (postgres+pgvector, neo4j, redis)
+- เฟส: **Phase 0** | milestone เสร็จ: M-1, M0, M1 (gate), M2, M3, **M4** | **เหลือ: M5** (Governance hooks) แล้วปิดเฟส
+- exit criteria: #1 hindcast ≥3/5 → **ผ่าน 4/5 ✅** | #2 cost Standard run ≤$80 → รอวัดเมื่อยกเลิก cap 10 agents | #3 governance 3 ข้อ + test → M5
+- test: 69 ข้อเขียว | ต้นทุนสะสม ~$0.30 จากงบ $50/เดือน | dev stack: docker compose (postgres+pgvector, neo4j, redis)
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
 ## แผนที่โค้ด (อะไรอยู่ไหน ทำไม)
@@ -31,21 +32,27 @@
 4. **LLM judge pattern**: temperature 0 + บังคับ JSON + few-shot ตัวอย่างการตัดสิน + retry 1 ครั้งเมื่อ parse พัง + parse-fail นับเป็นผลลบแบบ conservative — ใช้ pattern นี้กับ judge ตัวถัดๆ ไป
 5. **Extraction non-determinism**: OpenRouter รับ seed แบบ best-effort — entity หลักคงที่ entity รองแกว่งได้; NFR-07 freeze ที่ snapshot graph ไม่ใช่ re-run
 
-## หนี้เทคนิค (คิวไว้ M4 ยกเว้นระบุอื่น)
+## หนี้เทคนิค
 
-- [ ] แก้ `leak_if` ของโจทย์ a1 (นับ leak เมื่อระบุชื่อจริงผู้ชนะ/ยืนยันสถานะผู้ว่าฯ) — อย่าแก้โดยไม่บอกผู้ใช้ เพราะผูกกับประวัติ gate
-- [ ] รัน leak test กับเหตุการณ์ที่ 2 (`2565-true-dtac-merger`) ยืนยันผลไม่ผูกเหตุการณ์เดียว
-- [ ] เพิ่ม hindcast ชุดที่ 3–5 (exit criteria ต้องผ่าน ≥ 3/5)
-- [ ] ห่อ `query_indirect` เป็น REST endpoint (FastAPI ใน `api/`)
-- [ ] ย้าย `sanitize_answer` จาก trust/hindcast ไป core (M3 ใช้ด้วย)
+- [x] ~~แก้ leak_if a1~~ (5 ก.ค. — แจ้งผู้ใช้แล้ว, comment ใน yaml ชี้ M1 final report)
+- [x] ~~leak test True-DTAC~~ (0.0% ผ่าน) | ~~hindcast ชุด 3–5~~ (ครบ 5) | ~~sanitize ไป core~~
+- [ ] ห่อ `query_indirect` เป็น REST endpoint (FastAPI ใน `api/`) — คิว M5 หรือ Phase 1
+- [ ] exit criteria #2 (Standard run ≤ $80): วัดจริงได้เมื่อผู้ใช้ยกเลิก cap 10 agents — ระหว่างนี้มีแต่ประมาณการจาก token log
+- [ ] Windows console เป็น cp1252 — ทุก script ที่ print ไทยต้องรันด้วย `PYTHONIOENCODING=utf-8` (พิจารณาใส่ใน script เองที่ M5)
 
-## งานถัดไป: M4 — Injectable Events + รายงานพื้นฐาน (SIM-04)
+## งานถัดไป: M5 — Governance Hooks (GOV-03/04 + TRUST-01 ขั้นต่ำ) — ปิดเฟส
 
 จาก PHASE0-BRIEF:
-1. Inject event กลาง run → fork 2 branches ด้วย seed เดียวกันถึง round N → delta + ช่วงความเชื่อมั่น (AC ของ SIM-04)
-   — engine ปัจจุบัน deterministic เต็มรูปแล้ว: fork = สร้าง FabricSimulation 2 ตัว seed เดียวกัน inject ต่างกัน (ก่อน round N ต้อง identical — มี test ครอบ)
-2. รายงาน markdown/HTML: สรุปรายกลุ่ม + ตัวอย่าง reasoning trail (ใช้ voice layer) + voice share vs population share
-3. เคลียร์หนี้เทคนิคจากคิว: hindcast ชุด 3–5 + leak test True-DTAC + แก้ leak_if a1 (แจ้งผู้ใช้ก่อน) + REST endpoint
+1. Watermark module: ทุก export ฝัง visible + machine-readable (run id, วันที่, "AI simulation — not a real poll") — ทางผ่านเดียว
+2. Audit log append-only ใน PostgreSQL: DB trigger กัน UPDATE/DELETE (ทดสอบกับ DB จริงใน docker ไม่ mock)
+3. Prediction Registry ขั้นต่ำ: ทุก run เขียน record ≥1 (claim, ทิศทาง, confidence, วิธีวัด, วันครบกำหนด) + trigger append-only
+4. ปิดเฟส: สรุปเทียบ exit criteria 3 ข้อ + อัปเดต checklist ทั้งหมด
+
+## บทเรียนจาก M4
+
+- ผล what-if รอบแรก CI คร่อม 0 → เผยว่า engine ไม่มี belief revision — อ่านตัวเลขดิบแล้วตามไปแก้ model ไม่ใช่แค่รายงานผ่าน/ตก
+- hindcast prediction: ระบบทายถูกข้อที่สวนกระแส (โหวตนายกฯ) เพราะ agent วิเคราะห์โครงสร้างเสียง ส.ว. จาก before docs — สัญญาณว่าทำนายจากข้อมูล ไม่ใช่ sentiment
+- ข้อจำกัดที่ต้องพูดตรงๆ เสมอ: เหตุการณ์ hindcast อยู่ใน training data — prior contamination ตัดไม่ได้ 100% แม้ leak test ผ่าน; ความเชื่อมั่นแท้จริงต้องมาจากเหตุการณ์อนาคต (Phase 1 Calibration Engine)
 
 ## บทเรียนจาก M3 (กัน agent ถัดไปเดินซ้ำรอย)
 
@@ -60,3 +67,4 @@
 
 - 2026-07-05 (Claude Fable 5): วางแผน Phase 0 + M-1/M0/M1/M2 เสร็จ — M1 gate ผ่านโดยมติผู้ใช้ (รายละเอียด docs/reports/), M2 ได้ graph 114 entities + indirect query; สร้าง AGENTS.md + STATE.md สำหรับส่งมอบข้ามโมเดล; ถัดไป: M3 เริ่มที่ spike OASIS
 - 2026-07-05 (Claude Fable 5): **M3 เสร็จ** — ADR-0002 (runtime เอง, มติผู้ใช้), persona factory + cap guard, 4 channels + engine deterministic, benchmark FAB-01 ผ่าน sign test (59/60 p=5e-17; 45/58 p=1.5e-5) หลัง iterate โครงกลุ่ม 3 รอบ, voice layer เห็น say-do gap จริง; ถัดไป: M4
+- 2026-07-05 (Claude Fable 5): **M4 เสร็จ** — SIM-04 fork+belief revision (delta −18.0% CI ไม่คร่อม 0), รายงาน what-if ครบ field บังคับ, hindcast 5 ชุด + batch **ผ่าน 4/5 (exit criteria #1 ✅)**, leak test True-DTAC 0.0%, แก้ leak_if a1; เหลือ M5 ปิดเฟส

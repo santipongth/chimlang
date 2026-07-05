@@ -37,9 +37,12 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] Cultural priors เป็นพารามิเตอร์ agent + **voice layer** (`simulation/voice.py`): private_thought vs public_post แยกกัน — demo จริงเห็น say-do gap/เกรงใจ/ประชดชัด (`.tmp/voice-demo-*.md`, $0.006)
 - [x] Benchmark AC ของ FAB-01 **ผ่านทั้งสองข้อ**: isolated-channel 10 agents × 60 seeds — closed ถึง 50% ช้ากว่า public (16.9 vs 4.0 rounds, 59/60, p=5.3e-17); correction เข้า closed ช้ากว่า rumor (22.0 vs 7.7, 45/58, p=1.5e-5) — เกณฑ์ = sign test ตามถ้อยคำ "อย่างมีนัยสำคัญ" (เปลี่ยนจาก 80% ad-hoc, บันทึกโปร่งใสในรายงาน)
 
-### M4 — Injectable Events + รายงานพื้นฐาน (SIM-04)
-- [ ] Inject event กลาง run → fork 2 branches seed เดียวกัน → รายงาน delta พร้อมช่วงความเชื่อมั่น (AC ของ SIM-04)
-- [ ] รายงาน markdown/HTML: สรุปรายกลุ่ม + ตัวอย่าง reasoning trail + voice share vs population share
+### M4 — Injectable Events + รายงานพื้นฐาน (SIM-04) ✅ (5 ก.ค. 2026)
+- [x] Inject event กลาง run → fork 2 branches seed เดียวกัน → delta + CI (AC ของ SIM-04) — fork ตรวจ identical-until-N จริงทุกครั้ง; เพิ่มกลไก belief revision (พบว่าขาดตอนผลรอบแรก CI คร่อม 0); ผลจริง: คำชี้แจงทางการลดผู้เชื่อข่าวลือ **−18.0% CI [−25.7%, −10.3%]** (30 seeds)
+- [x] รายงาน markdown: สรุปรายกลุ่ม + trail ตัวอย่าง + voice share vs population share (TRUST-07) + ป้าย simulation_estimate — ไม่มีตัวเลขเดี่ยวไร้ช่วง
+- [x] **Hindcast batch (exit criteria #1): ผ่าน 4/5 เหตุการณ์ ✅** — dataset ครบ 5 ชุด (เพิ่มเลือกตั้ง 2566, โหวตนายกฯ 2566, ดิจิทัลวอลเล็ต 2567 + truth.yaml แยก scorer), predictor แบบ crowd majority (5 agents/target, fail-closed), ทายถูก 9/10 targets รวมข้อยาก leader_becomes_pm=False (วิเคราะห์จากโครงสร้างเสียง ส.ว. ไม่ตามกระแส); ข้อพลาดเดียว: phase1_cash_september (ความไม่แน่นอน ณ cutoff สูงจริง) | $0.086
+- [x] หนี้เทคนิคเคลียร์: แก้ leak_if ข้อ a1 ตาม M1 final report + leak test เหตุการณ์ที่ 2 (True-DTAC): **0.0% (0/15) ผ่านสะอาด** — ยืนยัน cutoff architecture ข้ามเหตุการณ์
+- ⚠️ ข้อจำกัดที่บันทึก: เหตุการณ์ hindcast อยู่ใน training data ของ LLM — leak test คุมการเผยผลชัดแจ้งได้ แต่ contamination เชิง prior ตัดไม่ได้ 100% → hindcast ผ่าน = จำเป็นแต่ไม่พอ ต้องพิสูจน์ต่อด้วยเหตุการณ์อนาคตจริง (Calibration Engine, Phase 1)
 
 ### M5 — Governance Hooks (GOV-03/04)
 - [ ] Watermark module สำหรับทุก export (visible + machine-readable: run id, วันที่, ป้าย "AI simulation — not a real poll")

@@ -61,11 +61,12 @@ def main() -> None:
         f"- วันที่: {datetime.now():%Y-%m-%d %H:%M} | agents/target: {args.agents} "
         f"(cap dev ≤ {settings.max_agents_dev})",
         "- เกณฑ์ต่อเหตุการณ์ (เข้ม): ทำนายทิศถูก **ครบทุก target** | agent ตอบเสีย = ไม่นับเสียง (fail-closed)",
-        "- ⚠️ scenario เลือกตั้ง/การเมือง: ผลเป็น simulation_estimate ระดับ aggregate — not_field_poll (GOV-02)",
+        "- ⚠️ scenario เลือกตั้ง/การเมือง: ผลเป็น simulation_estimate ระดับ aggregate"
+        " — not_field_poll (GOV-02)",
         "",
     ]
     passed = 0
-    for event_dir, event, truth in events:
+    for _event_dir, event, truth in events:
         print(f"\n== {event.event_id} ==")
         predictions = predict_event(
             adapter,
