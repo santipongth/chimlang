@@ -32,9 +32,12 @@
 - [x] SIM-06 Fidelity Dial (`simulation/fidelity.py` + `scripts/plan_run.py`): dev/quick/standard/deep ตาม PRD + cost estimate ก่อนรัน — **standard ประเมิน ~$2.49** (voice-sparse, calibrate จาก demo จริง) ต่ำกว่าเป้า $50 มาก; ทุก preset เกิน 10 agents ถูก block ที่ขั้นวางแผน (`PlanBlockedError`)
 - [x] Unit tests +7 (รวม 97 เขียว)
 
-### P1-M4 — Red Team Swarm (REH-02)
-- [ ] Adversarial agents (troll/สื่อจับผิด/นักกฎหมาย/คู่แข่ง) โจมตี scenario → Attack Surface Report จัดลำดับความเป็นไปได้×ความเสียหาย
-- [ ] Unit tests: บทบาทครบ, report จัดลำดับถูก, budget guard ครอบ
+### P1-M4 — Red Team Swarm (REH-02) ✅ (5 ก.ค. 2026)
+- [x] 5 บทบาทตาม PRD (troll/IO/คู่แข่ง/สื่อสืบสวน/นักกฎหมาย) × 2 ประเด็น → analyst ให้คะแนน likelihood×damage → Attack Surface Report เรียง risk (`simulation/redteam.py`)
+- [x] GOV-05 บังคับใน prompt + test: วิเคราะห์การโจมตีเท่านั้น ห้ามผลิตคอนเทนต์พร้อมเผยแพร่; คะแนนประเมินไม่ได้ = 3×3 (ความเสี่ยงที่วัดไม่ได้ห้ามหายจากรายงาน)
+- [x] ครบวงจร governance: audit + prediction (top risk → registry โดเมนนโยบาย due 45 วัน) + watermark
+- [x] ผลจริง ($0.014): 10 ประเด็น top risk **25/25 = IO ปั่น "เงินไปไหน"** สอดคล้อง corpus (57% ไม่เชื่อการใช้เงิน) + นักกฎหมายเจอช่องบังคับใช้โดยไม่ผ่านข้อบัญญัติ
+- [x] Unit tests +6 (รวม 103 เขียว)
 
 ### P1-M5 — Governance เฟสสอง (GOV-02/05/06)
 - [ ] Election mode: auto-classify + manual flag → บังคับ aggregate-only + ป้าย 3 ชนิด + ปิด Sim-to-Signal
