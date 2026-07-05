@@ -160,6 +160,53 @@ def dashboard_json(
     return dash.to_dict()
 
 
+@app.get("/dashboard.pdf")
+def dashboard_pdf(
+    subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
+    granularity: str = Query("aggregate"),
+    agents: int = Query(100, ge=10),
+):
+    """P4-M2 — Executive Brief เป็น PDF (ผ่านจุด export เดียว + watermark สองชั้น)"""
+    from fastapi.responses import FileResponse
+
+    from governance.watermark import export_report
+
+    try:
+        dash = _run_dashboard(subject, granularity, agents)
+    except ElectionModeError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+
+    lo, hi = dash.brief.headline_range
+    lines = [
+        f"# Executive Brief: {dash.subject}",
+        "",
+        f"Fragility {dash.brief.fragility_index}/100 — {dash.brief.confidence_label}",
+        f"ช่วงผลหลัก: [{lo:+.0%}, {hi:+.0%}] (แสดงเป็นช่วงเสมอ — TRUST-09)",
+        "",
+        "## ประเด็นหลัก",
+    ]
+    lines += [f"- {ln.text}" for ln in dash.brief.lines]
+    lines += ["", "## เปรียบเทียบ scenario (สัดส่วนผู้เชื่อรายกลุ่ม)", ""]
+    segs = sorted({s for sc in dash.scenarios for s in sc.belief_by_segment})
+    lines.append("| กลุ่ม | " + " | ".join(sc.name for sc in dash.scenarios) + " |")
+    lines.append("|---|" + "---|" * len(dash.scenarios))
+    for seg in segs:
+        row = " | ".join(f"{sc.belief_by_segment.get(seg, 0):.0%}" for sc in dash.scenarios)
+        lines.append(f"| {seg} | {row} |")
+
+    settings = get_settings()
+    run_id = f"dashpdf-{datetime.now():%Y%m%d-%H%M%S}"
+    # GOV-02: scenario เลือกตั้ง (ระดับ aggregate ที่อนุญาต) ต้องติดป้ายบังคับ 3 ชนิดใน PDF ด้วย
+    content = ElectionPolicy(classify_scenario(subject)).apply_labels("\n".join(lines))
+    out = export_report(
+        content,
+        Path(__file__).resolve().parents[1] / ".tmp" / f"{run_id}.pdf",
+        run_id=run_id,
+        enabled=settings.watermark_enabled,
+    )
+    return FileResponse(out, media_type="application/pdf", filename=f"chimlang-{run_id}.pdf")
+
+
 @app.get("/runs.json")
 def runs_json() -> dict:
     """หน้าการจัดการรัน (P4-M1): รันล่าสุด + คำทำนายที่ครบกำหนดรอ resolve"""

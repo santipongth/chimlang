@@ -58,8 +58,18 @@ def verify_watermark(text: str) -> WatermarkInfo | None:
 
 
 def export_report(content: str, path: Path | str, *, run_id: str, enabled: bool = True) -> Path:
-    """จุด export เดียวของระบบ — writer ทุกตัวต้องผ่านฟังก์ชันนี้ ห้ามเขียนไฟล์รายงานตรงๆ"""
+    """จุด export เดียวของระบบ — writer ทุกตัวต้องผ่านฟังก์ชันนี้ ห้ามเขียนไฟล์รายงานตรงๆ
+
+    นามสกุล .pdf = render เป็น PDF (P4-M2) — watermark ครบสองชั้นเช่นเดียวกับ markdown
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".pdf":
+        if not enabled:
+            raise WatermarkDisabledError()
+        from governance.pdf import render_pdf  # import ที่นี่ — ฝั่ง md ไม่ต้องแบก fpdf
+
+        exported_at = datetime.now(UTC).isoformat(timespec="seconds")
+        return render_pdf(content, path, run_id=run_id, exported_at=exported_at)
     path.write_text(apply_watermark(content, run_id=run_id, enabled=enabled), encoding="utf-8")
     return path

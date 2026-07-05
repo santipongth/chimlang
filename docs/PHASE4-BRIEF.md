@@ -15,8 +15,11 @@
 - [x] Backend เพิ่ม: `GET /runs.json`, `agents` param ที่ dashboard, `GovernanceStore.recent_runs()` | tests +5 (รวม 196 เขียว)
 - หมายเหตุ: `web/dist` + `node_modules` ไม่เข้า git — CI ยังไม่ build frontend (คิว P4-M6 ถ้าต้องการ)
 
-### P4-M2 — PDF Export + Watermark
-- [ ] รายงาน markdown → PDF ผ่านทางเดียว (`export_report` ขยาย) — watermark visible + machine-readable ใน PDF
+### P4-M2 — PDF Export + Watermark ✅ (6 ก.ค. 2026)
+- [x] `export_report()` จุดเดียวเดิมรองรับ `.pdf` (governance/pdf.py + fpdf2): watermark visible หัว/ท้าย**ทุกหน้า** + machine-readable ใน PDF metadata (อ่านกลับด้วย pypdf ใน test); ปิด flag = ปฏิเสธ + ไม่มีไฟล์หลุด
+- [x] ฟอนต์ไทย Sarabun (OFL, ฝังใน assets/fonts/) + text shaping (uharfbuzz) — สระ/วรรณยุกต์ถูกตำแหน่ง
+- [x] `GET /dashboard.pdf`: Executive Brief เป็น PDF — GOV-02 คุมครบ (individual=403, election aggregate ติดป้าย 3 ชนิด**ใน PDF จริง** ตรวจด้วย extract_text)
+- [x] tests +4 (รวม 200 เขียว)
 
 ### P4-M3 — Queue จริง (Celery + Redis ตาม D7) + หลาย run พร้อมกัน (NFR-03)
 - [ ] simulation run เป็น async task + สถานะ/ผลผ่าน API
