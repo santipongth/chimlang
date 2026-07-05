@@ -70,13 +70,23 @@ class LLMAdapter:
         max_tokens: int = 1024,
         temperature: float | None = None,
         seed: int | None = None,
+        reasoning: bool | None = None,
     ) -> LLMResult:
+        """reasoning=False ปิด hidden thinking ของ model (ผ่าน unified param ของ OpenRouter)
+
+        วัดจริง 6 ก.ค. 2026: crowd model เผา ~1,200 thinking tokens/call (14.5s) ทั้งที่
+        คำตอบมองเห็นแค่ ~50 ตัวอักษร — ปิดแล้วเหลือ 0.5s. ใช้กับ path ที่ interactive/สั้น
+        (rehearsal, voice) เท่านั้น; งานคิดลึก (judge, hindcast, benchmark) ปล่อย default
+        เพื่อไม่กระทบคุณภาพที่ benchmark ไว้ (ADR-0001)
+        """
         model = self._models[tier]
         kwargs: dict = {"model": model, "messages": messages, "max_tokens": max_tokens}
         if temperature is not None:
             kwargs["temperature"] = temperature
         if seed is not None:
             kwargs["seed"] = seed  # reproducibility (NFR-07) — provider ที่รองรับจะ pin ได้
+        if reasoning is not None:
+            kwargs["extra_body"] = {"reasoning": {"enabled": reasoning}}
 
         response = self._client.chat.completions.create(**kwargs)
 

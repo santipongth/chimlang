@@ -45,6 +45,16 @@ def test_seed_and_temperature_forwarded_only_when_set(
     assert fake_completions.calls[1]["temperature"] == 0.7
 
 
+def test_reasoning_flag_forwarded_only_when_set(settings, pricing, fake_client, fake_completions):
+    adapter = make_adapter(settings, pricing, fake_client)
+
+    adapter.chat(ModelTier.CROWD, [{"role": "user", "content": "ก"}])
+    assert "extra_body" not in fake_completions.calls[0]  # default = พฤติกรรมเดิม (คิดลึกได้)
+
+    adapter.chat(ModelTier.CROWD, [{"role": "user", "content": "ข"}], reasoning=False)
+    assert fake_completions.calls[1]["extra_body"] == {"reasoning": {"enabled": False}}
+
+
 def test_budget_abort_mid_run(settings, pricing, fake_client):
     # cap เล็กมาก: call แรกผ่าน call ที่สองต้อง abort ก่อนสะสมความเสียหาย
     adapter = make_adapter(settings, pricing, fake_client, cap_usd=0.0003)

@@ -5,7 +5,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - คู่มือ agent ทุกโมเดล + protocol ส่งมอบงานข้ามโมเดล: @AGENTS.md | สถานะล่าสุด: @docs/STATE.md (**อัปเดตก่อนจบทุก session**)
 - Spec ฉบับเต็ม: @docs/PRD-SANAM.md (PRD v1.1 — ชื่อชั่วคราวเดิม "SANAM" = ชิมลาง)
 - การตัดสินใจทางเทคนิค: @docs/TECH-DECISIONS.md (อ่านก่อนเลือก library/framework ใดๆ)
-- Scope ปัจจุบัน: **Phase 1 (Trust MVP)** — ดู @docs/PHASE1-BRIEF.md (Phase 0 ปิดครบแล้ว: @docs/PHASE0-BRIEF.md) ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
+- Scope ปัจจุบัน: **Phase 2 (Rehearsal & Signal)** — ดู @docs/PHASE2-BRIEF.md (Phase 0+1 ปิดครบแล้ว: @docs/PHASE0-BRIEF.md @docs/PHASE1-BRIEF.md) ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
 
 ## โครงสร้าง repo (เป้าหมาย)
 

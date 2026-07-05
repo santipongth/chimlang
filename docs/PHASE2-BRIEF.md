@@ -1,0 +1,52 @@
+# PHASE 2 BRIEF — Rehearsal & Signal (ชิมลาง)
+
+เริ่ม 6 ก.ค. 2026 (มติผู้ใช้ — approve แผนแล้ว) — scope ตาม PRD Release Plan Phase 2:
+REH-01/03/04/05, SIG-01..04, SIM-05/08/09/10/11, FAB-03/04 | **TRUST-08 defer** (ต้องใช้ panel คนจริง — รอผู้ใช้ sourcing, เตรียม interface รองรับ)
+**ข้อจำกัดคงเดิม: ทุก run ≤ 10 agents + งบ $50/เดือน** (ผู้ใช้จะขยาย scale เองเมื่อระบบเสร็จครบทุกเฟส)
+
+## Exit criteria (เชิงเทคนิค dev-scale — criteria เชิงธุรกิจของ PRD เช่น "war room ใช้จริง ≥3 incident" เป็นเรื่องผู้ใช้)
+
+1. REH-01: interactive rehearsal ตอบโต้ ≤ 10 วิ/คำถาม + scorecard ทุก session (วัด latency จริงในรายงาน)
+2. REH-03: เกม ≥ 3 ตา + decision tree ในรายงาน
+3. REH-04/05: วงจร sync → simulate 48 ชม. → divergence metric ทำงาน + alarm ยิงเมื่อ inject ความเบี่ยงทดสอบ
+4. SIG-01..04: ทุก response มี metadata บังคับ (run id, fragility, calibration, provenance hash) + out-of-sample harness วัด IC/hit rate เทียบ baseline + GOV-02 ปิด signal ใน election scenario (test ครอบ)
+5. SIM-05: world state คงข้าม run + reset ได้ | SIM-08: คำตอบอ้าง reasoning trail จริง
+6. ทุก feature ครบวงจร governance เดิม (audit + prediction ≥1 + watermark) + tests เขียวทั้งหมด + calibration ดีกว่า baseline วัดได้เมื่อ prediction ชุดแรกครบกำหนด (4 ส.ค. 2026)
+
+## Milestones
+
+### P2-M1 — Press Conference Rehearsal สด (REH-01) ✅ (6 ก.ค. 2026)
+- [x] `simulation/rehearsal.py`: นักข่าว 3 สาย (การเมือง/เศรษฐกิจ/สืบสวน) ถามต่อเนื่องจาก transcript, ชาวเน็ต react ผ่าน voice layer — ผู้เข้าร่วม 3+4=7 ≤ cap 10 (raise ถ้าเกิน)
+- [x] CLI (`scripts/run_rehearsal.py`): โหมดสด + `--answers` scripted mode — **latency วัดจริงสูงสุด 2.8 วิ/คำถาม (เป้า ≤ 10 ✅)** หลังแก้ hidden reasoning
+- [x] Scorecard analyst (temp 0 + JSON + retry 1): demo จริงจับคำตอบเสี่ยงที่ฝังไว้ได้ครบ — "คนเดือดร้อนจริงมีไม่มาก" ถูกจัดอันดับราดน้ำมัน #1 + ยกเป็นประโยคเสี่ยงถูกตัดทำดราม่า
+- [x] GOV-05 ใน prompt + test: วิจารณ์ได้ ห้ามร่างคำแถลงใหม่/สคริปต์ให้
+- [x] ครบวงจร governance: audit + prediction (ประเด็นราดน้ำมัน top, due 30 วัน, โดเมนนโยบาย) + watermark export
+- [x] Unit tests +9 (รวม 132 เขียว) — รวม test adapter param `reasoning`
+- **บทเรียนสำคัญ**: crowd model (qwen3.5-flash) เผา ~1,200 hidden thinking tokens/call (14.5 วิ) กับงานที่ตอบ 1 ประโยค — เพิ่ม `reasoning=False` ใน adapter สำหรับ path interactive (rehearsal/voice) → 0.5 วิ + ถูกลง 10 เท่า; งานคิดลึก (judge/hindcast/benchmark) คง default เดิมเพื่อไม่กระทบคุณภาพตาม ADR-0001
+
+### P2-M2 — Game Mode (REH-03)
+- [ ] เกมหลายตา: เราเดิน → strategic actor (คู่แข่ง/ฝ่ายค้าน) เดินตอบ → สังคม react (engine เดิม) ≥ 3 ตา
+- [ ] Decision tree สรุปเส้นทาง + ความเสี่ยงต่อทาง | governance ครบวงจร | unit tests
+
+### P2-M3 — Live War Room + Divergence Alarm (REH-04/05 + SIM-11)
+- [ ] Feed ข้อมูล aggregate (file/RSS) → sync โลกจำลอง → simulate ล่วงหน้า 48 ชม./รอบ
+- [ ] Divergence metric + alarm เมื่อโลกจริงหลุดทุก scenario (ทดสอบด้วย inject ความเบี่ยง)
+- [ ] SIM-11 external retrieval: เปิดเฉพาะ war room — hindcast ยังปิดตาย (กฎเหล็กข้อ 2 + leak test เดิมต้องเขียว)
+
+### P2-M4 — Sim-to-Signal API + Out-of-Sample Harness (SIG-01..04)
+- [ ] Features พร้อมช่วง: Narrative Momentum/Dispersion, Consensus Fragility, Sentiment Divergence, Contrarian Pressure ฯลฯ
+- [ ] Metadata บังคับทุก response + rate limit + disclaimer field | GOV-02 ปิด signal (ต่อ guard เดิมเข้า endpoint)
+- [ ] Out-of-sample harness: train/test split enforcement + IC/hit rate เทียบ baseline
+
+### P2-M5 — Living Memory + Conversational Querying (SIM-05/08)
+- [ ] World state ต่อ workspace ใน pgvector + "reset world" | ผลรันก่อนหน้า/เหตุการณ์จริงซึมเข้า memory
+- [ ] ถามต่อจากโลกจำลอง — คำตอบอ้าง reasoning trail จริง (NFR-08)
+
+### P2-M6 — Influence Graph + Impact Waterfall + Media/Rumor (SIM-09/10, FAB-03/04)
+- [ ] Hub nodes + cluster map **ระดับ segment เท่านั้น** (กฎเหล็กข้อ 7) | Impact Waterfall ต่อยอด `query_indirect`
+- [ ] สำนักข่าว agent (editorial stance) + rumor mutation rate ใน closed group
+
+## กติกาที่สืบทอด (ดู AGENTS.md)
+
+fail-closed ทุกด่าน · LLM ผ่าน adapter+BudgetGuard เท่านั้น · วัดซื่อสัตย์ · ทุก run เขียน prediction ≥1 + audit ·
+ทุก export ผ่าน watermark · GOV-02/05 บังคับโค้ด · อัปเดต STATE.md ทุก session · push GitHub ทุก commit

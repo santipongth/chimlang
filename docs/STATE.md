@@ -18,13 +18,14 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 1 (Trust MVP) — ครบทุก milestone P1-M1..M6 (5 ก.ค. 2026)** 🎉 exit criteria ผ่านครบ 4/4 (ดู PHASE1-BRIEF สรุปปิดเฟส)
-- API layer เริ่มแล้ว: FastAPI `api/app.py` (`make api` / `uvicorn api.app:app`) — /dashboard.json /dashboard.html /health
+- เฟส: **Phase 2 (Rehearsal & Signal) — เริ่ม 6 ก.ค. 2026 (ผู้ใช้ approve แผน) | P2-M1 เสร็จ** — ดู docs/PHASE2-BRIEF.md (Phase 0+1 ปิดครบ, exit criteria ผ่าน)
+- API layer: FastAPI `api/app.py` (`make api`) — /dashboard.json /dashboard.html /health
+- **บทเรียนใหม่ (6 ก.ค.)**: qwen3.5-flash เผา ~1,200 hidden thinking tokens/call — `adapter.chat(reasoning=False)` สำหรับ path interactive/สั้น (เร็วขึ้น 29x ถูกลง 10x); ห้ามปิดกับ judge/hindcast/benchmark (คุณภาพที่วัดไว้ใช้ thinking)
 - **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
 - test: **123 ข้อเขียว** | ต้นทุนสะสม ~$0.55 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป: **Phase 2 หรือขยาย scale** (รอผู้ใช้สั่ง) — Phase 2 = Rehearsal สด (REH-01/03/04/05), Sim-to-Signal + out-of-sample harness, war room, living memory (SIM-05); หรือผู้ใช้สั่งยกเลิก cap 10 agents เพื่อวัด exit criteria cost จริง (Standard ประเมิน ~$2.49 แล้ว) + scale ทดสอบ 100–1,000 agents
+- ถัดไป: **P2-M2 (Game Mode — REH-03)**: เกมหลายตา เรา→strategic actor→สังคม react ≥3 ตา + decision tree — ใช้ engine fork เดิม + prompt actor แบบ redteam pattern; จากนั้น M3 war room, M4 sim-to-signal, M5 living memory, M6 influence graph (ดู PHASE2-BRIEF)
 - ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
@@ -89,3 +90,4 @@
 - 2026-07-05 (Claude Fable 5): **M5 เสร็จ = Phase 0 ครบทุก milestone** — watermark (fail-closed, จุด export เดียว), audit log + prediction registry append-only ด้วย PostgreSQL trigger (test ยิง SQL ตรง), ครบวงจรใน run_whatif (audit→predict→finalize→watermark export ยืนยัน record ใน DB); governance store อยู่ governance/store.py, watermark อยู่ governance/watermark.py
 - 2026-07-05 (Claude Fable 5): **เริ่ม Phase 1 + P1-M1..M3 เสร็จ** — fragility (5 universes, TRUST-05 บังคับจริง), calibration engine (Brier + resolution append-only + benchmark page มี variance note), provenance cards + silent majority + fidelity dial (standard ≈ $2.49); **GitHub push + CI เขียว** (`santipongth/chimlang`); ถัดไป P1-M4 Red Team Swarm
 - 2026-07-05 (Claude Fable 5): **P1-M4..M6 เสร็จ = Phase 1 ครบทุก milestone** — Red Team Swarm (5 บทบาท, Attack Surface Report, GOV-05 guard), governance เฟสสอง (election mode auto-classify + no-persuasion + RBAC), Executive Dashboard (DASH-01..04) + FastAPI (/dashboard.json|html, election block ที่ API); exit criteria Phase 1 ผ่าน 4/4; tests 123 เขียว; ถัดไป Phase 2 หรือขยาย scale (รอผู้ใช้)
+- 2026-07-06 (Claude Fable 5): **เริ่ม Phase 2 (ผู้ใช้ approve แผน 6 milestones ใน PHASE2-BRIEF) + P2-M1 เสร็จ** — Press Conference Rehearsal สด (นักข่าว 3 สาย + ชาวเน็ต voice layer, scorecard analyst จับคำตอบเสี่ยงได้จริง), แก้ latency 25.8→2.8 วิ ด้วย `reasoning=False` (พบ crowd model เผา 1,200 hidden tokens/call); unstage toh-read.txt + gitignore; tests 132 เขียว; ถัดไป P2-M2 Game Mode

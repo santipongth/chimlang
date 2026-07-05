@@ -34,3 +34,4 @@ data/samples/**/*.zip
 data/samples/**/*.gz
 data/samples/**/*.parquet
 data/samples/**/*.sqlite
+toh-read.txt

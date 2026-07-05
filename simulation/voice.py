@@ -65,6 +65,7 @@ def generate_voice(
     believed: bool,
     channel: str,
     seed: int,
+    reasoning: bool | None = None,  # False = โหมดเร็วสำหรับ interactive (rehearsal)
 ) -> Voice:
     raw = adapter.chat(
         ModelTier.CROWD,
@@ -78,5 +79,6 @@ def generate_voice(
         ],
         max_tokens=250,
         seed=seed,
+        reasoning=reasoning,
     ).text
     return parse_voice(persona.agent_id, raw)
