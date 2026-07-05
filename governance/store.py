@@ -32,11 +32,25 @@ CREATE TABLE IF NOT EXISTS prediction_registry (
     due_date DATE NOT NULL,
     model_version TEXT NOT NULL
 );
+ALTER TABLE prediction_registry ADD COLUMN IF NOT EXISTS domain TEXT NOT NULL DEFAULT 'ทั่วไป';
+CREATE TABLE IF NOT EXISTS prediction_resolution (
+    id BIGSERIAL PRIMARY KEY,
+    ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+    prediction_id BIGINT NOT NULL UNIQUE REFERENCES prediction_registry(id),
+    outcome BOOLEAN NOT NULL,
+    brier DOUBLE PRECISION NOT NULL,
+    resolver TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT ''
+);
 CREATE OR REPLACE FUNCTION reject_mutation() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION 'append-only: % on % is forbidden (GOV-04/TRUST-01)', TG_OP, TG_TABLE_NAME;
 END;
 $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS prediction_resolution_append_only ON prediction_resolution;
+CREATE TRIGGER prediction_resolution_append_only
+    BEFORE UPDATE OR DELETE ON prediction_resolution
+    FOR EACH ROW EXECUTE FUNCTION reject_mutation();
 DROP TRIGGER IF EXISTS audit_log_append_only ON audit_log;
 CREATE TRIGGER audit_log_append_only
     BEFORE UPDATE OR DELETE ON audit_log
@@ -60,10 +74,33 @@ class RunWithoutPredictionError(RuntimeError):
 class Prediction:
     claim: str
     direction: str  # เช่น "ลดลง" / "เพิ่มขึ้น" / "เกิดขึ้น"
-    confidence: float  # 0-1
+    confidence: float  # 0-1 — ความน่าจะเป็นที่ claim (ตามทิศที่ระบุ) จะเป็นจริง
     measurement: str  # วิธีวัดผลเมื่อครบกำหนด
     due_date: date
     model_version: str
+    domain: str = "ทั่วไป"  # นโยบาย | ธุรกิจ/การตลาด | กระแสสังคม | ทั่วไป (TRUST-02 รายโดเมน)
+
+
+@dataclass(frozen=True)
+class DuePrediction:
+    prediction_id: int
+    run_id: str
+    claim: str
+    confidence: float
+    domain: str
+    due_date: date
+
+
+@dataclass(frozen=True)
+class DomainCalibration:
+    domain: str
+    resolved: int
+    mean_brier: float
+    baseline_brier: float = 0.25  # naive forecast p=0.5 → Brier 0.25 เสมอ
+
+    @property
+    def better_than_baseline(self) -> bool:
+        return self.mean_brier < self.baseline_brier
 
 
 class GovernanceStore:
@@ -91,8 +128,8 @@ class GovernanceStore:
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO prediction_registry "
-                "(run_id, claim, direction, confidence, measurement, due_date, model_version) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "(run_id, claim, direction, confidence, measurement, due_date, "
+                " model_version, domain) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     run_id,
                     p.claim,
@@ -101,8 +138,67 @@ class GovernanceStore:
                     p.measurement,
                     p.due_date,
                     p.model_version,
+                    p.domain,
                 ),
             )
+
+    # --- Calibration Engine (TRUST-02) ---
+
+    def due_unresolved(self, as_of: date) -> list[DuePrediction]:
+        """prediction ที่ครบกำหนดแล้วแต่ยังไม่ resolve — คิวงานของ Calibration Engine"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT p.id, p.run_id, p.claim, p.confidence, p.domain, p.due_date "
+                "FROM prediction_registry p "
+                "LEFT JOIN prediction_resolution r ON r.prediction_id = p.id "
+                "WHERE p.due_date <= %s AND r.id IS NULL ORDER BY p.due_date, p.id",
+                (as_of,),
+            ).fetchall()
+        return [
+            DuePrediction(
+                prediction_id=r[0],
+                run_id=r[1],
+                claim=r[2],
+                confidence=r[3],
+                domain=r[4],
+                due_date=r[5],
+            )
+            for r in rows
+        ]
+
+    def resolve_prediction(
+        self, prediction_id: int, *, outcome: bool, resolver: str, note: str = ""
+    ) -> float:
+        """บันทึกผลจริง + คำนวณ Brier score = (confidence − outcome)² — append-only
+
+        resolve ซ้ำ prediction เดิม = ผิดกติกา (UNIQUE ที่ DB) — แก้ผลไม่ได้เช่นเดียวกับ registry
+        """
+        with self._conn() as conn:
+            conf = conn.execute(
+                "SELECT confidence FROM prediction_registry WHERE id = %s", (prediction_id,)
+            ).fetchone()
+            if conf is None:
+                raise ValueError(f"ไม่พบ prediction id {prediction_id}")
+            brier = (conf[0] - (1.0 if outcome else 0.0)) ** 2
+            conn.execute(
+                "INSERT INTO prediction_resolution "
+                "(prediction_id, outcome, brier, resolver, note) VALUES (%s, %s, %s, %s, %s)",
+                (prediction_id, outcome, brier, resolver, note),
+            )
+        return brier
+
+    def calibration_summary(self) -> list[DomainCalibration]:
+        """Brier score สะสมรายโดเมน เทียบ baseline (naive p=0.5 → 0.25)"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT p.domain, count(*), avg(r.brier) "
+                "FROM prediction_resolution r "
+                "JOIN prediction_registry p ON p.id = r.prediction_id "
+                "GROUP BY p.domain ORDER BY p.domain"
+            ).fetchall()
+        return [
+            DomainCalibration(domain=r[0], resolved=int(r[1]), mean_brier=float(r[2])) for r in rows
+        ]
 
     def predictions_for_run(self, run_id: str) -> int:
         with self._conn() as conn:

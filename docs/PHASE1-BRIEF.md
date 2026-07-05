@@ -19,11 +19,12 @@
 - [x] `run_whatif.py` รัน multiverse เสมอ + รายงานฝัง fragility (ผลจริง: 5/5 universes "ลดลง" → fragility 0/100)
 - [x] Unit tests +12 (รวม 84 เขียว): fragility math, perturb deterministic/normalize, เกณฑ์ 40/70, block point estimate ในรายงาน
 
-### P1-M2 — Calibration Engine + Registry เต็มรูป (TRUST-01/02)
-- [ ] ตาราง resolution (append-only แยกจาก registry): บันทึกผลจริงเมื่อครบกำหนด + Brier score
-- [ ] Calibration dashboard รายโดเมน (นโยบาย/ธุรกิจ/กระแส) เป็น markdown/HTML
-- [ ] Public benchmark page generator: hindcast + calibration ทั้งผ่าน/ไม่ผ่าน
-- [ ] Unit tests: Brier math, append-only resolution, page generator ครบ field
+### P1-M2 — Calibration Engine + Registry เต็มรูป (TRUST-01/02) ✅ (5 ก.ค. 2026)
+- [x] ตาราง `prediction_resolution` append-only (PG trigger + UNIQUE กัน resolve ซ้ำ/แก้ผลย้อนหลัง) + Brier = (confidence−outcome)² + คอลัมน์ domain ใน registry
+- [x] คิว `due_unresolved()` + CLI `resolve_predictions.py` (resolve พร้อม audit อัตโนมัติ)
+- [x] Calibration dashboard รายโดเมนเทียบ baseline 0.25 (`trust/calibration.py`)
+- [x] Public benchmark page: `docs/reports/public-benchmark.md` (ผ่าน watermark) — hindcast รายเหตุการณ์ทั้งผ่าน/ไม่ผ่าน + calibration + ข้อจำกัด 4 ข้อรวม run-to-run variance ที่สังเกตจริง (4/5 → 5/5)
+- [x] Unit tests +6 (รวม 90 เขียว): Brier ถูก/ผิด, append-only + no-double-resolve ที่ DB จริง, คิว due, page ต้องโชว์ข้อที่ตก
 
 ### P1-M3 — Provenance + Silent Majority + Fidelity Dial (TRUST-06/07, SIM-06)
 - [ ] Persona Provenance Card ต่อ segment: แหล่งข้อมูล+วันที่+วิธี weighting+bias warning

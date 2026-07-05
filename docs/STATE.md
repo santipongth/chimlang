@@ -5,11 +5,12 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 1 (Trust MVP) — เริ่ม 5 ก.ค. 2026 (มติผู้ใช้) | P1-M1 เสร็จแล้ว** — ดู docs/PHASE1-BRIEF.md
-- **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้ยืนยันซ้ำตอนเริ่ม Phase 1) — ผู้ใช้จะสั่งขยายเอง
-- Phase 0 ปิดครบ: exit #1 hindcast 4/5 ✅ | #2 cost — วัดได้หลังขยาย agents | #3 governance ✅
-- test: 84 ข้อเขียว | ต้นทุนสะสม ~$0.31 | GitHub push: gh CLI ติดตั้งแล้ว **รอผู้ใช้ `gh auth login`** แล้วค่อยสร้าง private repo + push
-- ถัดไป: P1-M2 (Calibration Engine + registry resolution + public benchmark page)
+- เฟส: **Phase 1 (Trust MVP) | P1-M1 + P1-M2 เสร็จแล้ว** — ดู docs/PHASE1-BRIEF.md
+- **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
+- **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
+- test: 90 ข้อเขียว | ต้นทุนสะสม ~$0.48 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
+- hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
+- ถัดไป: P1-M3 (Provenance cards + TRUST-07 เต็ม + SIM-06 fidelity dial)
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
 ## แผนที่โค้ด (อะไรอยู่ไหน ทำไม)
