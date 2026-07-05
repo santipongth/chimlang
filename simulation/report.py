@@ -33,6 +33,7 @@ def render_whatif_report(
     event_text: str,
     rounds: int,
     fragility=None,  # trust.universe.FragilityReport — บังคับใส่ใน pipeline จริง (coverage 100%)
+    provenance_cards=None,  # list[ProvenanceCard] — TRUST-06 บังคับใน pipeline จริง
 ) -> str:
     example = outcomes[0]
     lo, hi = estimate.ci95
@@ -95,7 +96,12 @@ def render_whatif_report(
     ]
     for seg, pop_share, voice_share in voice_vs_population(example.baseline, base_msg_id):
         lines.append(f"| {seg} | {pop_share:.0%} | {voice_share:.0%} |")
+    expressors = example.baseline.expressors()
+    observers = example.baseline.observers()
     lines += [
+        "",
+        f"- ผู้แสดงออก {len(expressors)} ตัว vs ผู้สังเกตการณ์ (silent majority) {len(observers)} ตัว "
+        f"— เสียงที่เห็นบนช่องทางมาจากคนส่วนน้อยเสมอ อย่าอ่านเสียงดังแทนประชากร (TRUST-07)",
         "",
         "## สรุปรายกลุ่ม (belief rate ใน variant, seed แรก)",
         "",
@@ -127,4 +133,8 @@ def render_whatif_report(
         "",
         f"(trail เต็ม {len(example.variant.trail)} เหตุการณ์ อยู่ใน RunResult — ทุกตัวเลขย้อนได้)",
     ]
+    if provenance_cards:
+        from simulation.provenance import render_provenance_section
+
+        lines += ["", render_provenance_section(provenance_cards)]
     return "\n".join(lines)

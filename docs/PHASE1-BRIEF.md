@@ -26,11 +26,11 @@
 - [x] Public benchmark page: `docs/reports/public-benchmark.md` (ผ่าน watermark) — hindcast รายเหตุการณ์ทั้งผ่าน/ไม่ผ่าน + calibration + ข้อจำกัด 4 ข้อรวม run-to-run variance ที่สังเกตจริง (4/5 → 5/5)
 - [x] Unit tests +6 (รวม 90 เขียว): Brier ถูก/ผิด, append-only + no-double-resolve ที่ DB จริง, คิว due, page ต้องโชว์ข้อที่ตก
 
-### P1-M3 — Provenance + Silent Majority + Fidelity Dial (TRUST-06/07, SIM-06)
-- [ ] Persona Provenance Card ต่อ segment: แหล่งข้อมูล+วันที่+วิธี weighting+bias warning
-- [ ] TRUST-07 เต็ม: แยกผู้แสดงออก/ผู้สังเกตการณ์ใน engine + ทุกรายงาน
-- [ ] SIM-06 fidelity dial: Quick/Standard/Deep พร้อม cost estimate ก่อนรัน (ภายใต้ cap 10 จนกว่าจะขยาย)
-- [ ] Unit tests ครบทุกชิ้น
+### P1-M3 — Provenance + Silent Majority + Fidelity Dial (TRUST-06/07, SIM-06) ✅ (5 ก.ค. 2026)
+- [x] Persona Provenance Card (`simulation/provenance.py` + `meta.provenance` ใน segments.yaml): แหล่งข้อมูล/วันที่/weighting/bias warnings 3 ข้อ/coverage — ฝังท้ายทุกรายงาน; ไม่มี provenance ใน yaml = raise
+- [x] TRUST-07 เต็ม: `RunResult.expressors()/observers()` partition ตรวจด้วย test + รายงานแสดงคู่ voice-vs-population เสมอ (ผลจริง: ผู้แสดงออก 2 vs silent majority 6 จาก 10)
+- [x] SIM-06 Fidelity Dial (`simulation/fidelity.py` + `scripts/plan_run.py`): dev/quick/standard/deep ตาม PRD + cost estimate ก่อนรัน — **standard ประเมิน ~$2.49** (voice-sparse, calibrate จาก demo จริง) ต่ำกว่าเป้า $50 มาก; ทุก preset เกิน 10 agents ถูก block ที่ขั้นวางแผน (`PlanBlockedError`)
+- [x] Unit tests +7 (รวม 97 เขียว)
 
 ### P1-M4 — Red Team Swarm (REH-02)
 - [ ] Adversarial agents (troll/สื่อจับผิด/นักกฎหมาย/คู่แข่ง) โจมตี scenario → Attack Surface Report จัดลำดับความเป็นไปได้×ความเสียหาย

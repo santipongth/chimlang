@@ -8,6 +8,16 @@ meta:
   drafted_by: claude (2026-07-05)
   population_scope: กรุงเทพฯ และปริมณฑล อายุ 18 ปีขึ้นไป
   channel_types: [line_closed_group, public_feed, algo_feed, offline_wom]
+  # --- provenance (TRUST-06) — ทุก field ด้านล่างถูกดึงเข้า Persona Provenance Card ---
+  provenance:
+    data_source: "ร่างสังเคราะห์โดย Claude เพื่อการพัฒนา — ยังไม่อ้างอิงสำมะโน สสช./สำรวจการใช้สื่อจริง"
+    data_date: "2026-07-05"
+    weighting_method: "largest remainder ตาม share + jitter cultural priors ±0.1 ต่อ agent"
+    known_bias:
+      - "สัดส่วน segment เป็นค่าประมาณจากวิจารณญาณ ไม่ใช่ข้อมูลสำรวจ — ห้ามใช้ผลิตข้อสรุปจริง"
+      - "channel_mix ยังไม่ calibrate กับสำรวจการใช้สื่อไทย (FAB-05 กำหนดให้ทำเมื่อได้ข้อมูล)"
+      - "ครอบคลุมเฉพาะ กทม.-ปริมณฑล — ไม่แทนประชากรไทยทั้งประเทศ"
+    coverage: "ต่ำ (dev): ≤ 10 agents ต่อ run ตามข้อจำกัดช่วงพัฒนา — segment เล็กมีตัวแทน 0-1 ตัว"
   notes: >
     share ต้องรวมกันได้ 1.0 | channel_mix ต่อ segment รวมกันได้ 1.0
     cultural priors อยู่ในช่วง 0-1 (มากขึ้น = พฤติกรรมนั้นเด่นขึ้น)

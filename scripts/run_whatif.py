@@ -19,6 +19,7 @@ from governance.store import GovernanceStore, Prediction
 from governance.watermark import export_report
 from simulation.engine import Message
 from simulation.persona import PersonaFactory
+from simulation.provenance import build_cards
 from simulation.report import render_whatif_report
 from trust.universe import run_multiverse_whatif
 
@@ -105,6 +106,7 @@ def main() -> None:
         event_text=EVENT,
         rounds=args.rounds,
         fragility=fragility,
+        provenance_cards=build_cards(),  # TRUST-06: ทุกรายงานมีบัตรที่มา persona
     )
     # export ผ่าน watermark เท่านั้น (GOV-03) — enabled มาจาก env (default true ห้ามปิด prod)
     out = export_report(

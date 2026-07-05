@@ -57,6 +57,17 @@ class RunResult:
     def penetration(self, msg_id: str) -> float:
         return sum(1 for st in self.states.values() if msg_id in st.heard) / len(self.states)
 
+    def expressors(self) -> set[str]:
+        """agent ที่แชร์/แสดงออกอย่างน้อยหนึ่งข้อความ (TRUST-07: ผู้แสดงออก)"""
+        return {aid for aid, st in self.states.items() if any(st.sharing.values())}
+
+    def observers(self) -> set[str]:
+        """agent ที่ได้ยินอย่างน้อยหนึ่งข้อความแต่ไม่เคยแชร์เลย (TRUST-07: ผู้สังเกตการณ์)
+
+        กลุ่มนี้คือ silent majority — มีความเชื่อ/พฤติกรรมจริงแต่ไม่มีเสียงบนช่องทางสื่อสาร
+        """
+        return {aid for aid, st in self.states.items() if st.heard and not any(st.sharing.values())}
+
     def rounds_to_penetration(self, msg_id: str, frac: float, *, from_round: int) -> int | None:
         """จำนวน round (นับจากวันปล่อย) กว่าข้อความจะถึง frac ของประชากร — None ถ้าไม่ถึง"""
         rounds_heard = sorted(st.heard[msg_id] for st in self.states.values() if msg_id in st.heard)
