@@ -44,10 +44,23 @@ Exit criteria: (1) hindcast ภายในผ่าน ≥ 3 ใน 5 เหต
 - [x] หนี้เทคนิคเคลียร์: แก้ leak_if ข้อ a1 ตาม M1 final report + leak test เหตุการณ์ที่ 2 (True-DTAC): **0.0% (0/15) ผ่านสะอาด** — ยืนยัน cutoff architecture ข้ามเหตุการณ์
 - ⚠️ ข้อจำกัดที่บันทึก: เหตุการณ์ hindcast อยู่ใน training data ของ LLM — leak test คุมการเผยผลชัดแจ้งได้ แต่ contamination เชิง prior ตัดไม่ได้ 100% → hindcast ผ่าน = จำเป็นแต่ไม่พอ ต้องพิสูจน์ต่อด้วยเหตุการณ์อนาคตจริง (Calibration Engine, Phase 1)
 
-### M5 — Governance Hooks (GOV-03/04)
-- [ ] Watermark module สำหรับทุก export (visible + machine-readable: run id, วันที่, ป้าย "AI simulation — not a real poll")
-- [ ] Audit log แบบ append-only: ผู้สั่ง run, config hash, ผู้ export
-- [ ] Prediction Registry ขั้นต่ำ: ทุก run เขียน prediction record (claim, ทิศทาง, confidence, วิธีวัด, วันครบกำหนด) — DB trigger กัน UPDATE/DELETE
+### M5 — Governance Hooks (GOV-03/04) ✅ (5 ก.ค. 2026)
+- [x] Watermark module สำหรับทุก export (visible + machine-readable: run id, วันที่, ป้าย "AI simulation — not a real poll") — `export_report()` เป็นจุด export เดียว; WATERMARK_ENABLED=false = ปฏิเสธ export (fail-closed)
+- [x] Audit log แบบ append-only: ผู้สั่ง run, config hash, ผู้ export — PostgreSQL trigger `RAISE EXCEPTION` ทั้ง UPDATE/DELETE, test ยิง SQL ตรงกับ DB จริงใน docker
+- [x] Prediction Registry ขั้นต่ำ: ทุก run เขียน record (claim, ทิศทาง, confidence [DB CHECK 0-1], วิธีวัด, วันครบกำหนด, model_version) — trigger append-only + `finalize_run()` raise ถ้า run ไม่มี prediction
+- [x] ต่อครบวงจรจริงใน `run_whatif.py`: audit → simulate → register prediction → finalize → export ผ่าน watermark (ยืนยัน record ใน DB แล้ว)
+
+---
+
+## สรุปปิด Phase 0 (5 ก.ค. 2026) — milestones ครบ M0–M5
+
+| Exit criteria | ผล |
+|---|---|
+| (1) hindcast ภายในผ่าน ≥ 3/5 เหตุการณ์ | **ผ่าน 4/5 ✅** (ทายถูก 9/10 targets, ดูข้อจำกัด training-data contamination ใน M4) |
+| (2) ต้นทุน Standard run ≤ $80 | **ยังวัดตรงไม่ได้** (cap dev ≤ 10 agents) — ประมาณการจาก token log: กลไกแพร่ $0, voice ที่ ~10–30% ของ agent-rounds context สั้น ≈ $3–17/run แต่ถ้า voice ทุก agent ทุก round ด้วย context ยาวจะเกิน → ต้องออกแบบ voice budget ต่อ run แล้ววัดจริงเมื่อยกเลิก cap |
+| (3) กฎ governance 3 ข้อทำงานจริงพร้อม test | **ผ่าน ✅** — PII detector (M2), watermark + audit + registry (M5) ทั้งหมด fail-closed + มี test ยิงของจริง |
+
+ต้นทุนสะสมทั้งเฟส ~$0.31 | tests 77 ข้อ | คำตอบ Open Question #1 ของ PRD: retrieval+prompt filter เพียงพอสำหรับ Phase 0 (ไม่ต้องใช้ model cutoff เก่า) โดยมีเงื่อนไข re-verify ตาม docs/reports/M1-hindcast-poc-final.md
 
 ## ข้อมูลที่ผู้ใช้ต้องเตรียมใน data/samples/ (ก่อนเริ่ม M1–M3)
 

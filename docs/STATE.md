@@ -5,9 +5,10 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
-- เฟส: **Phase 0** | milestone เสร็จ: M-1, M0, M1 (gate), M2, M3, **M4** | **เหลือ: M5** (Governance hooks) แล้วปิดเฟส
-- exit criteria: #1 hindcast ≥3/5 → **ผ่าน 4/5 ✅** | #2 cost Standard run ≤$80 → รอวัดเมื่อยกเลิก cap 10 agents | #3 governance 3 ข้อ + test → M5
-- test: 69 ข้อเขียว | ต้นทุนสะสม ~$0.30 จากงบ $50/เดือน | dev stack: docker compose (postgres+pgvector, neo4j, redis)
+- เฟส: **Phase 0 — milestones ครบ M-1..M5 ทั้งหมด (5 ก.ค. 2026)** 🎉
+- exit criteria: #1 hindcast ≥3/5 → **ผ่าน 4/5 ✅** | #2 cost ≤$80 → รอวัดจริงเมื่อยกเลิก cap (ประมาณการ $3–17 แบบ voice-sparse) | #3 governance 3 ข้อ + test → **ผ่าน ✅**
+- test: 77 ข้อเขียว | ต้นทุนสะสม ~$0.31 จากงบ $50/เดือน | dev stack: docker compose (postgres+pgvector, neo4j, redis)
+- **งานถัดไปเป็นของ Phase 1** (Trust MVP: TRUST-01 เต็มรูป, Calibration Engine, Fragility, REH-02, DASH) — เริ่มเมื่อผู้ใช้สั่ง + ควรทบทวน cap 10 agents ก่อนวัด exit criteria #2
 - ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
 
 ## แผนที่โค้ด (อะไรอยู่ไหน ทำไม)
@@ -68,3 +69,4 @@
 - 2026-07-05 (Claude Fable 5): วางแผน Phase 0 + M-1/M0/M1/M2 เสร็จ — M1 gate ผ่านโดยมติผู้ใช้ (รายละเอียด docs/reports/), M2 ได้ graph 114 entities + indirect query; สร้าง AGENTS.md + STATE.md สำหรับส่งมอบข้ามโมเดล; ถัดไป: M3 เริ่มที่ spike OASIS
 - 2026-07-05 (Claude Fable 5): **M3 เสร็จ** — ADR-0002 (runtime เอง, มติผู้ใช้), persona factory + cap guard, 4 channels + engine deterministic, benchmark FAB-01 ผ่าน sign test (59/60 p=5e-17; 45/58 p=1.5e-5) หลัง iterate โครงกลุ่ม 3 รอบ, voice layer เห็น say-do gap จริง; ถัดไป: M4
 - 2026-07-05 (Claude Fable 5): **M4 เสร็จ** — SIM-04 fork+belief revision (delta −18.0% CI ไม่คร่อม 0), รายงาน what-if ครบ field บังคับ, hindcast 5 ชุด + batch **ผ่าน 4/5 (exit criteria #1 ✅)**, leak test True-DTAC 0.0%, แก้ leak_if a1; เหลือ M5 ปิดเฟส
+- 2026-07-05 (Claude Fable 5): **M5 เสร็จ = Phase 0 ครบทุก milestone** — watermark (fail-closed, จุด export เดียว), audit log + prediction registry append-only ด้วย PostgreSQL trigger (test ยิง SQL ตรง), ครบวงจรใน run_whatif (audit→predict→finalize→watermark export ยืนยัน record ใน DB); governance store อยู่ governance/store.py, watermark อยู่ governance/watermark.py
