@@ -36,6 +36,7 @@ class AgentState:
     heard_via: dict[str, str] = field(default_factory=dict)  # msg_id -> channel แรก
     believed: dict[str, bool] = field(default_factory=dict)
     sharing: dict[str, bool] = field(default_factory=dict)  # ยังแชร์ต่ออยู่ไหม
+    mutated: set[str] = field(default_factory=set)  # msg ที่ได้รับมาแบบเพี้ยน (FAB-04)
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,13 @@ class RunResult:
         """
         return {aid for aid, st in self.states.items() if st.heard and not any(st.sharing.values())}
 
+    def mutation_share(self, msg_id: str) -> float:
+        """สัดส่วนผู้ได้ยินที่ได้รับเวอร์ชันเพี้ยน (FAB-04)"""
+        heard = [st for st in self.states.values() if msg_id in st.heard]
+        if not heard:
+            return 0.0
+        return sum(1 for st in heard if msg_id in st.mutated) / len(heard)
+
     def rounds_to_penetration(self, msg_id: str, frac: float, *, from_round: int) -> int | None:
         """จำนวน round (นับจากวันปล่อย) กว่าข้อความจะถึง frac ของประชากร — None ถ้าไม่ถึง"""
         rounds_heard = sorted(st.heard[msg_id] for st in self.states.values() if msg_id in st.heard)
@@ -84,8 +92,16 @@ class FabricSimulation:
         *,
         seed: int,
         enabled_channels: frozenset[str] | None = None,
+        rumor_mutation_rate: float = 0.0,
     ):
-        """enabled_channels: จำกัดช่องทาง (ใช้ทำ isolated-channel benchmark) — None = ครบ 4"""
+        """enabled_channels: จำกัดช่องทาง (ใช้ทำ isolated-channel benchmark) — None = ครบ 4
+
+        rumor_mutation_rate (FAB-04): โอกาสที่ข่าวลือ "เพี้ยน" ระหว่างส่งต่อใน closed group
+        (0-1, default 0 = ปิด) — ผู้รับเวอร์ชันเพี้ยนถูก mark + log ใน trail
+        """
+        if not 0.0 <= rumor_mutation_rate <= 1.0:
+            raise ValueError("rumor_mutation_rate ต้องอยู่ในช่วง 0-1")
+        self._mutation_rate = rumor_mutation_rate
         self._rng = Random(seed)
         self._seed = seed
         self._states = {p.agent_id: AgentState(persona=p) for p in personas}
@@ -161,6 +177,14 @@ class FabricSimulation:
         st.heard[msg.msg_id] = round_no
         st.heard_via[msg.msg_id] = channel
         self._log(round_no, st.persona.agent_id, msg, channel, "heard")
+        if (
+            msg.kind == "rumor"
+            and channel == "line_closed_group"
+            and self._rng.random() < self._mutation_rate
+        ):
+            # FAB-04: ข่าวลือเพี้ยนระหว่างส่งต่อในกลุ่มปิด (ตรวจสอบ/แก้ยากที่สุด)
+            st.mutated.add(msg.msg_id)
+            self._log(round_no, st.persona.agent_id, msg, channel, "heard_mutated")
         p = st.persona
         believe_prob = CHANNELS[channel].trust
         if msg.kind == "correction" and channel == "line_closed_group":
@@ -202,6 +226,8 @@ class FabricSimulation:
                     )
                     self._expose(round_no, self._states[seeder], msg, msg.seed_channel)
                     self._states[seeder].sharing[msg.msg_id] = True
+                    # log แยกจาก "shared" (ที่มาจาก draw) — จำเป็นต่อ influence graph (SIM-09)
+                    self._log(round_no, seeder, msg, msg.seed_channel, "seeded")
                     continue
 
                 sharers = {a for a in self._order if self._states[a].sharing.get(msg.msg_id)}

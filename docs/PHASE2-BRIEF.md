@@ -50,9 +50,29 @@ REH-01/03/04/05, SIG-01..04, SIM-05/08/09/10/11, FAB-03/04 | **TRUST-08 defer** 
 - [x] `simulation/ask.py` (SIM-08): analyst เห็นเฉพาะ trail ที่กรองแล้ว, คำตอบต้อง cite [เลข] เหตุการณ์จริง — อ้าง index มั่วถูกตัด, ไม่มี citation = ติดธง "อย่าใช้ตัดสินใจ" (fail-closed); demo ตอบพร้อมหลักฐาน 4 เหตุการณ์ตรวจสอบได้
 - [x] Unit tests +9 (รวม 168 เขียว)
 
-### P2-M6 — Influence Graph + Impact Waterfall + Media/Rumor (SIM-09/10, FAB-03/04)
-- [ ] Hub nodes + cluster map **ระดับ segment เท่านั้น** (กฎเหล็กข้อ 7) | Impact Waterfall ต่อยอด `query_indirect`
-- [ ] สำนักข่าว agent (editorial stance) + rumor mutation rate ใน closed group
+### P2-M6 — Influence Graph + Impact Waterfall + Media/Rumor (SIM-09/10, FAB-03/04) ✅ (6 ก.ค. 2026)
+- [x] SIM-09 (`simulation/influence.py`): influence matrix จาก trail — **ระดับ segment เท่านั้น** (เครดิตเฉลี่ยให้กลุ่มของผู้แชร์ขณะนั้น ไม่มี edge รายบุคคล), hub segments + cluster pairs; test บังคับว่า output ไม่มี agent id (กฎเหล็กข้อ 7); engine เพิ่ม log "seeded" (ผู้แชร์คนแรกเคยหายจาก trail)
+- [x] SIM-10 (`graphlayer/waterfall.py`): Impact Waterfall 2-3 hop จาก Neo4j — ผลจริง: จาก "กทม." เจอ 30 entities ทางอ้อมพร้อมเส้นทางเต็ม (ระวังซ้ำบทเรียน M2: shortestPath ใช้ min length ≥2 ไม่ได้)
+- [x] FAB-03 (`simulation/media.py`): สำนักข่าวจำลอง 3 stance (amplify/filter/neutral) — prompt ห้ามบิดข้อเท็จจริง + ย้ำใช้ในโลกจำลองเท่านั้น
+- [x] FAB-04: `rumor_mutation_rate` ใน engine (0-1 ปรับได้) — ข่าวลือเพี้ยนเฉพาะ closed group, mark ต่อ agent + log trail + `mutation_share()` metric, deterministic
+- [x] Unit tests +11 (รวม 179 เขียว)
+
+---
+
+## สรุปปิด Phase 2 (6 ก.ค. 2026) — milestones ครบ P2-M1..M6
+
+| Exit criteria (เชิงเทคนิค) | ผล |
+|---|---|
+| (1) REH-01 ตอบโต้ ≤ 10 วิ + scorecard | **ผ่าน ✅** — latency จริงสูงสุด 2.8 วิ (หลังแก้ hidden reasoning) |
+| (2) REH-03 ≥ 3 ตา + decision tree | **ผ่าน ✅** — บังคับที่โค้ด + ทางเลือกที่ไม่ได้เดินทุกตา |
+| (3) War room + divergence alarm ยิงเมื่อ inject ความเบี่ยง | **ผ่าน ✅** — 95% หลุดซอง [40,80] → alarm; noise 2% ไม่ยิง |
+| (4) SIG metadata ครบ + OOS harness + GOV-02 ปิด signal | **ผ่าน ✅** — 403 ที่ endpoint + harness ปฏิเสธตัวอย่างเล็ก |
+| (5) Living memory ข้าม run + reset | **ผ่าน ✅** — demo 20%→(จำ)→40% + SIM-08 cite trail จริง |
+| (6) governance ครบทุก feature + tests เขียว | **ผ่าน ✅** — 179 tests; ทุก run มี audit+prediction+watermark |
+
+tests 179 เขียว | ต้นทุนสะสมทั้งโปรเจกต์ ~$0.58 | ยังใต้ cap 10 agents ตลอด
+**หมายเหตุ calibration**: เกณฑ์ PRD "ดีกว่า baseline ≥ 15%" วัดได้เมื่อ predictions ทยอยครบกำหนด (คิวแรก 8 ก.ค. จาก war room, ชุดใหญ่ 4 ส.ค.) — resolve ด้วย `scripts/resolve_predictions.py` แล้ว rebuild benchmark page
+**งานที่ defer**: TRUST-08 hybrid panel (รอผู้ใช้ sourcing คนจริง) | **ถัดไป: Phase 3 (Citizen) หรือขยาย scale — รอผู้ใช้สั่ง**
 
 ## กติกาที่สืบทอด (ดู AGENTS.md)
 
