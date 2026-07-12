@@ -339,6 +339,36 @@ class GovernanceStore:
             for r in rows
         ]
 
+    def insights(self) -> dict:
+        """Cross-run analytics (P5-M6) — อ่านอย่างเดียวจาก audit log + registry
+
+        ทุกตัวเลขย้อนถึงข้อมูลดิบได้: runs จาก audit (GOV-04), predictions จาก registry
+        """
+        with self._conn() as conn:
+            total_runs = conn.execute("SELECT count(DISTINCT run_id) FROM audit_log").fetchone()[0]
+            exports = conn.execute(
+                "SELECT count(*) FROM audit_log WHERE action = 'report_exported'"
+            ).fetchone()[0]
+            per_day = conn.execute(
+                "SELECT to_char(date_trunc('day', started), 'YYYY-MM-DD') AS day, count(*) "
+                "FROM (SELECT run_id, min(ts) AS started FROM audit_log GROUP BY run_id) t "
+                "GROUP BY day ORDER BY day DESC LIMIT 30"
+            ).fetchall()
+            pred_by_domain = conn.execute(
+                "SELECT p.domain, count(*), count(r.id) "
+                "FROM prediction_registry p "
+                "LEFT JOIN prediction_resolution r ON r.prediction_id = p.id "
+                "GROUP BY p.domain ORDER BY count(*) DESC"
+            ).fetchall()
+        return {
+            "total_runs": int(total_runs),
+            "exports": int(exports),
+            "runs_per_day": [{"day": r[0], "runs": int(r[1])} for r in reversed(per_day)],
+            "predictions_by_domain": [
+                {"domain": r[0], "total": int(r[1]), "resolved": int(r[2])} for r in pred_by_domain
+            ],
+        }
+
     def predictions_for_run(self, run_id: str) -> int:
         with self._conn() as conn:
             row = conn.execute(

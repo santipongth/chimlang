@@ -46,6 +46,42 @@ export async function fetchRuns(): Promise<RunsData> {
   return r.json();
 }
 
+// ---- Knowledge graph viz + insights (P5-M6) ----
+
+export interface GraphNode {
+  name: string;
+  kind: string;
+  degree: number;
+  sources: number;
+}
+
+export interface GraphSummary {
+  nodes: GraphNode[];
+  edges: { from: string; to: string; relation: string }[];
+  hubs: string[];
+  kinds: string[];
+  note: string;
+}
+
+export async function fetchGraphSummary(): Promise<GraphSummary> {
+  const r = await fetch("/graph/summary.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export interface InsightsData {
+  total_runs: number;
+  exports: number;
+  runs_per_day: { day: string; runs: number }[];
+  predictions_by_domain: { domain: string; total: number; resolved: number }[];
+}
+
+export async function fetchInsights(): Promise<InsightsData> {
+  const r = await fetch("/insights.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
 // ---- Watchlist + alerts (P5-M5) ----
 
 export interface WatchlistItem {

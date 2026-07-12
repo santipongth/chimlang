@@ -142,6 +142,47 @@ def graph_indirect(
     }
 
 
+@app.get("/graph/summary.json")
+def graph_summary_json(
+    limit: int = Query(120, ge=10, le=300), principal: Principal = Depends(get_principal)
+) -> dict:
+    """P5-M6 — snapshot ของ knowledge graph สำหรับ viz (SIM-09: hub/cluster ระดับ entity ข่าว
+
+    ไม่ map บุคคลจริงนอกบริบทข่าว — PII ถูก block ตั้งแต่ ingest แล้ว GOV-01)
+    """
+    from graphlayer.store import Neo4jStore
+    from graphlayer.summary import compute_hubs
+
+    settings = get_settings()
+    try:
+        store = Neo4jStore(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+        summary = store.graph_summary(limit=limit)
+        store.close()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"knowledge graph ไม่พร้อม: {e}") from e
+    kinds = sorted({n["kind"] for n in summary["nodes"]})
+    return {
+        **summary,
+        "hubs": compute_hubs(summary["nodes"]),
+        "kinds": kinds,
+        "note": "ทุก node/edge มี provenance ย้อนถึงเอกสารต้นทาง (NFR-08) — hub = top 15% degree",
+    }
+
+
+@app.get("/insights.json")
+def insights_json(principal: Principal = Depends(get_principal)) -> dict:
+    """P5-M6 — analytics ข้าม run จาก audit log + prediction registry (อ่านอย่างเดียว)"""
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        store = GovernanceStore(settings.postgres_url)
+        store.setup()
+        return store.insights()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
 def _run_dashboard(subject: str, granularity: str, agents: int = 100) -> Dashboard:
     settings = get_settings()
     policy = ElectionPolicy(classify_scenario(subject))

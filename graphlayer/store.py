@@ -85,6 +85,42 @@ class Neo4jStore:
             )
             return [(rec["rel"], rec["other"]) for rec in result]
 
+    def graph_summary(self, limit: int = 150) -> dict:
+        """P5-M6 — snapshot ของ graph สำหรับ visualization: nodes (top-degree) + edges ระหว่างกัน
+
+        จำกัดที่ top-N ตาม degree เพื่อให้ render ได้จริง — provenance ต่อ node ยังย้อนได้
+        ผ่าน sources (NFR-08)
+        """
+        with self._driver.session() as s:
+            node_rows = s.run(
+                "MATCH (e:Entity) OPTIONAL MATCH (e)-[r:REL]-() "
+                "RETURN e.name AS name, e.type AS kind, count(r) AS degree, "
+                "size(coalesce(e.sources, [])) AS sources "
+                "ORDER BY degree DESC, name LIMIT $limit",
+                limit=int(limit),
+            )
+            nodes = [
+                {
+                    "name": rec["name"],
+                    "kind": rec["kind"] or "other",
+                    "degree": int(rec["degree"]),
+                    "sources": int(rec["sources"]),
+                }
+                for rec in node_rows
+            ]
+            names = [n["name"] for n in nodes]
+            edge_rows = s.run(
+                "MATCH (a:Entity)-[r:REL]->(b:Entity) "
+                "WHERE a.name IN $names AND b.name IN $names "
+                "RETURN a.name AS src, b.name AS dst, r.type AS relation LIMIT 500",
+                names=names,
+            )
+            edges = [
+                {"from": rec["src"], "to": rec["dst"], "relation": rec["relation"]}
+                for rec in edge_rows
+            ]
+        return {"nodes": nodes, "edges": edges}
+
     def entity_count(self) -> int:
         with self._driver.session() as s:
             return s.run("MATCH (e:Entity) RETURN count(e) AS c").single()["c"]

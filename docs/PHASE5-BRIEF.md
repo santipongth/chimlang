@@ -48,11 +48,11 @@
 - [x] หน้า Watchlist (list + toggle + Run now + alerts feed) + unread badge ที่ sidebar
 - [x] tests: shift detection, webhook ไม่ยิง http://, run พังไม่กระทบ
 
-### P5-M6 — Knowledge graph viz + Insights
-- [ ] `GET /graph/summary.json`: nodes+edges จาก Neo4j + degree + hub (top 15% ไม่เกิน 6) + cluster ตาม kind
-- [ ] Interactive SVG แบบ studio: wedge layout ตาม cluster, hub วงแหวน, click node → side panel connections, filter chips ตาม kind
-- [ ] หน้า Insights: runs timeline + factor cloud + metric averages จาก registry/audit (ของเรามีข้อมูลครบอยู่แล้ว)
-- [ ] tests: summary endpoint (mock Neo4j), hub calculation
+### P5-M6 — Knowledge graph viz + Insights ✅ (12 ก.ค. 2026)
+- [x] `GET /graph/summary.json`: nodes+edges จาก Neo4j + degree + hub (top 15% ไม่เกิน 6) + cluster ตาม kind
+- [x] Interactive SVG แบบ studio: wedge layout ตาม cluster, hub วงแหวน, click node → side panel connections, filter chips ตาม kind
+- [x] หน้า Insights: runs timeline + factor cloud + metric averages จาก registry/audit (ของเรามีข้อมูลครบอยู่แล้ว)
+- [x] tests: summary endpoint (mock Neo4j), hub calculation
 
 ## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
 
@@ -69,4 +69,12 @@
 | M3 Calibration UI | ✅ 12 ก.ค. |
 | M4 Red Team + Compare | ✅ 12 ก.ค. |
 | M5 Watchlist + webhook | ✅ 12 ก.ค. |
-| M6 Graph viz + Insights | ⏳ กำลังทำ |
+| M6 Graph viz + Insights | ✅ 12 ก.ค. |
+
+## สรุปปิด Phase 5 (12 ก.ค. 2026) — ครบทุก milestone M1..M6 ในวันเดียว
+
+UI ยึด studio ครบ (sidebar+badge, header pattern, tabs, tooltip-สูตรทุก metric) +
+หน้าใหม่ 4 หน้า (Compare / Calibration / Watchlist / Insights) + engine เพิ่ม
+tipping detection (ปิดข้อบังคับ PRD ขั้น 7 ที่ตกหล่น), Red Team in-population,
+watchlist retention loop + webhook | tests 253 เขียว | จุดต่างจาก SwarmSight ที่รักษาไว้:
+ทุกอย่าง seed-deterministic, resolve เป็น append-only, webhook ไม่แตะ secret, PII/GOV ครบ
