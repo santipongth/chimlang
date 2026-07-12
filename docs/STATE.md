@@ -1,17 +1,17 @@
 # STATE.md — สถานะโครงการ (ไฟล์ส่งมอบข้ามโมเดล)
 
 > ไฟล์นี้คือ "ความจำกลาง" ของโครงการ — agent ทุกตัว (Claude/Codex/GLM/Kimi/อื่นๆ) อ่านก่อนเริ่ม
-> และ**อัปเดตก่อนจบทุก session** (protocol ใน AGENTS.md) | อัปเดตล่าสุด: 5 ก.ค. 2026
+> และ**อัปเดตก่อนจบทุก session** (protocol ใน AGENTS.md) | อัปเดตล่าสุด: 12 ก.ค. 2026
 
 ## 🔵 เริ่มตรงนี้ (พรุ่งนี้/เมื่อกลับมา)
 
-1. อ่าน: `AGENTS.md` → ไฟล์นี้ (STATE.md) → `docs/PHASE1-BRIEF.md` (สรุปปิด Phase 1)
-2. sync โค้ดล่าสุด: `git pull` (ล่าสุด commit `179a861`, tree สะอาด, 24 commits)
+1. อ่าน: `AGENTS.md` → ไฟล์นี้ (STATE.md) → `docs/PHASE4-BRIEF.md` (สรุปปิด Phase 4 = เฟสล่าสุด)
+2. sync โค้ดล่าสุด: `git pull` — tree ต้องสะอาด
 3. เปิด dev stack: `docker compose up -d` (postgres/neo4j/redis) — จำเป็นสำหรับ test governance
-4. ยืนยันสุขภาพระบบ: `uv run pytest -q` (ต้องได้ 123 passed) ก่อนเริ่มงานใหม่
+4. ยืนยันสุขภาพระบบ: `uv run pytest -q` (ต้องได้ **214 passed**) ก่อนเริ่มงานใหม่
 5. ต้องมี `.env` (มี OpenRouter API key) — ไม่อยู่ใน git ผู้ใช้เก็บเอง; model: crowd=qwen3.5-flash-02-23, analyst=qwen3-235b-a22b-2507
-6. **cap 10 agents ยังบังคับอยู่** — ห้าม bypass จนกว่าผู้ใช้สั่งขยาย
-7. เลือกงานถัดไปจาก "งานถัดไป" ด้านล่าง (Phase 2 / ขยาย scale / เก็บงานคุณภาพ) — ถ้า non-trivial เสนอ plan ให้ผู้ใช้ก่อน
+6. **cap = 1,000 agents/run** (ผู้ใช้ขยายจาก 10 เมื่อ 6 ก.ค. 2026) — deep 5,000 ต้องขออนุมัติผู้ใช้ก่อน
+7. ทุกเฟสปิดแล้ว (0–4) — งานถัดไปส่วนใหญ่**รออินพุต/มติผู้ใช้** (ดู "ถัดไป" ใน TL;DR) — ถ้า non-trivial เสนอ plan ให้ผู้ใช้ก่อน
 
 **หมายเหตุความต่อเนื่องข้ามโมเดล:** ความต่อเนื่องอยู่ที่ไฟล์เหล่านี้ + git history ไม่ใช่ที่บทสนทนา —
 เปิดเครื่องมือใหม่ (Codex/GLM) แล้วอ่าน 3 ไฟล์นี้ก็ทำงานต่อได้เต็มบริบท โดยไม่ต้องมีประวัติแชทเดิม
@@ -30,14 +30,12 @@
 - calibration ≥15% ยังรอ predictions ครบกำหนดจริง (คิวแรก 8 ก.ค. — `scripts/resolve_predictions.py`)
 - API layer: FastAPI `api/app.py` (`make api`) — /dashboard.json /dashboard.html /health
 - **บทเรียนใหม่ (6 ก.ค.)**: qwen3.5-flash เผา ~1,200 hidden thinking tokens/call — `adapter.chat(reasoning=False)` สำหรับ path interactive/สั้น (เร็วขึ้น 29x ถูกลง 10x); ห้ามปิดกับ judge/hindcast/benchmark (คุณภาพที่วัดไว้ใช้ thinking)
-- **cap 10 agents คงอยู่ตลอดทุกเฟสจนระบบเสร็จสมบูรณ์** (คำสั่งผู้ใช้) — ผู้ใช้จะสั่งขยายเอง
-- **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope)
-- test: **123 ข้อเขียว** | ต้นทุนสะสม ~$0.55 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
+- **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope) — **ดู CI ด้วย SHA เสมอ**: `gh run list --commit "$SHA"` ห้ามใช้ `--limit 1`
+- test: **214 ข้อเขียว** | ต้นทุนสะสม ~$0.62 | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
-- ถัดไป: (1) 8 ก.ค. resolve predictions คิวแรก (`scripts/resolve_predictions.py` — ดูวิธีในหมายเหตุด้านล่าง) (2) งานคุณภาพค้างที่รอผู้ใช้: React UI (แค่สั่ง), calibrate segments กับสำมะโนจริง (รอไฟล์/ลิงก์จากผู้ใช้ → วาง data/samples/population/sources/), TRUST-08 panel (รอผู้ใช้ตัดสินใจ sourcing), semantic memory (เมื่อความจำโต)
+- ถัดไป (12 ก.ค.): (1) **prediction #161 ครบกำหนดตั้งแต่ 8 ก.ค. ยังไม่ resolve** — มาจาก War Room demo สังเคราะห์ ไม่มีผลจริงให้เทียบ ต้องรอผู้ใช้ป้อน outcome (ดูหมายเหตุด้านล่าง) (2) งานที่รออินพุต/มติผู้ใช้: ป้อนเหตุการณ์/นโยบายจริงเข้าระบบ (ปลดล็อก calibration แท้จริง), calibrate segments กับสำมะโนจริง (รอไฟล์/ลิงก์ → วาง data/samples/population/sources/), TRUST-08 panel (รอผู้ใช้ตัดสินใจ sourcing), GA สาธารณะ (TLS/pen test/SSO/multi-tenant), semantic memory (เมื่อความจำโต)
 - **หมายเหตุ resolve predictions**: prediction ปัจจุบันมาจาก scenario สังเคราะห์ (corpus demo) — ไม่มีผลจริงภายนอกให้เทียบ; การ resolve ให้มีความหมายต้องเริ่มป้อนเหตุการณ์/นโยบายจริงเข้าระบบก่อน แล้วเมื่อครบกำหนดผู้ใช้ป้อนผลจริง: `uv run python scripts/resolve_predictions.py --id N --outcome true|false --note "แหล่งอ้างอิง"` → Brier สะสมอัตโนมัติ → rebuild benchmark page
-- ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse → exit criteria cost ≤ $80 มีแนวโน้มผ่านสบายเมื่อได้วัดจริง
-- ข้อจำกัดบังคับ: **ทุก run ≤ 10 agents** (คำสั่งผู้ใช้ 5 ก.ค. 2026) — บังคับใน `PersonaFactory.sample()` แล้ว
+- ข้อมูลสำคัญจาก fidelity dial: Standard run (1000×30×5u) ประเมิน ~$2.49 แบบ voice-sparse — วัดจริงแล้ว $25.09/$0.82 (ดู scale-measurement.md)
 
 ## แผนที่โค้ด (อะไรอยู่ไหน ทำไม)
 
@@ -65,17 +63,17 @@
 
 - [x] ~~แก้ leak_if a1~~ (5 ก.ค. — แจ้งผู้ใช้แล้ว, comment ใน yaml ชี้ M1 final report)
 - [x] ~~leak test True-DTAC~~ (0.0% ผ่าน) | ~~hindcast ชุด 3–5~~ (ครบ 5) | ~~sanitize ไป core~~
-- [ ] ห่อ `query_indirect` เป็น REST endpoint (FastAPI ใน `api/`) — คิว M5 หรือ Phase 1
-- [ ] exit criteria #2 (Standard run ≤ $80): วัดจริงได้เมื่อผู้ใช้ยกเลิก cap 10 agents — ระหว่างนี้มีแต่ประมาณการจาก token log
-- [ ] Windows console เป็น cp1252 — ทุก script ที่ print ไทยต้องรันด้วย `PYTHONIOENCODING=utf-8` (พิจารณาใส่ใน script เองที่ M5)
+- [x] ~~ห่อ `query_indirect` เป็น REST endpoint~~ (P3-Q: `/graph/indirect.json`)
+- [x] ~~exit criteria #2 Standard run ≤ $80~~ (วัดจริง 6 ก.ค.: $25.09 thinking-on / $0.82 off — ผ่าน)
+- [x] ~~Windows console cp1252~~ (P3-Q: UTF-8 reconfigure จุดเดียวใน core/config; ยกเว้น `python -c` inline ต้องใช้ `PYTHONIOENCODING=utf-8` เอง)
+- [x] ~~CI ยังไม่ build frontend~~ (12 ก.ค. — เพิ่ม job `web-build` ใน ci.yml: npm ci + tsc/vite build จับ TS พังทุก push)
 
-## งานถัดไป: M5 — Governance Hooks (GOV-03/04 + TRUST-01 ขั้นต่ำ) — ปิดเฟส
+## งานถัดไป (หลังปิด Phase 0–4 ครบ) — ทั้งหมดรออินพุต/มติผู้ใช้
 
-จาก PHASE0-BRIEF:
-1. Watermark module: ทุก export ฝัง visible + machine-readable (run id, วันที่, "AI simulation — not a real poll") — ทางผ่านเดียว
-2. Audit log append-only ใน PostgreSQL: DB trigger กัน UPDATE/DELETE (ทดสอบกับ DB จริงใน docker ไม่ mock)
-3. Prediction Registry ขั้นต่ำ: ทุก run เขียน record ≥1 (claim, ทิศทาง, confidence, วิธีวัด, วันครบกำหนด) + trigger append-only
-4. ปิดเฟส: สรุปเทียบ exit criteria 3 ข้อ + อัปเดต checklist ทั้งหมด
+1. **Resolve prediction #161** (ครบกำหนด 8 ก.ค.) — ผู้ใช้ป้อนผลจริง: `uv run python scripts/resolve_predictions.py --id 161 --outcome true|false --note "แหล่งอ้างอิง"`
+2. **ป้อนเหตุการณ์/นโยบายจริง** เข้าระบบ — จุดปลดล็อก calibration ≥15% แท้จริง (prediction ปัจจุบันเป็น scenario สังเคราะห์)
+3. Calibrate segments กับสำมะโนจริง (รอไฟล์/ลิงก์ → `data/samples/population/sources/`)
+4. TRUST-08 hybrid panel (รอผู้ใช้ตัดสินใจ sourcing) | GA สาธารณะ: TLS, pen test อิสระ, SSO, multi-tenant (docs/reports/security-review.md)
 
 ## บทเรียนจาก M4
 
@@ -112,3 +110,4 @@
 - 2026-07-06 (Claude Fable 5): **เริ่ม Phase 4 + P4-M1 React UI เสร็จ** — Vite+React18+TS+Tailwind4, theme/layout ตาม ref ผู้ใช้ (sidebar+content 2 คอลัมน์, เขียวมรกต, serif heading, step wizard), i18n TH/EN ทุกหน้า, 5 หน้า รวม landing + การจัดการรัน (/runs.json ใหม่ + recent_runs()), FastAPI เสิร์ฟ dist ที่ /app; tests 196 เขียว; ถัดไป P4-M2 PDF export
 - 2026-07-06 (Claude Fable 5): **P4-M2..M4 เสร็จ** — PDF export ผ่านจุด watermark เดียว (Sarabun ฝัง+shaping, metadata ตรวจกลับได้, GOV-02 label ใน PDF), Celery+Redis queue (POST /jobs/whatif + guard ก่อน enqueue + governance 2 ชั้น), Auth/RBAC (X-API-Key, viewer/analyst/operator/admin, election=admin verified เท่านั้น, citizen สาธารณะ); tests 211 เขียว; เหลือ M5 deployment (รอผู้ใช้ตัดสินใจ cloud) + M6
 - 2026-07-06 (Claude Fable 5): **P4-M5+M6 เสร็จ = Phase 4 ครบทุก milestone** — มติผู้ใช้ D9: self-hosted docker; Dockerfile multi-stage + compose.prod (smoke จริงผ่าน: health/UI/sim ใน container; บั๊ก uvicorn อยู่ dev group ถูกจับตอน smoke), PDF 2 ภาษา, security headers + /health/deep + security-review.md (ตรงๆ: pen test/TLS/SSO ยังไม่ทำ); tests 214 เขียว
+- 2026-07-12 (Claude Fable 5): **maintenance หลังปิด Phase 4** — ตรวจสุขภาพ (214 เขียว), แก้ STATE.md ที่ stale ขัดแย้งกันเอง (เริ่มตรงนี้/cap 10/123 tests/หนี้เทคนิค/งานถัดไป M5 เก่า), เพิ่ม CI job `web-build` (จับ TS พังทุก push — เก็บคิวจาก P4-M1); **พบ prediction #161 ครบกำหนด 8 ก.ค. ยังไม่ resolve** (scenario สังเคราะห์ — รอผู้ใช้ป้อน outcome); ไม่มีงานโค้ดค้าง — ทุกอย่างถัดไปรออินพุตผู้ใช้

@@ -21,3 +21,19 @@ jobs:
           uv run ruff format --check .
       - name: Test
         run: uv run pytest -q
+
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+      - name: Build frontend (type-check + bundle)
+        run: npm run build
+        working-directory: web

@@ -13,7 +13,7 @@
 - [x] Watermark banner ถาวรทุกหน้า | election scenario โชว์ 403 จาก GOV-02 ตรงๆ
 - [x] Dev: Vite proxy → :8000 | Prod: FastAPI เสิร์ฟ `web/dist` ที่ **`/app`** (ชิ้นเดียว) — `make api` แล้วเปิด http://localhost:8000/app/
 - [x] Backend เพิ่ม: `GET /runs.json`, `agents` param ที่ dashboard, `GovernanceStore.recent_runs()` | tests +5 (รวม 196 เขียว)
-- หมายเหตุ: `web/dist` + `node_modules` ไม่เข้า git — CI ยังไม่ build frontend (คิว P4-M6 ถ้าต้องการ)
+- หมายเหตุ: `web/dist` + `node_modules` ไม่เข้า git — ~~CI ยังไม่ build frontend~~ เพิ่ม job `web-build` แล้ว (12 ก.ค. 2026)
 
 ### P4-M2 — PDF Export + Watermark ✅ (6 ก.ค. 2026)
 - [x] `export_report()` จุดเดียวเดิมรองรับ `.pdf` (governance/pdf.py + fpdf2): watermark visible หัว/ท้าย**ทุกหน้า** + machine-readable ใน PDF metadata (อ่านกลับด้วย pypdf ใน test); ปิด flag = ปฏิเสธ + ไม่มีไฟล์หลุด
