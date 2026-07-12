@@ -14,9 +14,9 @@ const DICT: Record<string, { th: string; en: string }> = {
   nav_history: { th: "ประวัติ", en: "History" },
   nav_settings: { th: "ตั้งค่า", en: "Settings" },
   lang_label: { th: "ภาษา", en: "Language" },
-  nav_calibration: { th: "Calibration", en: "Calibration" },
-  nav_insights: { th: "Insights", en: "Insights" },
-  nav_watchlist: { th: "Watchlist", en: "Watchlist" },
+  nav_calibration: { th: "วัดความแม่น (Calibration)", en: "Calibration" },
+  nav_insights: { th: "ภาพรวมสถิติ (Insights)", en: "Insights" },
+  nav_watchlist: { th: "รายการติดตาม (Watchlist)", en: "Watchlist" },
   nav_gallery: { th: "แกลเลอรีสาธารณะ", en: "Public Gallery" },
   nav_citizen: { th: "โหมดประชาชน", en: "Citizen Mode" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
@@ -47,9 +47,9 @@ const DICT: Record<string, { th: string; en: string }> = {
   wiz_eyebrow: { th: "รันใหม่", en: "NEW RUN" },
   wiz_title: { th: "ออกแบบรันของคุณ", en: "Design your run" },
   wiz_step1: { th: "คำถาม", en: "Question" },
-  wiz_step_agents: { th: "Agents", en: "Agents" },  // เดิม wiz_step2="เครื่องยนต์" ทำ stepper ซ้ำกับขั้น engine ใหม่ (บั๊ก 12 ก.ค.)
+  wiz_step_agents: { th: "ตัวแทนจำลอง", en: "Agents" },  // เดิม wiz_step2="เครื่องยนต์" ทำ stepper ซ้ำกับขั้น engine ใหม่ (บั๊ก 12 ก.ค.)
   wiz_step3: { th: "ยืนยัน & รัน", en: "Review & Run" },
-  wiz_q_label: { th: "คำถาม / หัวข้อ SCENARIO", en: "QUESTION / SCENARIO" },
+  wiz_q_label: { th: "คำถามหรือเหตุการณ์ที่อยากซ้อม (scenario)", en: "QUESTION / SCENARIO" },
   wiz_q_ph: { th: "จะเกิดอะไรถ้า...", en: "What if..." },
   wiz_domain: { th: "หมวดหมู่", en: "DOMAIN" },
   // หมวดหมู่ 6 อันตาม studio ต้นทาง
@@ -59,12 +59,12 @@ const DICT: Record<string, { th: string; en: string }> = {
   domain_policy: { th: "นโยบายสาธารณะ", en: "Policy" },
   domain_science: { th: "วิทยาศาสตร์/เทคโนโลยี", en: "Science" },
   domain_general: { th: "ทั่วไป", en: "General" },
-  wiz_agents: { th: "จำนวน agents", en: "Agents" },
+  wiz_agents: { th: "จำนวนตัวแทนจำลอง (agents)", en: "Agents" },
   wiz_agents_note: {
-    th: "มากขึ้น = เสถียรขึ้นแต่ช้าลง (cap 1,000/run — ระดับ 5,000 ต้องขออนุมัติ)",
+    th: "ยิ่งมากผลยิ่งนิ่งแต่ช้าลง (สูงสุด 1,000 ตัวต่อครั้ง — ระดับ 5,000 ต้องขออนุมัติก่อน)",
     en: "More = steadier but slower (cap 1,000/run — 5,000 tier requires approval)",
   },
-  wiz_universes: { th: "ทุกรันใช้ 5 จักรวาลคู่ขนานเพื่อวัด Fragility เสมอ", en: "Every run uses 5 parallel universes to measure fragility" },
+  wiz_universes: { th: "ทุกครั้งที่รัน ระบบจะจำลองโลกคู่ขนาน 5 แบบ เพื่อวัดว่าข้อสรุปพลิกง่ายแค่ไหน (fragility)", en: "Every run uses 5 parallel universes to measure fragility" },
   wiz_review: { th: "สรุปก่อนรัน", en: "Review before running" },
   wiz_election_warn: {
     th: "หัวข้อเกี่ยวกับเลือกตั้ง/การเมืองจะถูกบังคับ aggregate-only และปิด Sim-to-Signal โดยอัตโนมัติ (GOV-02)",
@@ -86,7 +86,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   dash_tab_report: { th: "รายงาน & Export", en: "Report & Export" },
   voices_title: { th: "เสียงจำลองรายกลุ่ม (Synthetic Voices)", en: "Synthetic voices by segment" },
   voices_note: {
-    th: "เสียงจำลองจาก agent — สังเกต say-do gap: สิ่งที่พูดต่อสาธารณะ ≠ สิ่งที่คิดจริง",
+    th: "เสียงจากตัวแทนจำลอง — สังเกตช่องว่างระหว่างสิ่งที่พูดต่อสาธารณะกับสิ่งที่คิดจริง (say-do gap)",
     en: "Simulated agent voices — note the say-do gap between public statements and private views",
   },
   voice_public: { th: "พูดต่อสาธารณะ", en: "Says publicly" },
@@ -102,7 +102,7 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "Fragility Index = สัดส่วนจักรวาลคู่ขนาน (5 universes) ที่ข้อสรุปหลักพลิกเมื่อเขย่าสมมติฐานเล็กน้อย\n0-40 = มั่นคง | 41-70 = ลด confidence อัตโนมัติ | >70 = ห้าม export ตัวเลขเดี่ยว (TRUST-05)",
     en: "Fragility Index = share of the 5 parallel universes where the main conclusion flips under small perturbations.\n0-40 = stable | 41-70 = confidence auto-downgraded | >70 = single-figure export blocked (TRUST-05)",
   },
-  tipping_title: { th: "Tipping Points — จุดที่กระแสพลิก", en: "Tipping points — where the narrative flips" },
+  tipping_title: { th: "จุดพลิกกระแส (Tipping Points)", en: "Tipping points — where the narrative flips" },
   tipping_none: {
     th: "ไม่พบ tipping point — การแพร่เป็นแบบค่อยเป็นค่อยไปตลอดการจำลอง (ไม่มี round ที่ความเชื่อเปลี่ยน ≥ 15%)",
     en: "No tipping point — diffusion was gradual throughout (no round moved belief ≥ 15%)",
@@ -168,7 +168,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   wiz_step_sources: { th: "แหล่งข้อมูล", en: "Sources" },
   wiz_engine_title: { th: "เลือกเครื่องยนต์จำลอง", en: "PICK A SIMULATION ENGINE" },
   wiz_engine_desc: {
-    th: "Fabric = กลไก deterministic ($0, scale ใหญ่) · Debate = agent LLM คุยโต้กันจริง (เห็นบทสนทนา + replay, มีค่าใช้จ่ายผ่าน BudgetGuard)",
+    th: "Fabric = จำลองด้วยกลไกคณิตศาสตร์ ไม่มีค่าใช้จ่าย รองรับตัวแทนจำลองจำนวนมาก · Debate = ตัวแทนจำลองคุยโต้กันจริงด้วยปัญญาประดิษฐ์ เห็นบทสนทนาและดูย้อนหลังได้ (มีค่าใช้จ่ายเล็กน้อย ระบบคุมงบให้อัตโนมัติ)",
     en: "Fabric = deterministic mechanics ($0, big scale) · Debate = LLM agents actually conversing (real feed + replay, BudgetGuard-metered)",
   },
   wiz_engine_future: {
@@ -198,7 +198,7 @@ const DICT: Record<string, { th: string; en: string }> = {
     en: "A contrarian + auditor join the debate to challenge consensus and question evidence — reduces groupthink",
   },
   wiz_cost_note: {
-    th: "Debate ใช้ LLM จริง — ประเมินค่าใช้จ่ายก่อนเริ่มและหยุดอัตโนมัติถ้าเกินงบ (BudgetGuard)",
+    th: "โหมด Debate ใช้ปัญญาประดิษฐ์จริง — ระบบประเมินค่าใช้จ่ายก่อนเริ่ม และหยุดอัตโนมัติถ้าจะเกินงบ",
     en: "Debate uses real LLM calls — cost is estimated upfront and hard-capped by BudgetGuard",
   },
   wiz_persist_note: {
@@ -252,7 +252,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   rd_feed: { th: "บทสนทนา", en: "Conversation" },
   rd_round: { th: "รอบ", en: "round" },
   rd_post_failed: { th: "agent ตอบพัง — ไม่นับใน metrics", en: "agent failed — excluded from metrics" },
-  rd_meta: { th: "ข้อมูลการรัน (reproducibility)", en: "Run metadata (reproducibility)" },
+  rd_meta: { th: "ข้อมูลกำกับการรัน (ใช้ทำซ้ำผลเดิมได้)", en: "Run metadata (reproducibility)" },
   rd_seed_note: { th: "LLM pin แบบ best-effort — snapshot จริงคือโพสต์ที่เก็บไว้", en: "LLM pinning is best-effort — the stored posts are the true snapshot" },
   rd_sources: { th: "เอกสารอ้างอิงที่ใช้", en: "SOURCES USED" },
   rd_prediction_note: {
@@ -273,6 +273,23 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "ทุก pack ผ่าน PII gate ตอนสร้างแล้ว — ลบได้อย่างเดียว แก้ไม่ได้ (สร้างใหม่แทน)",
     en: "Every pack passed the PII gate at creation — packs can be deleted, not edited (recreate instead)",
   },
+  set_llm_title: { th: "โมเดลปัญญาประดิษฐ์ (LLM)", en: "AI model (LLM)" },
+  set_llm_desc: {
+    th: "เลือกผู้ให้บริการยอดนิยมหรือกำหนดเอง — เว้นว่าง = ใช้ค่าจากไฟล์ .env ตามเดิม; กุญแจลับ (API key) ตั้งได้ในไฟล์ .env เท่านั้น เพื่อความปลอดภัย",
+    en: "Pick a popular provider or customise — blank = keep .env values; the API key can only be set in .env for safety",
+  },
+  set_llm_base_url: { th: "ที่อยู่บริการ (Base URL)", en: "Base URL" },
+  set_llm_crowd: { th: "โมเดลตัวแทนจำลอง (crowd)", en: "Crowd model" },
+  set_llm_analyst: { th: "โมเดลนักวิเคราะห์ (analyst)", en: "Analyst model" },
+  set_llm_key: { th: "กุญแจลับ (LLM_API_KEY ใน .env)", en: "API key (LLM_API_KEY in .env)" },
+  set_llm_key_on: { th: "ตั้งค่าแล้ว", en: "configured" },
+  set_llm_key_off: { th: "ยังไม่ตั้ง — เพิ่มในไฟล์ .env แล้วเปิดระบบใหม่", en: "not set — add to .env and restart" },
+  set_llm_price_note: {
+    th: "โมเดลที่ไม่มีราคาในระบบจะรันไม่ได้ (กันงบบานโดยไม่รู้ตัว) — โมเดลมาตรฐานมีราคาให้แล้ว; โมเดลใหม่ต้องเพิ่มราคาใน config/pricing.yaml",
+    en: "Models without a known price cannot run (protects the budget) — standard models are priced; add new ones to config/pricing.yaml",
+  },
+  set_llm_active: { th: "ค่าที่ใช้งานจริงตอนนี้", en: "Currently active" },
+  set_llm_reset: { th: "ล้างค่า กลับไปใช้ .env", en: "Reset to .env values" },
   set_system: { th: "สถานะระบบ", en: "System status" },
   set_webhook_on: { th: "เชื่อมแล้วผ่าน ALERT_WEBHOOK_URL", en: "connected via ALERT_WEBHOOK_URL" },
   set_webhook_off: { th: "ยังไม่ตั้ง (เพิ่มใน .env)", en: "not set (add to .env)" },
@@ -370,7 +387,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   pk_discard: { th: "ทิ้งร่างนี้", en: "Discard draft" },
   // Watchlist (P5-M5)
   wl_eyebrow: { th: "ติดตามต่อเนื่อง", en: "CONTINUOUS MONITORING" },
-  wl_title: { th: "Watchlist — เฝ้าดูกระแสให้อัตโนมัติ", en: "Watchlist — automatic narrative monitoring" },
+  wl_title: { th: "รายการติดตาม (Watchlist) — เฝ้าดูกระแสให้อัตโนมัติ", en: "Watchlist — automatic narrative monitoring" },
   wl_sub: {
     th: "subscribe หัวข้อ → ระบบ re-run ตามรอบ (รายวัน/รายสัปดาห์) แล้วแจ้งเตือนเมื่อพบ tipping point หรือข้อสรุปเปลี่ยนทิศ ≥ 10 จุดจากรอบก่อน",
     en: "Subscribe to a topic → the system re-runs on cadence (daily/weekly) and alerts you on tipping points or when the conclusion shifts ≥ 10 pts from the previous round.",
@@ -394,7 +411,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   wl_unread: { th: "ยังไม่อ่าน", en: "unread" },
   wl_mark_all: { th: "อ่านทั้งหมดแล้ว", en: "Mark all read" },
   wl_no_alerts: { th: "ยังไม่มีการแจ้งเตือน", en: "No alerts yet" },
-  wl_kind_tipping: { th: "พบ tipping point", en: "Tipping point detected" },
+  wl_kind_tipping: { th: "พบจุดพลิกกระแส (tipping point)", en: "Tipping point detected" },
   wl_kind_shift: { th: "ข้อสรุปเปลี่ยนทิศ", en: "Consensus shifted" },
   tip_shift: {
     th: "consensus_shift = |mean_delta รอบนี้ − รอบก่อน| ≥ 0.10\nmean_delta = ผลของคำชี้แจงต่อสัดส่วนผู้เชื่อ (เฉลี่ยข้าม 3 seeds)\ntipping_point = round ที่ความเชื่อเปลี่ยน ≥ 15% ใน round เดียว",
@@ -442,14 +459,14 @@ const DICT: Record<string, { th: string; en: string }> = {
     en: "Mark real outcomes of due predictions — we compute Brier scores (lower = better) per domain; every resolution is append-only and immutable.",
   },
   tip_brier: {
-    th: "Brier score = ค่าเฉลี่ยของ (ความมั่นใจ − ผลจริง)²\n• 0 = สมบูรณ์แบบ\n• 0.10–0.20 = ดี\n• 0.25 = สุ่มเดา (โยนเหรียญ)\n• > 0.25 = มั่นใจเกินจริง\nผลจริง: เกิดขึ้น = 1, บางส่วน = 0.5, ไม่เกิด = 0",
+    th: "คะแนนความแม่น (Brier score) = ค่าเฉลี่ยของ (ความมั่นใจ − ผลจริง)²\n• 0 = สมบูรณ์แบบ\n• 0.10–0.20 = ดี\n• 0.25 = สุ่มเดา (โยนเหรียญ)\n• > 0.25 = มั่นใจเกินจริง\nผลจริง: เกิดขึ้น = 1, บางส่วน = 0.5, ไม่เกิด = 0",
     en: "Brier score = mean of (confidence − actual)²\n• 0 = perfect\n• 0.10–0.20 = good\n• 0.25 = coin flip baseline\n• > 0.25 = overconfident\nActual: happened = 1, partial = 0.5, didn't = 0",
   },
   cal_scale_note: { th: "0 = สมบูรณ์แบบ · 0.25 = สุ่มเดา", en: "0 = perfect · 0.25 = coin flip" },
   cal_resolved: { th: "ผลที่บันทึกแล้ว", en: "Outcomes marked" },
   cal_best_domain: { th: "โดเมนแม่นสุด", en: "Best domain" },
   cal_no_data: { th: "ยังไม่มีข้อมูล", en: "No data yet" },
-  cal_trend: { th: "แนวโน้ม Brier รายสัปดาห์", en: "Weekly Brier trend" },
+  cal_trend: { th: "แนวโน้มความแม่นรายสัปดาห์ (Brier)", en: "Weekly Brier trend" },
   cal_lower_better: { th: "ต่ำลง = แม่นขึ้น", en: "lower = better" },
   cal_by_domain: { th: "ความแม่นตามโดเมน", en: "Accuracy by domain" },
   cal_due_title: { th: "คำทำนายครบกำหนด — บันทึกผลจริง", en: "Due predictions — log outcomes" },

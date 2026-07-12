@@ -143,6 +143,14 @@ export async function deleteRun(runId: string): Promise<void> {
 
 // ---- App settings (P6-M4) ----
 
+export interface LlmProvider {
+  key: string;
+  label: string;
+  base_url: string;
+  needs_key: boolean;
+  hint_th: string;
+}
+
 export interface AppSettings {
   default_engine: "fabric" | "debate";
   default_agents: number;
@@ -152,6 +160,21 @@ export interface AppSettings {
   webhook_configured: boolean;
   auth_enabled: boolean;
   caps: { fabric: number; debate: number };
+  // LLM ปรับเองได้ (ADR-0006) — API key ไม่เคยมากับ response
+  llm_provider: string;
+  llm_base_url: string;
+  llm_model_crowd: string;
+  llm_model_analyst: string;
+  llm_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
+  llm: {
+    providers: LlmProvider[];
+    key_present: boolean;
+    active_base_url: string;
+    active_model_crowd: string;
+    active_model_analyst: string;
+    env_model_crowd: string;
+    env_model_analyst: string;
+  };
 }
 
 export async function fetchSettings(): Promise<AppSettings> {

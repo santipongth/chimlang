@@ -49,6 +49,19 @@ class PricingRegistry:
         except KeyError:
             raise UnknownModelPricingError(model) from None
 
+    def merged(self, extra: dict[str, dict] | None) -> "PricingRegistry":
+        """รวมราคาที่ผู้ใช้กำหนดจากหน้าตั้งค่า (P6 — LLM ปรับเองได้) ทับ/เพิ่มจาก yaml
+
+        fail-closed คงเดิม: model ที่ไม่อยู่ทั้งสองแหล่ง = รันไม่ได้
+        """
+        table = dict(self._table)
+        for model, e in (extra or {}).items():
+            table[model] = ModelPricing(
+                input_usd_per_m=float(e["input_usd_per_m"]),
+                output_usd_per_m=float(e["output_usd_per_m"]),
+            )
+        return PricingRegistry(table)
+
     def cost_usd(self, model: str, input_tokens: int, output_tokens: int) -> float:
         p = self.get(model)
         return (input_tokens * p.input_usd_per_m + output_tokens * p.output_usd_per_m) / 1_000_000

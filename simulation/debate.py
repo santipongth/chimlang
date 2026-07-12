@@ -21,7 +21,6 @@ from random import Random
 from core.config import get_settings
 from core.llm.adapter import LLMAdapter, ModelTier
 from core.llm.cost import BudgetGuard, CostEstimator, TierLoad
-from core.llm.pricing import PricingRegistry
 from core.text import sanitize_llm_text
 from simulation.persona import Persona
 from simulation.tipping import detect_tipping_points
@@ -67,9 +66,14 @@ class DebateResult:
 
 
 def make_debate_adapter(agents: int, rounds: int) -> LLMAdapter:
-    """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap = ไม่เริ่ม"""
-    settings = get_settings()
-    pricing = PricingRegistry.from_yaml()
+    """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap = ไม่เริ่ม
+
+    ใช้ค่าจากหน้าตั้งค่า (provider/model/ราคา) ถ้าผู้ใช้ตั้งไว้ — key ยังมาจาก .env (ADR-0006)
+    """
+    from core.llm.userconfig import effective_llm_settings, effective_pricing
+
+    settings = effective_llm_settings()
+    pricing = effective_pricing()
     guard = BudgetGuard(cap_usd=settings.run_budget_usd_cap)
     guard.check_estimate(
         CostEstimator(pricing).estimate(

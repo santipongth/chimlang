@@ -107,6 +107,91 @@ export default function Settings() {
             <p className="mt-3 text-xs text-muted-foreground">{t("set_packs_note")}</p>
           </section>
 
+          {/* LLM ปรับเองได้ (ADR-0006) — API key ยังตั้งใน .env เท่านั้น
+              guard: server เวอร์ชันเก่าไม่มี field llm → ซ่อน section แทน crash ทั้งหน้า */}
+          {data.llm && (
+          <section className={card + " space-y-4"}>
+            <h2 className="font-semibold">🧠 {t("set_llm_title")}</h2>
+            <p className="text-xs text-muted-foreground">{t("set_llm_desc")}</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(data.llm.providers ?? []).map((p) => (
+                <SelectCard
+                  key={p.key}
+                  active={(data.llm_provider || "openrouter") === p.key}
+                  onClick={() =>
+                    patch({ llm_provider: p.key, llm_base_url: p.base_url } as any)
+                  }
+                >
+                  <div className="text-sm font-medium">{p.label}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{p.hint_th}</div>
+                </SelectCard>
+              ))}
+            </div>
+            <label className="block text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("set_llm_base_url")}
+              </span>
+              <input
+                value={data.llm_base_url}
+                onChange={(e) => setData({ ...data, llm_base_url: e.target.value })}
+                onBlur={() => patch({ llm_base_url: data.llm_base_url } as any)}
+                placeholder={data.llm.active_base_url || "https://openrouter.ai/api/v1"}
+                className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+              />
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_llm_crowd")}
+                </span>
+                <input
+                  value={data.llm_model_crowd}
+                  onChange={(e) => setData({ ...data, llm_model_crowd: e.target.value })}
+                  onBlur={() => patch({ llm_model_crowd: data.llm_model_crowd } as any)}
+                  placeholder={data.llm.env_model_crowd}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_llm_analyst")}
+                </span>
+                <input
+                  value={data.llm_model_analyst}
+                  onChange={(e) => setData({ ...data, llm_model_analyst: e.target.value })}
+                  onBlur={() => patch({ llm_model_analyst: data.llm_model_analyst } as any)}
+                  placeholder={data.llm.env_model_analyst}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+                />
+              </label>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3 text-xs space-y-1.5">
+              <div>
+                {data.llm.key_present ? "✅" : "⚠️"} {t("set_llm_key")}:{" "}
+                {data.llm.key_present ? t("set_llm_key_on") : t("set_llm_key_off")}
+              </div>
+              <div className="text-muted-foreground">💰 {t("set_llm_price_note")}</div>
+              <div className="text-muted-foreground">
+                {t("set_llm_active")}: crowd = <code>{data.llm.active_model_crowd || "—"}</code> ·
+                analyst = <code>{data.llm.active_model_analyst || "—"}</code>
+              </div>
+            </div>
+            <button
+              onClick={() =>
+                patch({
+                  llm_provider: "",
+                  llm_base_url: "",
+                  llm_model_crowd: "",
+                  llm_model_analyst: "",
+                } as any)
+              }
+              className="rounded-xl border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-muted"
+            >
+              ↺ {t("set_llm_reset")}
+            </button>
+          </section>
+          )}
+
           <section className={card + " text-sm space-y-2"}>
             <h2 className="font-semibold">{t("set_system")}</h2>
             <div className="grid grid-cols-[180px_1fr] gap-y-1.5 text-muted-foreground">

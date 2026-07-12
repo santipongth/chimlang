@@ -141,7 +141,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
           {tab === "overview" && !isDebate && (
             <>
               <section className={card + " space-y-3"}>
-                <h2 className="font-semibold">Executive Brief</h2>
+                <h2 className="font-semibold">สรุปสำหรับผู้บริหาร (Executive Brief)</h2>
                 <ul className="space-y-1.5 text-sm">
                   {(p.brief?.lines ?? []).map((ln: any, i: number) => (
                     <li key={i} className={ln.kind === "risk" ? "text-red-700" : "text-primary-strong"}>

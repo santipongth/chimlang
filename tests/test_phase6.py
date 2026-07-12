@@ -311,3 +311,72 @@ def test_post_runs_user_claim_registered(client):
     assert row[1] == "โพลสำนัก X รอบสิ้นเดือน"
     assert row[2] == date.today() + timedelta(days=14)
     client.delete(f"/runs/{rid}")
+
+
+# ---- LLM ปรับเองได้ (ADR-0006) ----
+
+
+@needs_pg
+def test_llm_settings_overlay_and_reset(client):
+    # ตั้ง provider + model จาก UI → effective settings เปลี่ยน; ล้างค่า → กลับไปใช้ .env
+    from core.llm.userconfig import LLM_PROVIDERS, effective_llm_settings
+
+    assert "openrouter" in LLM_PROVIDERS and LLM_PROVIDERS["ollama"]["needs_key"] is False
+    r = client.put(
+        "/settings.json",
+        json={
+            "llm_provider": "groq",
+            "llm_base_url": "https://api.groq.com/openai/v1",
+            "llm_model_crowd": "llama-3.3-70b",
+        },
+    )
+    assert r.status_code == 200
+    eff = effective_llm_settings()
+    assert eff.llm_base_url == "https://api.groq.com/openai/v1"
+    assert eff.llm_model_crowd == "llama-3.3-70b"
+    data = client.get("/settings.json").json()
+    assert data["llm"]["active_model_crowd"] == "llama-3.3-70b"
+    assert "llm_api_key" not in str(data)  # key ห้ามออกไปกับ response
+    # ล้างค่า = กลับ .env
+    client.put(
+        "/settings.json",
+        json={
+            "llm_provider": "",
+            "llm_base_url": "",
+            "llm_model_crowd": "",
+            "llm_model_analyst": "",
+        },
+    )
+    assert (
+        effective_llm_settings().llm_model_crowd
+        == client.get("/settings.json").json()["llm"]["env_model_crowd"]
+    )
+
+
+@needs_pg
+def test_llm_settings_validation(client):
+    assert client.put("/settings.json", json={"llm_provider": "quantum-ai"}).status_code == 422
+    assert client.put("/settings.json", json={"llm_base_url": "ftp://x"}).status_code == 422
+    assert (
+        client.put(
+            "/settings.json", json={"llm_prices": {"m": {"input_usd_per_m": -1}}}
+        ).status_code
+        == 422
+    )
+
+
+@needs_pg
+def test_llm_custom_price_merges_and_fail_closed(client):
+    # ราคาที่ผู้ใช้กรอก merge เข้า registry; model ที่ไม่มีราคา = รันไม่ได้ (fail-closed เดิม)
+    from core.llm.pricing import UnknownModelPricingError
+    from core.llm.userconfig import effective_pricing
+
+    client.put(
+        "/settings.json",
+        json={"llm_prices": {"my/custom-model": {"input_usd_per_m": 0.5, "output_usd_per_m": 1.0}}},
+    )
+    pricing = effective_pricing()
+    assert pricing.cost_usd("my/custom-model", 1_000_000, 0) == pytest.approx(0.5)
+    with pytest.raises(UnknownModelPricingError):
+        pricing.cost_usd("no/price-model", 1000, 0)
+    client.put("/settings.json", json={"llm_prices": {}})

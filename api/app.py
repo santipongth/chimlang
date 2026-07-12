@@ -448,6 +448,9 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
         data = get_app_settings(settings.postgres_url)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    from core.llm.userconfig import LLM_PROVIDERS, effective_llm_settings
+
+    eff = effective_llm_settings()
     return {
         **data,
         "webhook_configured": bool(settings.alert_webhook_url.strip()),
@@ -455,6 +458,18 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
         "caps": {
             "fabric": settings.max_agents_per_run,
             "debate": settings.max_agents_per_debate,
+        },
+        # LLM ปรับเองได้ (ADR-0006) — key ไม่เคยออกไปกับ response
+        "llm": {
+            "providers": [
+                {"key": k, **{kk: vv for kk, vv in v.items()}} for k, v in LLM_PROVIDERS.items()
+            ],
+            "key_present": bool(settings.llm_api_key.strip()),
+            "active_base_url": eff.llm_base_url,
+            "active_model_crowd": eff.llm_model_crowd,
+            "active_model_analyst": eff.llm_model_analyst,
+            "env_model_crowd": settings.llm_model_crowd,
+            "env_model_analyst": settings.llm_model_analyst,
         },
     }
 
