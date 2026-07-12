@@ -115,6 +115,57 @@ export async function fetchRuns(): Promise<RunsData> {
   return r.json();
 }
 
+// ---- Public gallery (P5-M8, ADR-0004) ----
+
+export interface GalleryListItem {
+  share_token: string;
+  subject: string;
+  agents: number;
+  created_at: string;
+  votes: { agree: number; disagree: number };
+  watermark: { label: string; labels: string[]; shared_at: string; note: string };
+  brief: DashboardData["brief"];
+}
+
+export interface GalleryDetail extends Omit<GalleryListItem, "brief"> {
+  payload: DashboardData & Record<string, any>;
+}
+
+export async function fetchGallery(): Promise<GalleryListItem[]> {
+  const r = await fetch("/gallery.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).items;
+}
+
+export async function fetchGalleryDetail(token: string): Promise<GalleryDetail> {
+  const r = await fetch(`/gallery/${token}.json`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function shareToGallery(subject: string, agents: number): Promise<string> {
+  const r = await fetch("/gallery/share", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject, agents }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).share_token;
+}
+
+export async function voteGallery(
+  token: string,
+  vote: "agree" | "disagree",
+): Promise<{ agree: number; disagree: number }> {
+  const r = await fetch(`/gallery/${token}/vote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vote }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).votes;
+}
+
 // ---- Knowledge graph viz + insights (P5-M6) ----
 
 export interface GraphNode {

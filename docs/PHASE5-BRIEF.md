@@ -61,10 +61,17 @@
 - [x] UI: preset cards ใน wizard (สำมะโน default + packs) + PersonaPackModal (prompt → preview → ลอง ask ราย segment → save)
 - [x] tests +15 (mock LLM ทั้งหมด — ไม่เผางบจริง): PII block, fail-closed, normalize share, retry, factory sampling, endpoint cycle
 
+### P5-M8 — Public Gallery + agree/disagree votes ✅ (12 ก.ค. 2026 — GOV review เป็น ADR-0004, ผู้ใช้ veto ได้)
+- [x] `governance/gallery.py`: guard_share fail-closed 4 ด่าน (**election ห้ามแชร์เด็ดขาด** — เข้มกว่า GOV-02 ปกติ, แชร์=export ต้อง EXPORT+watermark เปิด, PII gate หัวข้อ, detector ปิด=ปฏิเสธ)
+- [x] snapshot frozen (NFR-07): payload ถ่ายสำเนา ณ เวลาแชร์ แก้ไม่ได้ ถอนได้อย่างเดียว (record คงอยู่) + audit ทุกแชร์/ถอน (GOV-04)
+- [x] votes ไม่เก็บตัวตน: sha256(salt|ip|ua) ทางเดียว, 1 hash = 1 เสียง (โหวตซ้ำ=เปลี่ยนเสียง), rate limit 429
+- [x] endpoints: POST /gallery/share (EXPORT), GET /gallery.json + /{token}.json + vote (สาธารณะ — precedent citizen), DELETE (EXPORT)
+- [x] UI: หน้า Gallery (disclaimer ถาวร + crowd vs swarm + โหวต) + ปุ่มเผยแพร่ใน dashboard tab รายงาน
+- [x] tests +10 | ADR-0004 บันทึกทุกการตัดสินใจ governance
+
 ## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
 
 - MCP tools surface (create-run/get-run) — ต้องผ่าน auth/RBAC
-- Public gallery + agree/disagree votes — ต้อง GOV-02/watermark review
 
 ## สถานะ
 
@@ -77,6 +84,7 @@
 | M5 Watchlist + webhook | ✅ 12 ก.ค. |
 | M6 Graph viz + Insights | ✅ 12 ก.ค. |
 | M7 Persona packs + AI | ✅ 12 ก.ค. |
+| M8 Public gallery + votes | ✅ 12 ก.ค. |
 
 ## สรุปปิด Phase 5 (12 ก.ค. 2026) — ครบทุก milestone M1..M6 ในวันเดียว
 

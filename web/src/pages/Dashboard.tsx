@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DashboardData, fetchDashboard, pct } from "../api";
+import { DashboardData, fetchDashboard, pct, shareToGallery } from "../api";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader, Tabs } from "../ui";
 import type { RunRequest } from "../App";
@@ -100,6 +100,7 @@ export default function Dashboard({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("overview");
+  const [shareState, setShareState] = useState<"idle" | "busy" | "done" | string>("idle");
 
   useEffect(() => {
     if (request && !result) {
@@ -329,6 +330,27 @@ export default function Dashboard({
                 </a>
               </div>
               <p className="text-xs text-muted-foreground">{t("pdf_note")}</p>
+
+              {/* แชร์สู่ gallery สาธารณะ (P5-M8) — ต้องสิทธิ์ EXPORT; election ถูก block ที่ API */}
+              <div className="border-t border-border pt-4">
+                <button
+                  disabled={shareState === "busy"}
+                  onClick={() => {
+                    setShareState("busy");
+                    shareToGallery(subject, agents)
+                      .then(() => setShareState("done"))
+                      .catch((e) => setShareState(String(e.message ?? e)));
+                  }}
+                  className="rounded-xl border border-border px-5 py-2.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-40"
+                >
+                  {shareState === "busy" ? "⏳" : "🌐"} {t("share_gallery")}
+                </button>
+                {shareState === "done" && <p className="mt-2 text-xs text-primary-strong">✅ {t("share_done")}</p>}
+                {shareState !== "idle" && shareState !== "busy" && shareState !== "done" && (
+                  <p className="mt-2 text-xs text-red-700">{shareState}</p>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">{t("share_note")}</p>
+              </div>
             </section>
           )}
         </>

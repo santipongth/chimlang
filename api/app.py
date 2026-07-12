@@ -11,7 +11,7 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -416,6 +416,160 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
     return {"runs": runs, "due": due}
+
+
+# ---- Public Gallery (P5-M8, ADR-0004) ----
+
+gallery_rate_limiter = RateLimiter(max_calls=60, window_s=60.0)
+
+
+class ShareBody(BaseModel):
+    subject: str
+    agents: int = 100
+
+
+class VoteBody(BaseModel):
+    vote: str  # agree | disagree
+
+
+@app.post("/gallery/share")
+def gallery_share(body: ShareBody, principal: Principal = Depends(get_principal)) -> dict:
+    """แชร์ผลรันสู่สาธารณะ — แชร์ = export: ต้อง EXPORT + ผ่านด่าน ADR-0004 ทุกข้อ"""
+    require(principal, Permission.EXPORT)
+    from governance.gallery import GalleryStore, guard_share
+    from governance.store import GovernanceStore
+    from governance.watermark import WatermarkDisabledError
+
+    settings = get_settings()
+    try:
+        guard_share(body.subject)
+    except ElectionModeError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except WatermarkDisabledError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    payload = _run_dashboard(body.subject, "aggregate", body.agents).to_dict()
+    try:
+        store = GalleryStore(settings.postgres_url)
+        store.setup()
+        token = store.share(
+            subject=body.subject.strip(),
+            agents=min(body.agents, settings.max_agents_per_run),
+            payload=payload,
+            created_by=principal.user_id,
+        )
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id,
+            action="gallery_shared",
+            run_id=f"gallery-{token[:12]}",
+            config_hash="-",
+            detail=f"subject={body.subject[:80]}",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"share_token": token, "url": f"/app/#gallery/{token}"}
+
+
+@app.get("/gallery.json")
+def gallery_list() -> dict:
+    """รายการแชร์สาธารณะ — เปิดอ่านได้ทุกคน (precedent: citizen endpoints)"""
+    from governance.gallery import GalleryStore
+
+    settings = get_settings()
+    try:
+        store = GalleryStore(settings.postgres_url)
+        store.setup()
+        items = store.list_public()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {
+        "items": [
+            {
+                "share_token": i.share_token,
+                "subject": i.subject,
+                "agents": i.agents,
+                "created_at": i.created_at,
+                "votes": i.votes,
+                "watermark": i.watermark,
+                "brief": i.payload.get("brief", {}),
+            }
+            for i in items
+        ],
+        "disclaimer": "AI simulation — not a real poll | ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง",
+    }
+
+
+@app.get("/gallery/{token}.json")
+def gallery_detail(token: str) -> dict:
+    from governance.gallery import GalleryStore
+
+    settings = get_settings()
+    try:
+        store = GalleryStore(settings.postgres_url)
+        store.setup()
+        item = store.get(token)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {
+        "share_token": item.share_token,
+        "subject": item.subject,
+        "agents": item.agents,
+        "created_at": item.created_at,
+        "payload": item.payload,
+        "watermark": item.watermark,
+        "votes": item.votes,
+    }
+
+
+@app.post("/gallery/{token}/vote")
+def gallery_vote(token: str, body: VoteBody, request: Request) -> dict:
+    """โหวตสาธารณะ (ไม่ต้องมี key) — dedup ด้วย hash ทางเดียว ไม่เก็บ ip ดิบ (ADR-0004)"""
+    if not gallery_rate_limiter.allow():
+        raise HTTPException(status_code=429, detail="โหวตถี่เกินไป — ลองใหม่ในอีกสักครู่")
+    from governance.gallery import GalleryStore, voter_hash
+
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    ua = request.headers.get("user-agent", "")
+    try:
+        store = GalleryStore(settings.postgres_url)
+        store.setup()
+        votes = store.vote(token, body.vote, voter_hash(ip, ua))
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "ไม่พบ" in str(e) else 422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"votes": votes}
+
+
+@app.delete("/gallery/{token}")
+def gallery_unshare(token: str, principal: Principal = Depends(get_principal)) -> dict:
+    """ถอนจากสาธารณะ (record คงอยู่เพื่อ audit) — ต้อง EXPORT เช่นเดียวกับตอนแชร์"""
+    require(principal, Permission.EXPORT)
+    from governance.gallery import GalleryStore
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        store = GalleryStore(settings.postgres_url)
+        store.setup()
+        store.unshare(token)
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id,
+            action="gallery_unshared",
+            run_id=f"gallery-{token[:12]}",
+            config_hash="-",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True}
 
 
 # ---- Persona Packs (P5-M7) ----

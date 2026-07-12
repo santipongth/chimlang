@@ -15,6 +15,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   nav_calibration: { th: "Calibration", en: "Calibration" },
   nav_insights: { th: "Insights", en: "Insights" },
   nav_watchlist: { th: "Watchlist", en: "Watchlist" },
+  nav_gallery: { th: "Gallery สาธารณะ", en: "Public Gallery" },
   nav_citizen: { th: "โหมดประชาชน", en: "Citizen Mode" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
   // Landing
@@ -181,6 +182,32 @@ const DICT: Record<string, { th: string; en: string }> = {
   ins_connections: { th: "ความเชื่อมโยง", en: "CONNECTIONS" },
   ins_graph_down: { th: "knowledge graph ยังไม่พร้อม (ต้องมี neo4j + ingest corpus แล้ว)", en: "Knowledge graph unavailable (needs neo4j + an ingested corpus)" },
   ins_graph_empty: { th: "ยังไม่มี entity ใน graph — ingest corpus ก่อน (scripts/ingest_corpus.py)", en: "Graph is empty — ingest a corpus first (scripts/ingest_corpus.py)" },
+  // Public gallery (P5-M8, ADR-0004)
+  gal_eyebrow: { th: "เปิดสู่สาธารณะ", en: "OPEN TO THE PUBLIC" },
+  gal_title: { th: "Gallery ผลจำลองสาธารณะ", en: "Public simulation gallery" },
+  gal_sub: {
+    th: "ผลรันที่หน่วยงานเลือกเผยแพร่ — ประชาชนโหวตเห็นด้วย/ไม่เห็นด้วยได้ (wisdom of crowd เทียบ swarm); ตัวเลขเป็น snapshot ณ เวลาแชร์ แก้ไม่ได้",
+    en: "Runs organisations chose to publish — the public can vote agree/disagree (wisdom of crowd vs swarm); figures are frozen snapshots.",
+  },
+  gal_disclaimer: {
+    th: "ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง ไม่ใช่คำสัญญาของหน่วยงานใด — scenario เลือกตั้งถูกห้ามเผยแพร่ที่นี่ (ADR-0004)",
+    en: "All figures are simulation estimates — not real polls, not promises. Election scenarios cannot be published here (ADR-0004).",
+  },
+  gal_empty: { th: "ยังไม่มีผลรันที่เผยแพร่", en: "Nothing published yet" },
+  gal_back: { th: "กลับไปรายการ", en: "Back to list" },
+  gal_crowd: { th: "เสียงคนจริง (crowd)", en: "Crowd verdict" },
+  tip_crowd: {
+    th: "โหวตจากผู้เข้าชมสาธารณะ (1 คน 1 เสียง dedup ด้วย hash ไม่เก็บตัวตน)\nแสดงคู่ confidence ของ swarm เพื่อเทียบ wisdom of crowd — ไม่ถูกป้อนกลับเข้า simulation อัตโนมัติ",
+    en: "Votes from public visitors (one vote per person via anonymous hash).\nShown next to swarm confidence to compare wisdom-of-crowds — never fed back into the simulation automatically",
+  },
+  gal_agree: { th: "เห็นด้วย", en: "Agree" },
+  gal_disagree: { th: "ไม่เห็นด้วย", en: "Disagree" },
+  share_gallery: { th: "เผยแพร่สู่ Gallery สาธารณะ", en: "Publish to public gallery" },
+  share_done: { th: "เผยแพร่แล้ว — ดูได้ที่เมนู Gallery สาธารณะ", en: "Published — see the Public Gallery menu" },
+  share_note: {
+    th: "ต้องสิทธิ์ export; scenario เลือกตั้งถูกห้ามเผยแพร่; ตัวเลขเป็น snapshot แก้ไม่ได้ ถอนได้อย่างเดียว (ADR-0004)",
+    en: "Requires export permission; election scenarios are blocked; figures are immutable snapshots — you can only unpublish (ADR-0004)",
+  },
   // Persona packs (P5-M7)
   wiz_persona_title: { th: "กลุ่มประชากร (PERSONAS)", en: "POPULATION PERSONAS" },
   wiz_persona_desc: {

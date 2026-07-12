@@ -9,6 +9,7 @@ import Calibration from "./pages/Calibration";
 import Compare from "./pages/Compare";
 import Watchlist from "./pages/Watchlist";
 import Insights from "./pages/Insights";
+import Gallery from "./pages/Gallery";
 import { fetchWatchlists } from "./api";
 import type { DashboardData } from "./api";
 
@@ -20,6 +21,7 @@ export type Page =
   | "insights"
   | "calibration"
   | "watchlist"
+  | "gallery"
   | "citizen"
   | "runs";
 export interface RunRequest {
@@ -49,6 +51,7 @@ function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page
     { id: "insights", icon: "📈", label: t("nav_insights") },
     { id: "calibration", icon: "🎯", label: t("nav_calibration") },
     { id: "watchlist", icon: "🔔", label: t("nav_watchlist") },
+    { id: "gallery", icon: "🌐", label: t("nav_gallery") },
     { id: "citizen", icon: "👥", label: t("nav_citizen") },
     { id: "runs", icon: "🕘", label: t("nav_runs") },
   ];
@@ -137,6 +140,7 @@ function Shell() {
           {page === "insights" && <Insights />}
           {page === "calibration" && <Calibration />}
           {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
+          {page === "gallery" && <Gallery />}
           {page === "citizen" && <Citizen />}
           {page === "runs" && <Runs />}
           </div>
