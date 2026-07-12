@@ -195,6 +195,9 @@ class FabricSimulation:
         if msg.kind == "correction" and channel == "line_closed_group":
             # ข่าวแก้ในกลุ่มปิดถูกลดทอนด้วยความเกรงใจผู้ส่งเดิม (corpus 2026-06-08)
             believe_prob *= 1.0 - 0.5 * p.kreng_jai
+        if msg.kind == "correction":
+            # P5-M4: adversarial agent ต้านคำชี้แจงทางการ (default 1.0 = เดิมเป๊ะ)
+            believe_prob *= p.correction_receptivity
         believed = self._rng.random() < believe_prob
         st.believed[msg.msg_id] = believed
         if believed:

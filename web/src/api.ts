@@ -46,6 +46,33 @@ export async function fetchRuns(): Promise<RunsData> {
   return r.json();
 }
 
+// ---- Compare baseline vs +Red Team (P5-M4) ----
+
+export interface CompareSide {
+  mean_delta: number;
+  ci95: [number, number];
+  conclusion: string;
+  belief_by_segment: Record<string, number>;
+}
+
+export interface CompareData {
+  subject: string;
+  seeds: number[];
+  rounds: number;
+  agents: number;
+  baseline: CompareSide;
+  red_team: CompareSide & { roster: { agent_id: string; traits: string[] }[]; segment_label: string };
+  delta_of_delta: number;
+  robust: boolean;
+  note: string;
+}
+
+export async function fetchCompare(subject: string, agents = 100): Promise<CompareData> {
+  const r = await fetch(`/compare.json?subject=${encodeURIComponent(subject)}&agents=${agents}`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
 // ---- Calibration (P5-M3) ----
 
 export interface CalibrationItem {

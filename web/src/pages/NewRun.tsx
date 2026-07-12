@@ -45,6 +45,7 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
   const [subject, setSubject] = useState("");
   const [domain, setDomain] = useState(DOMAINS[0]);
   const [agents, setAgents] = useState(100);
+  const [redTeam, setRedTeam] = useState(false);
 
   const labels = [t("wiz_step1"), t("wiz_step2"), t("wiz_step3")];
   const card = "bg-card border border-border rounded-2xl p-6";
@@ -115,6 +116,28 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
           </div>
           <p className="text-xs text-muted-foreground">{t("wiz_agents_note")}</p>
           <p className="text-xs text-muted-foreground">🌌 {t("wiz_universes")}</p>
+
+          {/* Red Team A/B — toggle card โทน destructive แบบ studio */}
+          <button
+            type="button"
+            onClick={() => setRedTeam(!redTeam)}
+            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+              redTeam ? "border-red-300 bg-red-50" : "border-border bg-card hover:bg-muted"
+            }`}
+          >
+            <span className="mt-0.5 text-lg">🛡️</span>
+            <span className="flex-1">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                {t("wiz_redteam_title")}
+                {redTeam && (
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-700">
+                    ON
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{t("wiz_redteam_desc")}</span>
+            </span>
+          </button>
         </div>
       )}
 
@@ -128,6 +151,8 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
             <span>{domain}</span>
             <span className="text-muted-foreground">{t("wiz_agents")}</span>
             <span>{agents.toLocaleString()} × 5 universes</span>
+            <span className="text-muted-foreground">Red Team A/B</span>
+            <span>{redTeam ? `🛡️ ${t("wiz_redteam_on")}` : "—"}</span>
           </div>
         </div>
       )}
@@ -151,7 +176,7 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
         ) : (
           <button
             className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium"
-            onClick={() => onRun({ subject: subject.trim(), agents })}
+            onClick={() => onRun({ subject: subject.trim(), agents, redTeam })}
           >
             {t("run_now")}
           </button>

@@ -356,6 +356,36 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"runs": runs, "due": due}
 
 
+@app.get("/compare.json")
+def compare_json(
+    subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
+    agents: int = Query(100, ge=10),
+    principal: Principal = Depends(get_principal),
+) -> dict:
+    """P5-M4 — เทียบ baseline vs +Red Team (seed เดียวกัน): ข้อสรุปทนต่อ adversarial ไหม
+
+    governance เดียวกับ dashboard: ต้อง RUN, election scenario ต้อง admin verified (GOV-02/06)
+    """
+    require(principal, Permission.RUN)
+    if ElectionPolicy(classify_scenario(subject)).active:
+        require_election(principal)
+    from simulation.compare import run_redteam_compare
+
+    settings = get_settings()
+    n = min(agents, settings.max_agents_per_run)
+    result = run_redteam_compare(
+        PersonaFactory(),
+        n_agents=n,
+        max_agents=n,
+        rounds=20,
+        base_messages=[Message("rumor", "rumor", RUMOR, 1, "public_feed")],
+        event=Message("official", "correction", EVENT, 8, "public_feed", counters="rumor"),
+        target_msg_id="rumor",
+        seeds=[settings.default_seed + i for i in range(4)],
+    )
+    return {"subject": subject, **result}
+
+
 @app.get("/calibration.json")
 def calibration_json(principal: Principal = Depends(get_principal)) -> dict:
     """หน้า Calibration (P5-M3): Brier รวม/รายโดเมน + trend รายสัปดาห์ + คิว resolve

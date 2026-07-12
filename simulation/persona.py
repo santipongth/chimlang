@@ -35,6 +35,9 @@ class Persona:
     say_do_gap: float
     sarcasm_meme: float
     traits: tuple[str, ...]
+    # ความรับฟังข่าวแก้/คำชี้แจงทางการ (P5-M4): 1.0 = ปกติ (พฤติกรรมเดิมทุกตัว),
+    # ต่ำ = ต้านคำชี้แจง — ใช้กับ Red Team adversarial agents (REH-02 in-population)
+    correction_receptivity: float = 1.0
 
 
 class PersonaFactory:

@@ -34,11 +34,11 @@
 - [x] ปลดล็อก resolve #161 ผ่าน UI ได้จริง
 - [x] tests: partial Brier, append-only (ยิง resolve ซ้ำ = record ใหม่ไม่ทับ), RBAC
 
-### P5-M4 — Red Team in-population + Compare
-- [ ] persona factory: flag `red_team=True` → แทน 2 agents สุดท้ายด้วย contrarian (prior −0.6) + auditor (−0.3) — ไม่แตะ cap/BudgetGuard
-- [ ] endpoint รันคู่: baseline + red team ด้วย **seed เดียวกัน** → คืน run id คู่ + delta
-- [ ] หน้า Compare: delta banner (ไอคอนขึ้น/ลง/คงที่) + 2 panes + CalculationModal (breakdown per-segment + สูตร delta)
-- [ ] GOV-05: Red Team ให้ insight ช่องโหว่เท่านั้น ห้าม generate สารตอบโต้ | tests
+### P5-M4 — Red Team in-population + Compare ✅ (12 ก.ค. 2026)
+- [x] persona factory: flag `red_team=True` → แทน 2 agents สุดท้ายด้วย contrarian (prior −0.6) + auditor (−0.3) — ไม่แตะ cap/BudgetGuard
+- [x] endpoint รันคู่: baseline + red team ด้วย **seed เดียวกัน** → คืน run id คู่ + delta
+- [x] หน้า Compare: delta banner (ไอคอนขึ้น/ลง/คงที่) + 2 panes + CalculationModal (breakdown per-segment + สูตร delta)
+- [x] GOV-05: Red Team ให้ insight ช่องโหว่เท่านั้น ห้าม generate สารตอบโต้ | tests
 
 ### P5-M5 — Watchlist + alerts + webhook
 - [ ] ตาราง PG: `watchlists` (question, domain, cadence, active, last_run_at), `alerts` (kind, payload, read_at) — ผ่าน governance store pattern เดิม
@@ -67,6 +67,6 @@
 | M1 UI shell | ✅ 12 ก.ค. |
 | M2 Tipping + canvas | ✅ 12 ก.ค. |
 | M3 Calibration UI | ✅ 12 ก.ค. |
-| M4 Red Team + Compare | ⏳ กำลังทำ |
-| M5 Watchlist + webhook | รอ |
+| M4 Red Team + Compare | ✅ 12 ก.ค. |
+| M5 Watchlist + webhook | ⏳ กำลังทำ |
 | M6 Graph viz + Insights | รอ |
