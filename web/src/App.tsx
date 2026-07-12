@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LangProvider, useLang } from "./i18n";
 import Landing from "./pages/Landing";
 import NewRun from "./pages/NewRun";
@@ -7,9 +7,19 @@ import Citizen from "./pages/Citizen";
 import Runs from "./pages/Runs";
 import Calibration from "./pages/Calibration";
 import Compare from "./pages/Compare";
+import Watchlist from "./pages/Watchlist";
+import { fetchWatchlists } from "./api";
 import type { DashboardData } from "./api";
 
-export type Page = "home" | "new" | "dashboard" | "compare" | "calibration" | "citizen" | "runs";
+export type Page =
+  | "home"
+  | "new"
+  | "dashboard"
+  | "compare"
+  | "calibration"
+  | "watchlist"
+  | "citizen"
+  | "runs";
 export interface RunRequest {
   subject: string;
   agents: number;
@@ -34,6 +44,7 @@ function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page
     { id: "new", icon: "＋", label: t("nav_new_run") },
     { id: "dashboard", icon: "📊", label: t("nav_dashboard") },
     { id: "calibration", icon: "🎯", label: t("nav_calibration") },
+    { id: "watchlist", icon: "🔔", label: t("nav_watchlist") },
     { id: "citizen", icon: "👥", label: t("nav_citizen") },
     { id: "runs", icon: "🕘", label: t("nav_runs") },
   ];
@@ -86,6 +97,18 @@ function Shell() {
   const [page, setPage] = useState<Page>("home");
   const [request, setRequest] = useState<RunRequest | null>(null);
   const [result, setResult] = useState<DashboardData | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  // badge alerts ที่ sidebar — โหลดตอนเปิด + refresh ทุก 60 วิ (เบา ไม่มี LLM)
+  const refreshUnread = () =>
+    fetchWatchlists()
+      .then((d) => setUnread(d.unread))
+      .catch(() => {});
+  useEffect(() => {
+    refreshUnread();
+    const timer = setInterval(refreshUnread, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const startRun = (req: RunRequest) => {
     setRequest(req);
@@ -97,7 +120,7 @@ function Shell() {
     <div className="min-h-screen">
       <WatermarkBanner />
       <div className="flex">
-        <Sidebar page={page} setPage={setPage} />
+        <Sidebar page={page} setPage={setPage} badges={{ watchlist: unread }} />
         <main className="min-w-0 flex-1 px-8 py-10">
           {/* dashboard/runs กว้าง max-w-4xl แบบ studio; ฟอร์ม/wizard แคบ max-w-3xl */}
           <div className={`mx-auto ${page === "new" || page === "home" || page === "citizen" ? "max-w-3xl" : "max-w-4xl"}`}>
@@ -108,6 +131,7 @@ function Shell() {
           )}
           {page === "compare" && <Compare request={request} />}
           {page === "calibration" && <Calibration />}
+          {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
           {page === "citizen" && <Citizen />}
           {page === "runs" && <Runs />}
           </div>

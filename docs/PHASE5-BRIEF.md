@@ -40,13 +40,13 @@
 - [x] หน้า Compare: delta banner (ไอคอนขึ้น/ลง/คงที่) + 2 panes + CalculationModal (breakdown per-segment + สูตร delta)
 - [x] GOV-05: Red Team ให้ insight ช่องโหว่เท่านั้น ห้าม generate สารตอบโต้ | tests
 
-### P5-M5 — Watchlist + alerts + webhook
-- [ ] ตาราง PG: `watchlists` (question, domain, cadence, active, last_run_at), `alerts` (kind, payload, read_at) — ผ่าน governance store pattern เดิม
-- [ ] Alert 2 ชนิด: `tipping_point` (จาก M2 detector) + `consensus_shift` (เทียบ run ก่อนหน้าของคำถามเดิม |Δ| ≥ 0.1)
-- [ ] Webhook: POST https-only, payload `{text, content, kind, ...}` เข้ากันได้ Slack/Discord/generic, **best-effort** (พังห้ามทำ run พัง), ไม่ log URL/secret
-- [ ] Re-run ตาม cadence ผ่าน Celery beat — ทุกครั้งผ่าน BudgetGuard + cost estimate
-- [ ] หน้า Watchlist (list + toggle + Run now + alerts feed) + unread badge ที่ sidebar
-- [ ] tests: shift detection, webhook ไม่ยิง http://, run พังไม่กระทบ
+### P5-M5 — Watchlist + alerts + webhook ✅ (12 ก.ค. 2026)
+- [x] ตาราง PG: `watchlists` (question, domain, cadence, active, last_run_at), `alerts` (kind, payload, read_at) — ผ่าน governance store pattern เดิม
+- [x] Alert 2 ชนิด: `tipping_point` (จาก M2 detector) + `consensus_shift` (เทียบ run ก่อนหน้าของคำถามเดิม |Δ| ≥ 0.1)
+- [x] Webhook: POST https-only, payload `{text, content, kind, ...}` เข้ากันได้ Slack/Discord/generic, **best-effort** (พังห้ามทำ run พัง), ไม่ log URL/secret
+- [x] Re-run ตาม cadence ผ่าน Celery beat — ทุกครั้งผ่าน BudgetGuard + cost estimate
+- [x] หน้า Watchlist (list + toggle + Run now + alerts feed) + unread badge ที่ sidebar
+- [x] tests: shift detection, webhook ไม่ยิง http://, run พังไม่กระทบ
 
 ### P5-M6 — Knowledge graph viz + Insights
 - [ ] `GET /graph/summary.json`: nodes+edges จาก Neo4j + degree + hub (top 15% ไม่เกิน 6) + cluster ตาม kind
@@ -68,5 +68,5 @@
 | M2 Tipping + canvas | ✅ 12 ก.ค. |
 | M3 Calibration UI | ✅ 12 ก.ค. |
 | M4 Red Team + Compare | ✅ 12 ก.ค. |
-| M5 Watchlist + webhook | ⏳ กำลังทำ |
-| M6 Graph viz + Insights | รอ |
+| M5 Watchlist + webhook | ✅ 12 ก.ค. |
+| M6 Graph viz + Insights | ⏳ กำลังทำ |

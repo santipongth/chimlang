@@ -31,3 +31,30 @@ def whatif_dashboard_task(subject: str, granularity: str, agents: int) -> dict:
     from api.app import _run_dashboard  # import ใน task กัน circular ตอน API โหลด tasks
 
     return _run_dashboard(subject, granularity, agents).to_dict()
+
+
+@celery_app.task(name="chimlang.check_watchlists")
+def check_watchlists_task() -> dict:
+    """P5-M5 — ไล่ตรวจ watchlist ที่ถึงรอบตาม cadence แล้วสร้าง alert/webhook
+
+    ตัวหนึ่งพังไม่หยุดตัวอื่น (best-effort ราย watchlist) — คืนสรุปจำนวนที่ตรวจ/alert
+    """
+    from governance.watchlist import WatchlistStore, check_watchlist, default_runner
+
+    store = WatchlistStore(_settings.postgres_url)
+    store.setup()
+    checked, alerts, failed = 0, 0, 0
+    for w in store.due():
+        try:
+            alerts += len(check_watchlist(store, w, runner=default_runner))
+            checked += 1
+        except Exception:
+            failed += 1  # watchlist เดียวพังห้ามลากทั้งคิว
+    return {"checked": checked, "alerts": alerts, "failed": failed}
+
+
+# Celery beat: ปลุกทุกชั่วโมง (cadence จริงคุมใน WatchlistStore.due())
+# รัน beat: uv run celery -A core.tasks.celery_app beat -l info
+celery_app.conf.beat_schedule = {
+    "check-watchlists-hourly": {"task": "chimlang.check_watchlists", "schedule": 3600.0},
+}

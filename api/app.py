@@ -356,6 +356,117 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"runs": runs, "due": due}
 
 
+class WatchlistBody(BaseModel):
+    label: str
+    subject: str
+    agents: int = 100
+    cadence: str = "daily"  # daily | weekly
+
+
+@app.get("/watchlists.json")
+def watchlists_json(principal: Principal = Depends(get_principal)) -> dict:
+    """P5-M5 — รายการ watchlist + alerts (unread count สำหรับ badge ที่ sidebar)"""
+    from governance.watchlist import WatchlistStore
+
+    settings = get_settings()
+    try:
+        store = WatchlistStore(settings.postgres_url)
+        store.setup()
+        items = [w.__dict__ for w in store.list_watchlists()]
+        alerts = store.list_alerts(limit=50)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {
+        "items": items,
+        "alerts": alerts,
+        "unread": sum(1 for a in alerts if not a["read"]),
+        "webhook_configured": bool(settings.alert_webhook_url.strip()),
+    }
+
+
+@app.post("/watchlists")
+def watchlist_create(body: WatchlistBody, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    if ElectionPolicy(classify_scenario(body.subject)).active:
+        require_election(principal)  # GOV-02/06: election watchlist เฉพาะ admin verified
+    from governance.watchlist import WatchlistStore
+
+    settings = get_settings()
+    try:
+        store = WatchlistStore(settings.postgres_url)
+        store.setup()
+        wid = store.create(
+            label=body.label.strip() or body.subject[:40],
+            subject=body.subject.strip(),
+            agents=min(body.agents, settings.max_agents_per_run),
+            cadence=body.cadence,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"id": wid}
+
+
+@app.post("/watchlists/{watchlist_id}/toggle")
+def watchlist_toggle(
+    watchlist_id: int, active: bool = Query(...), principal: Principal = Depends(get_principal)
+) -> dict:
+    require(principal, Permission.RUN)
+    from governance.watchlist import WatchlistStore
+
+    settings = get_settings()
+    try:
+        store = WatchlistStore(settings.postgres_url)
+        store.setup()
+        store.set_active(watchlist_id, active)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"id": watchlist_id, "active": active}
+
+
+@app.post("/watchlists/{watchlist_id}/run")
+def watchlist_run_now(watchlist_id: int, principal: Principal = Depends(get_principal)) -> dict:
+    """Run now — ตรวจทันทีไม่รอ cadence (กลไกล้วน $0 — cap ยังคุม n เสมอ)"""
+    require(principal, Permission.RUN)
+    from governance.watchlist import WatchlistStore, check_watchlist, default_runner
+
+    settings = get_settings()
+    try:
+        store = WatchlistStore(settings.postgres_url)
+        store.setup()
+        w = store.get(watchlist_id)
+        if ElectionPolicy(classify_scenario(w.subject)).active:
+            require_election(principal)
+        created = check_watchlist(store, w, runner=default_runner)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"id": watchlist_id, "alerts_created": created}
+
+
+class AlertReadBody(BaseModel):
+    id: int | None = None
+    all: bool = False
+
+
+@app.post("/alerts/read")
+def alerts_read(body: AlertReadBody, principal: Principal = Depends(get_principal)) -> dict:
+    from governance.watchlist import WatchlistStore
+
+    settings = get_settings()
+    try:
+        store = WatchlistStore(settings.postgres_url)
+        store.setup()
+        store.mark_read(body.id, all_alerts=body.all)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True}
+
+
 @app.get("/compare.json")
 def compare_json(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),

@@ -46,6 +46,74 @@ export async function fetchRuns(): Promise<RunsData> {
   return r.json();
 }
 
+// ---- Watchlist + alerts (P5-M5) ----
+
+export interface WatchlistItem {
+  id: number;
+  label: string;
+  subject: string;
+  agents: number;
+  cadence: "daily" | "weekly";
+  active: boolean;
+  last_run_at: string | null;
+  last_delta: number | null;
+}
+
+export interface AlertItem {
+  id: number;
+  ts: string;
+  watchlist_id: number | null;
+  kind: string;
+  payload: Record<string, any>;
+  read: boolean;
+}
+
+export interface WatchlistData {
+  items: WatchlistItem[];
+  alerts: AlertItem[];
+  unread: number;
+  webhook_configured: boolean;
+}
+
+export async function fetchWatchlists(): Promise<WatchlistData> {
+  const r = await fetch("/watchlists.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function createWatchlist(body: {
+  label: string;
+  subject: string;
+  agents: number;
+  cadence: "daily" | "weekly";
+}): Promise<void> {
+  const r = await fetch("/watchlists", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+export async function toggleWatchlist(id: number, active: boolean): Promise<void> {
+  const r = await fetch(`/watchlists/${id}/toggle?active=${active}`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+export async function runWatchlistNow(id: number): Promise<{ alerts_created: any[] }> {
+  const r = await fetch(`/watchlists/${id}/run`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function markAlertsRead(id?: number): Promise<void> {
+  await fetch("/alerts/read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(id == null ? { all: true } : { id }),
+  });
+}
+
 // ---- Compare baseline vs +Red Team (P5-M4) ----
 
 export interface CompareSide {

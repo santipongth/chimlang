@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     api_keys: str = ""  # "คีย์:ผู้ใช้:role[:verified],..." — role: viewer|analyst|operator|admin
 
+    # --- Watchlist alerts (P5-M5) ---
+    # webhook URL เป็น secret → อยู่ .env เท่านั้น ห้ามเก็บใน DB/ห้าม log (https เท่านั้น)
+    alert_webhook_url: str = ""
+    consensus_shift_threshold: float = 0.10  # |Δ mean_delta| ระหว่างรอบ ≥ ค่านี้ = consensus_shift
+
 
 def get_settings(**overrides) -> Settings:
     return Settings(**overrides)
