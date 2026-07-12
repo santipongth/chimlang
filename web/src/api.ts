@@ -81,6 +81,7 @@ export interface PoolSegment {
   id: string;
   name: string;
   share: number;
+  voice_activity?: number;
   cultural_priors: Record<string, number>;
   channel_mix: Record<string, number>;
   traits: string[];
@@ -288,6 +289,20 @@ export async function savePack(label: string, segments: PackSegment[], prompt: s
   });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return (await r.json()).id;
+}
+
+export async function updatePack(
+  id: number,
+  label: string,
+  segments: PackSegment[],
+  prompt: string,
+): Promise<void> {
+  const r = await fetch(`/personas/packs/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label, segments, prompt }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
 export async function tryAsk(segment: PackSegment, question: string): Promise<string> {

@@ -369,7 +369,7 @@ export default function NewRun({
               ))}
             </div>
             <button type="button" onClick={() => setPackModalOpen(true)} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">
-              ✨ {t("wiz_persona_create")}
+              ✨ {t("wiz_persona_manage")}
             </button>
 
             {/* พูลของ persona — เห็นองค์ประกอบก่อนรัน (P6-M6) */}
@@ -485,7 +485,19 @@ export default function NewRun({
           </button>
         )}
       </div>
-      <PersonaPackModal open={packModalOpen} onClose={() => setPackModalOpen(false)} onSaved={loadPacks} subject={subject} />
+      <PersonaPackModal
+        open={packModalOpen}
+        onClose={() => setPackModalOpen(false)}
+        packs={packs}
+        selectedPackId={packId}
+        onPick={(id) => { setPackId(id); setPackModalOpen(false); }}
+        onSaved={(id) => {
+          loadPacks();
+          // ถ้าแก้ pack ที่กำลังเลือกอยู่ effect [packId] ไม่ยิงเอง — refetch pool ตรงๆ
+          if (id != null && id === packId) fetchPool(packId).then((d) => setPool(d.segments)).catch(() => {});
+        }}
+        subject={subject}
+      />
     </div>
   );
 }

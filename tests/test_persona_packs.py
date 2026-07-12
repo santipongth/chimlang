@@ -232,3 +232,79 @@ def test_try_ask_endpoint_mocked(client, monkeypatch):
         "/personas/try-ask", json={"segment": _segments(2)[0], "question": "คิดยังไงกับเรื่องนี้"}
     )
     assert r.status_code == 200 and "ไม่แน่ใจ" in r.json()["answer"]
+
+
+# ---- P8: แก้ pack เดิมได้ (Persona Pack Editor) ----
+
+
+def test_store_update_roundtrip_preserves_provenance(store):
+    pid = store.create(label="ก่อนแก้", segments=_segments(2), prompt="เดิม", created_by="ผู้สร้างเดิม")
+    try:
+        new_segs = _segments(3)
+        new_segs[0]["name"] = "กลุ่มที่แก้แล้ว"
+        store.update(pack_id=pid, label="หลังแก้", segments=new_segs, prompt="ใหม่")
+        pack = store.get(pid)
+        assert pack.label == "หลังแก้" and len(pack.segments) == 3
+        assert pack.segments[0]["name"] == "กลุ่มที่แก้แล้ว"
+        # provenance เดิมต้องคงไว้ (TRUST-06)
+        assert pack.created_by == "ผู้สร้างเดิม"
+    finally:
+        store.delete(pid)
+
+
+def test_store_update_missing_id_raises(store):
+    with pytest.raises(ValueError, match="ไม่พบ"):
+        store.update(pack_id=999999, label="x", segments=_segments(2), prompt="")
+
+
+def test_update_validates_like_create(store):
+    pid = store.create(label="กันพัง", segments=_segments(2), prompt="", created_by="test")
+    try:
+        bad = _segments(2)
+        bad[0]["share"] = 0.9  # รวมเกิน 1 — ด่านเดียวกับ create
+        with pytest.raises(PackValidationError):
+            store.update(pack_id=pid, label="กันพัง", segments=bad, prompt="")
+    finally:
+        store.delete(pid)
+
+
+def test_put_endpoint_update_pii_and_404(client, store):
+    r = client.post("/personas/packs", json={"label": "pack แก้ผ่าน api", "segments": _segments(2)})
+    assert r.status_code == 200
+    pid = r.json()["id"]
+    try:
+        # แก้สำเร็จ
+        segs = _segments(2)
+        segs[0]["name"] = "กลุ่มใหม่หลัง PUT"
+        r = client.put(f"/personas/packs/{pid}", json={"label": "แก้แล้ว", "segments": segs})
+        assert r.status_code == 200
+        packs = client.get("/personas/packs.json").json()["packs"]
+        updated = next(p for p in packs if p["id"] == pid)
+        assert updated["label"] == "แก้แล้ว"
+        assert updated["segments"][0]["name"] == "กลุ่มใหม่หลัง PUT"
+
+        # share ไม่ครบ 100% → 422 (validation ไม่ใช่ 404)
+        bad_share = _segments(2)
+        bad_share[0]["share"] = 0.9
+        r = client.put(f"/personas/packs/{pid}", json={"label": "x", "segments": bad_share})
+        assert r.status_code == 422
+
+        # PII ในชื่อกลุ่ม → 422 พร้อมเหตุผล GOV-01 (PackValidationError ต้องจับก่อน ValueError)
+        pii = _segments(2)
+        pii[0]["traits"] = ["โทรหาคุณสมชาย 081-234-5678"]
+        r = client.put(f"/personas/packs/{pid}", json={"label": "x", "segments": pii})
+        assert r.status_code == 422 and "GOV-01" in r.json()["detail"]
+    finally:
+        client.delete(f"/personas/packs/{pid}")
+
+    # id ไม่มีจริง → 404
+    r = client.put("/personas/packs/999999", json={"label": "x", "segments": _segments(2)})
+    assert r.status_code == 404
+
+
+def test_pool_json_has_voice_activity(client, store):
+    # จำเป็นสำหรับ "ทำสำเนาสำมะโนไปแก้" — สำเนาต้องผ่าน validate_pack ที่บังคับ voice_activity
+    r = client.get("/personas/pool.json")
+    assert r.status_code == 200
+    segments = r.json()["segments"]
+    assert segments and all("voice_activity" in s for s in segments)

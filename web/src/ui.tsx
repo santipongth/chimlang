@@ -91,3 +91,40 @@ export function SelectCard({
     </button>
   );
 }
+
+// Slider พร้อม label + ค่าปัจจุบัน — ใช้ใน persona pack editor (แก้ share/priors/media diet)
+export function Slider({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 1,
+  step = 0.05,
+  display,
+}: {
+  label: ReactNode;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  display?: string;
+}) {
+  return (
+    <label className="block text-xs">
+      <span className="flex items-center justify-between text-muted-foreground">
+        <span>{label}</span>
+        <span className="tabular-nums font-medium text-foreground">{display ?? value.toFixed(2)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="mt-1 w-full accent-primary"
+      />
+    </label>
+  );
+}

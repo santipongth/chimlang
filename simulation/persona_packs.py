@@ -124,6 +124,21 @@ class PackStore:
             ).fetchone()
             return int(row[0])
 
+    def update(self, *, pack_id: int, label: str, segments: list[dict], prompt: str) -> None:
+        """แก้ pack เดิม — ด่าน validate + PII เดียวกับ create (GOV-01 ทุกทางเข้า)
+
+        ไม่แตะ created_by/created_at (provenance เดิมคงไว้ — TRUST-06)
+        """
+        validate_pack(label, segments)
+        with self._conn() as conn:
+            row = conn.execute(
+                "UPDATE persona_packs SET label = %s, prompt = %s, segments = %s "
+                "WHERE id = %s RETURNING id",
+                (label, prompt, json.dumps(segments, ensure_ascii=False), pack_id),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"ไม่พบ persona pack id {pack_id}")
+
     def list_packs(self) -> list[PersonaPack]:
         with self._conn() as conn:
             rows = conn.execute(

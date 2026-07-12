@@ -1203,6 +1203,7 @@ def personas_pool_json(
                 "id": s.get("id", ""),
                 "name": s.get("name", ""),
                 "share": s.get("share", 0),
+                "voice_activity": s.get("voice_activity", 0.5),
                 "cultural_priors": s.get("cultural_priors", {}),
                 "channel_mix": s.get("channel_mix", {}),
                 "traits": s.get("traits", []),
@@ -1243,6 +1244,30 @@ def personas_pack_create(body: PackBody, principal: Principal = Depends(get_prin
         )
     except PackValidationError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"id": pack_id}
+
+
+@app.put("/personas/packs/{pack_id}")
+def personas_pack_update(
+    pack_id: int, body: PackBody, principal: Principal = Depends(get_principal)
+) -> dict:
+    """แก้ pack เดิม — validate + PII gate (GOV-01) ด่านเดียวกับตอนสร้าง"""
+    require(principal, Permission.RUN)
+    from simulation.persona_packs import PackStore, PackValidationError
+
+    settings = get_settings()
+    try:
+        store = PackStore(settings.postgres_url)
+        store.setup()
+        store.update(
+            pack_id=pack_id, label=body.label.strip(), segments=body.segments, prompt=body.prompt
+        )
+    except PackValidationError as e:  # subclass ของ ValueError — ต้องจับก่อน (422 ไม่ใช่ 404)
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
     return {"id": pack_id}
