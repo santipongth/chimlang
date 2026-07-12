@@ -76,6 +76,12 @@
 - [x] วิธีต่อ: `claude mcp add chimlang --env CHIMLANG_API_KEY=<key> -- uv run python -m api.mcp_server`
 - [x] tests +5 (MockTransport — ไม่ต้องมี server จริง)
 
+### P5-M10 — เก็บตก SIG-01 ครบ 8 + security review + live smoke ✅ (12 ก.ค. 2026)
+- [x] SIG-01 ครบ 8 features ตาม PRD: เพิ่ม `bullish_bearish_shift` (Δ belief ครึ่งหลัง จาก series แม่นตรงจาก trail) + `event_interpretation_gap` (pstdev ของ "เชื่อ|ได้ยิน" ระหว่าง segment — แยกการตีความออกจากการเข้าถึงสาร)
+- [x] security-review.md อัปเดตครอบ surface ใหม่ทั้งหมด (gallery สาธารณะ/votes/resolve/webhook/packs/MCP) พร้อมความเสี่ยงคงเหลือแบบตรงๆ
+- [x] live smoke ยิง server จริง: ทุก endpoint ใหม่ตอบถูก (signal คืน 8 features, compare ที่ n=20 red team พลิกข้อสรุปจริง dd=+0.112, UI 200)
+- [x] tests +2 (รวม 285 เขียว)
+
 ## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
 
 
@@ -92,6 +98,7 @@
 | M7 Persona packs + AI | ✅ 12 ก.ค. |
 | M8 Public gallery + votes | ✅ 12 ก.ค. |
 | M9 MCP surface | ✅ 12 ก.ค. |
+| M10 เก็บตก SIG-01+security | ✅ 12 ก.ค. |
 
 ## สรุปปิด Phase 5 (12 ก.ค. 2026) — ครบทุก milestone M1..M6 ในวันเดียว
 

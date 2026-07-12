@@ -7,6 +7,12 @@
 - sentiment_divergence: |belief ของผู้แสดงออก − belief ของประชากรทั้งหมด| (voice ≠ population)
 - contrarian_pressure: สัดส่วนผู้ได้ยินแต่ "ไม่เชื่อ"
 - adoption_elasticity: conversion ได้ยิน→เชื่อ
+- bullish_bearish_shift: Δ belief share ครึ่งหลังของ run (+ = ฝั่งเชื่อขยายตัว, − = ถดถอย
+  เช่นโดนข่าวแก้ดึงกลับ) — จาก belief series ที่แม่นตรงจาก reasoning trail (P5 เก็บตก)
+- event_interpretation_gap: pstdev ของ "เชื่อ|ได้ยิน" ระหว่าง segment — ทุกกลุ่มรับสาร
+  เดียวกันแต่ตีความต่างกันแค่ไหน (ต่างจาก dispersion ที่ปนผลการเข้าถึงสาร)
+
+ครบ 8 features ตาม SIG-01 ของ PRD (P2-M4 ทำ 6 ตัวแรก, P5 เติม 2 ตัวหลัง)
 
 SIG-03: ทุก bundle ฝัง metadata บังคับ (run id, fragility, calibration โดเมน, provenance hash)
 SIG-04: disclaimer เชิงโครงสร้าง + ห้ามใช้เป็น real-time trading signal
@@ -19,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from simulation.engine import RunResult
+from simulation.tipping import belief_series
 from trust.universe import FragilityReport
 
 DISCLAIMER = (
@@ -81,12 +88,28 @@ def features_for_run(result: RunResult, msg_id: str, *, rounds: int) -> dict[str
     )
     adoption = believed_all / len(heard) if heard else 0.0
 
+    # bullish/bearish shift (SIG-01 ข้อ 6): Δ belief share ครึ่งหลังของ run —
+    # ใช้ series ที่ replay จาก trail (นับ belief revision ถูกต้อง ไม่ใช่ approximation)
+    series = belief_series(result, msg_id)
+    shift = series[-1] - series[len(series) // 2]
+
+    # event interpretation gap (SIG-01 ข้อ 8): จำกัดเฉพาะผู้ "ได้ยินแล้ว" —
+    # สารเดียวกันถึงมือแล้ว แต่ละ segment เชื่อไม่เท่ากันแค่ไหน
+    seg_heard: dict[str, list[bool]] = defaultdict(list)
+    for st in states:
+        if msg_id in st.heard:
+            seg_heard[st.persona.segment_name].append(bool(st.believed.get(msg_id)))
+    heard_rates = [sum(v) / len(v) for v in seg_heard.values() if v]
+    interpretation_gap = statistics.pstdev(heard_rates) if len(heard_rates) > 1 else 0.0
+
     return {
         "narrative_momentum": momentum,
         "narrative_dispersion": dispersion,
         "sentiment_divergence": divergence,
         "contrarian_pressure": contrarian,
         "adoption_elasticity": adoption,
+        "bullish_bearish_shift": shift,
+        "event_interpretation_gap": interpretation_gap,
     }
 
 

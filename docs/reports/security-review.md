@@ -1,7 +1,17 @@
-# Security Self-Review — Phase 4 M6 (6 ก.ค. 2026)
+# Security Self-Review — Phase 4 M6 (6 ก.ค. 2026) + อัปเดต Phase 5 (12 ก.ค. 2026)
 
 > รีวิวภายในโดย agent ผู้พัฒนา — **ไม่ใช่ penetration test อิสระ** (NFR-05 กำหนด pen test
 > ภายนอกก่อน GA จริง ซึ่งยังไม่ทำ) เอกสารนี้บอกตรงๆ ว่าอะไรบังคับแล้ว/อะไรยังไม่ทำ
+
+## 🆕 Surface ใหม่จาก Phase 5 (12 ก.ค. 2026)
+
+| Surface | การป้องกัน | ความเสี่ยงคงเหลือ (ตรงๆ) |
+|---|---|---|
+| `/gallery.json`, `/gallery/{token}.json`, `/gallery/{token}/vote` — **สาธารณะ ไม่ต้องมี key** (โดยเจตนา ADR-0004) | แชร์ต้อง EXPORT+watermark+PII gate+ไม่ใช่ election; snapshot frozen; vote dedup ด้วย hash(salt\|ip\|ua) ไม่เก็บ ip ดิบ; rate limit 60/นาที | rate limiter เป็น per-process in-memory (หลาย worker = quota แยกกัน); vote dedup หลบได้ถ้าเปลี่ยน ip/ua (ยอมรับ — เป็น sentiment ไม่ใช่การลงคะแนนทางการ) |
+| `/predictions/{id}/resolve` (P5-M3) | RUN perm (analyst+), append-only 2 ชั้น (UNIQUE + trigger), audit ทุกครั้ง | resolver ป้อน outcome ผิดได้ — ป้องกันด้วย note บังคับใจ + immutable ทำให้ตรวจย้อนเจอ |
+| Watchlist webhook (P5-M5) | https เท่านั้น, best-effort, URL เป็น secret ใน `.env` ไม่เก็บ DB/ไม่ log | SSRF ในทางทฤษฎีถ้าผู้ดูแลตั้ง URL ชี้ intranet เอง — ผู้ตั้งค่าคือ admin ของเครื่องเองจึงยอมรับ; payload alert ไม่มีข้อมูลลับ |
+| Persona packs (P5-M7) | PII gate ทุกข้อความรวมที่ AI สร้าง (fail-closed เมื่อ detector ปิด), validate โครงเข้ม, LLM ผ่าน BudgetGuard | prompt injection ใส่ใน pack prompt มีผลแค่ segments ที่ยังต้องผ่าน validate/PII — เสี่ยงต่ำ |
+| MCP server (P5-M9, ADR-0005) | **ห่อ REST เท่านั้น ไม่มี privileged path** — auth/RBAC/election/cap บังคับที่ API ตามเดิม; key อยู่ env ของ process MCP | สิทธิ์ของ agent ภายนอก = role ของ key ที่ออกให้ — ผู้ดูแลต้องออก key ขั้นต่ำที่จำเป็น (แนะนำ analyst ไม่ใช่ admin) |
 
 ## ✅ บังคับแล้วระดับโค้ด + มี test
 

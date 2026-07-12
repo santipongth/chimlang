@@ -37,13 +37,52 @@ def test_features_bounded_and_deterministic():
     assert f1 == f2  # deterministic ต่อ seed
     for name, v in f1.items():
         assert -1.0 <= v <= 1.0, name
+    # ครบ 8 features ตาม SIG-01 ของ PRD (P2-M4 ทำ 6 ตัวแรก, P5 เติม 2 ตัวหลัง)
     assert set(f1) == {
         "narrative_momentum",
         "narrative_dispersion",
         "sentiment_divergence",
         "contrarian_pressure",
         "adoption_elasticity",
+        "bullish_bearish_shift",
+        "event_interpretation_gap",
     }
+
+
+def test_shift_lower_when_correction_pulls_back():
+    # กลไก: ข่าวแก้กลางรันดึง belief ครึ่งหลังลง → shift (มีข่าวแก้) < shift (ไม่มี) ที่ seed เดียวกัน
+    def run(with_correction: bool):
+        sim = FabricSimulation(PersonaFactory().sample(40, seed=6, max_agents=40), seed=6)
+        sim.inject(Message("rumor", "rumor", "ข่าวลือทดสอบ", 1, "public_feed", broadcast_share=0.5))
+        if with_correction:
+            sim.inject(
+                Message(
+                    "official",
+                    "correction",
+                    "คำชี้แจงทดสอบ",
+                    10,
+                    "public_feed",
+                    counters="rumor",
+                    broadcast_share=0.6,
+                )
+            )
+        return features_for_run(sim.run(20), "rumor", rounds=20)["bullish_bearish_shift"]
+
+    assert run(with_correction=True) < run(with_correction=False)
+
+
+def test_interpretation_gap_zero_for_single_segment():
+    # ประชากร segment เดียว → ไม่มี "ตีความต่างกันระหว่างกลุ่ม" ให้วัด = 0
+    from dataclasses import replace
+
+    personas = [
+        replace(p, segment_id="one", segment_name="กลุ่มเดียว")
+        for p in PersonaFactory().sample(20, seed=8, max_agents=20)
+    ]
+    sim = FabricSimulation(personas, seed=8)
+    sim.inject(Message("rumor", "rumor", "ข่าวลือทดสอบ", 1, "public_feed"))
+    f = features_for_run(sim.run(15), "rumor", rounds=15)
+    assert f["event_interpretation_gap"] == 0.0
 
 
 def test_bundle_metadata_and_disclaimer_mandatory():
