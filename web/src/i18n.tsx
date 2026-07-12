@@ -181,6 +181,39 @@ const DICT: Record<string, { th: string; en: string }> = {
   ins_connections: { th: "ความเชื่อมโยง", en: "CONNECTIONS" },
   ins_graph_down: { th: "knowledge graph ยังไม่พร้อม (ต้องมี neo4j + ingest corpus แล้ว)", en: "Knowledge graph unavailable (needs neo4j + an ingested corpus)" },
   ins_graph_empty: { th: "ยังไม่มี entity ใน graph — ingest corpus ก่อน (scripts/ingest_corpus.py)", en: "Graph is empty — ingest a corpus first (scripts/ingest_corpus.py)" },
+  // Persona packs (P5-M7)
+  wiz_persona_title: { th: "กลุ่มประชากร (PERSONAS)", en: "POPULATION PERSONAS" },
+  wiz_persona_desc: {
+    th: "ใช้โครงสร้างสำมะโนมาตรฐาน หรือนิยาม audience เอง (สร้างด้วย AI ได้ — ผ่านด่าน PII ทุก pack)",
+    en: "Use the standard census structure or define your own audience (AI-assisted — every pack passes the PII gate)",
+  },
+  wiz_persona_default: { th: "โครงสร้างสำมะโน (ค่าเริ่มต้น)", en: "Census structure (default)" },
+  wiz_persona_default_desc: {
+    th: "6 segments กทม.-ปริมณฑล พร้อม provenance card",
+    en: "6 Bangkok-metro segments with provenance cards",
+  },
+  wiz_persona_create: { th: "สร้าง persona pack ใหม่ (AI ช่วยได้)", en: "Create a persona pack (AI-assisted)" },
+  pk_title: { th: "สร้าง Persona Pack", en: "Create a persona pack" },
+  pk_desc: {
+    th: "บรรยาย audience เป็นภาษาธรรมชาติ → AI ร่าง segments (สัดส่วน + เกรงใจ/say-do gap/มีม + channel mix) → คุณตรวจ ลองถาม แล้วค่อยบันทึก",
+    en: "Describe your audience in plain language → AI drafts segments (share + cultural priors + channel mix) → you review, test-ask, then save.",
+  },
+  pk_gov_note: {
+    th: "ทุก pack ผ่าน PII detector (GOV-01) — ห้ามมีชื่อบุคคลจริง; pack คือ 'กลุ่มคน' ไม่ใช่บุคคล",
+    en: "Every pack passes the PII detector (GOV-01) — no real names; a pack describes groups, never individuals",
+  },
+  pk_label_ph: { th: "ชื่อ pack เช่น 'ลูกค้าร้านกาแฟ กทม.'", en: "Pack name e.g. 'Bangkok cafe customers'" },
+  pk_prompt_ph: {
+    th: "บรรยาย audience เช่น 'ผู้ปกครองนักเรียนประถมในเมืองรอง กังวลค่าเทอม ใช้ LINE เป็นหลัก...'",
+    en: "Describe the audience e.g. 'Parents of primary-school kids in secondary cities, worried about fees, mostly on LINE...'",
+  },
+  pk_generate: { th: "ให้ AI ร่าง segments", en: "Draft segments with AI" },
+  pk_generating: { th: "กำลังร่าง (analyst model)...", en: "Drafting (analyst model)..." },
+  pk_preview: { th: "ตรวจก่อนบันทึก", en: "REVIEW BEFORE SAVING" },
+  pk_ask_ph: { th: "คำถามสำหรับลองถามราย segment...", en: "Question to test-ask each segment..." },
+  pk_try_ask: { th: "ลอง ask", en: "Try ask" },
+  pk_save: { th: "บันทึก pack", en: "Save pack" },
+  pk_discard: { th: "ทิ้งร่างนี้", en: "Discard draft" },
   // Watchlist (P5-M5)
   wl_eyebrow: { th: "ติดตามต่อเนื่อง", en: "CONTINUOUS MONITORING" },
   wl_title: { th: "Watchlist — เฝ้าดูกระแสให้อัตโนมัติ", en: "Watchlist — automatic narrative monitoring" },

@@ -26,6 +26,7 @@ export interface RunRequest {
   subject: string;
   agents: number;
   redTeam?: boolean; // A/B: เปิด = เทียบ baseline vs +Red Team ในหน้า compare
+  packId?: number | null; // persona pack ที่ผู้ใช้นิยามเอง (P5-M7) — null = สำมะโน default
 }
 
 function WatermarkBanner() {

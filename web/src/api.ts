@@ -29,10 +29,79 @@ export interface ImpactResult {
   disclaimer: string;
 }
 
-export async function fetchDashboard(subject: string, agents = 100): Promise<DashboardData> {
-  const r = await fetch(`/dashboard.json?subject=${encodeURIComponent(subject)}&agents=${agents}`);
+export async function fetchDashboard(
+  subject: string,
+  agents = 100,
+  packId?: number | null,
+): Promise<DashboardData> {
+  const pack = packId != null ? `&pack_id=${packId}` : "";
+  const r = await fetch(
+    `/dashboard.json?subject=${encodeURIComponent(subject)}&agents=${agents}${pack}`,
+  );
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
+}
+
+// ---- Persona packs (P5-M7) ----
+
+export interface PackSegment {
+  id: string;
+  name: string;
+  share: number;
+  voice_activity: number;
+  cultural_priors: Record<string, number>;
+  channel_mix: Record<string, number>;
+  traits: string[];
+}
+
+export interface PersonaPack {
+  id: number;
+  label: string;
+  prompt: string;
+  created_by: string;
+  created_at: string;
+  segments: PackSegment[];
+}
+
+export async function fetchPacks(): Promise<PersonaPack[]> {
+  const r = await fetch("/personas/packs.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).packs;
+}
+
+export async function generatePack(label: string, prompt: string): Promise<PackSegment[]> {
+  const r = await fetch("/personas/packs/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label, prompt }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).segments;
+}
+
+export async function savePack(label: string, segments: PackSegment[], prompt: string): Promise<number> {
+  const r = await fetch("/personas/packs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label, segments, prompt }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).id;
+}
+
+export async function tryAsk(segment: PackSegment, question: string): Promise<string> {
+  const r = await fetch("/personas/try-ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ segment, question }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).answer;
+}
+
+export async function deletePack(id: number): Promise<void> {
+  const r = await fetch(`/personas/packs/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
 export interface RunsData {
@@ -171,8 +240,15 @@ export interface CompareData {
   note: string;
 }
 
-export async function fetchCompare(subject: string, agents = 100): Promise<CompareData> {
-  const r = await fetch(`/compare.json?subject=${encodeURIComponent(subject)}&agents=${agents}`);
+export async function fetchCompare(
+  subject: string,
+  agents = 100,
+  packId?: number | null,
+): Promise<CompareData> {
+  const pack = packId != null ? `&pack_id=${packId}` : "";
+  const r = await fetch(
+    `/compare.json?subject=${encodeURIComponent(subject)}&agents=${agents}${pack}`,
+  );
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
 }

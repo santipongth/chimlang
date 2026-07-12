@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLang } from "../i18n";
 import { PageHeader, SelectCard } from "../ui";
+import { PersonaPack, fetchPacks } from "../api";
+import PersonaPackModal from "../PersonaPackModal";
 import type { RunRequest } from "../App";
 
 // Template gallery แบบ studio: คลิกเดียวเซ็ตทั้งคำถาม + โดเมน
@@ -46,6 +48,14 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
   const [domain, setDomain] = useState(DOMAINS[0]);
   const [agents, setAgents] = useState(100);
   const [redTeam, setRedTeam] = useState(false);
+  const [packs, setPacks] = useState<PersonaPack[]>([]);
+  const [packId, setPackId] = useState<number | null>(null);
+  const [packModalOpen, setPackModalOpen] = useState(false);
+
+  const loadPacks = () => fetchPacks().then(setPacks).catch(() => {});
+  useEffect(() => {
+    loadPacks();
+  }, []);
 
   const labels = [t("wiz_step1"), t("wiz_step2"), t("wiz_step3")];
   const card = "bg-card border border-border rounded-2xl p-6";
@@ -117,6 +127,33 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
           <p className="text-xs text-muted-foreground">{t("wiz_agents_note")}</p>
           <p className="text-xs text-muted-foreground">🌌 {t("wiz_universes")}</p>
 
+          {/* Persona preset (P5-M7): สำมะโน default หรือ pack ที่ผู้ใช้นิยาม/AI สร้าง */}
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_persona_title")}</div>
+            <p className="text-xs text-muted-foreground mt-1 mb-2">{t("wiz_persona_desc")}</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <SelectCard active={packId === null} onClick={() => setPackId(null)}>
+                <div className="text-sm font-medium">{t("wiz_persona_default")}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{t("wiz_persona_default_desc")}</div>
+              </SelectCard>
+              {packs.map((p) => (
+                <SelectCard key={p.id} active={packId === p.id} onClick={() => setPackId(p.id)}>
+                  <div className="text-sm font-medium">★ {p.label}</div>
+                  <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                    {p.segments.length} segments — {p.segments.map((s) => s.name).join(", ")}
+                  </div>
+                </SelectCard>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPackModalOpen(true)}
+              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5"
+            >
+              ✨ {t("wiz_persona_create")}
+            </button>
+          </div>
+
           {/* Red Team A/B — toggle card โทน destructive แบบ studio */}
           <button
             type="button"
@@ -151,6 +188,8 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
             <span>{domain}</span>
             <span className="text-muted-foreground">{t("wiz_agents")}</span>
             <span>{agents.toLocaleString()} × 5 universes</span>
+            <span className="text-muted-foreground">Personas</span>
+            <span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
             <span className="text-muted-foreground">Red Team A/B</span>
             <span>{redTeam ? `🛡️ ${t("wiz_redteam_on")}` : "—"}</span>
           </div>
@@ -176,12 +215,18 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
         ) : (
           <button
             className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium"
-            onClick={() => onRun({ subject: subject.trim(), agents, redTeam })}
+            onClick={() => onRun({ subject: subject.trim(), agents, redTeam, packId })}
           >
             {t("run_now")}
           </button>
         )}
       </div>
+      <PersonaPackModal
+        open={packModalOpen}
+        onClose={() => setPackModalOpen(false)}
+        onSaved={loadPacks}
+        subject={subject}
+      />
     </div>
   );
 }

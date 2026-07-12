@@ -54,9 +54,15 @@
 - [x] หน้า Insights: runs timeline + factor cloud + metric averages จาก registry/audit (ของเรามีข้อมูลครบอยู่แล้ว)
 - [x] tests: summary endpoint (mock Neo4j), hub calculation
 
+### P5-M7 — Persona Packs + AI-generate + ลอง ask ✅ (12 ก.ค. 2026 — ผู้ใช้สั่ง "ทำต่อ")
+- [x] `simulation/persona_packs.py`: pack = ชุด segments โครงเดียวกับ segments.yaml → `PersonaFactory(segments=...)` ใช้ได้ตรงๆ; validate ครบ (share/mix รวม 1.0, priors 0-1, 2-8 segments) + **PII gate ทุกข้อความ (GOV-01, detector ปิด = fail-closed)**
+- [x] `simulation/persona_ai.py`: generate จาก prompt (analyst tier + temperature 0 + retry 1 ตาม pattern judge + BudgetGuard) และ try-ask (crowd + reasoning=False + sanitize)
+- [x] endpoints: GET/POST/DELETE /personas/packs, /generate (คืน preview — มนุษย์ตรวจก่อนบันทึก), /try-ask | dashboard.json + compare.json รับ `pack_id`
+- [x] UI: preset cards ใน wizard (สำมะโน default + packs) + PersonaPackModal (prompt → preview → ลอง ask ราย segment → save)
+- [x] tests +15 (mock LLM ทั้งหมด — ไม่เผางบจริง): PII block, fail-closed, normalize share, retry, factory sampling, endpoint cycle
+
 ## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
 
-- Persona packs + AI-generate + single-persona simulator ("ลอง ask")
 - MCP tools surface (create-run/get-run) — ต้องผ่าน auth/RBAC
 - Public gallery + agree/disagree votes — ต้อง GOV-02/watermark review
 
@@ -70,11 +76,12 @@
 | M4 Red Team + Compare | ✅ 12 ก.ค. |
 | M5 Watchlist + webhook | ✅ 12 ก.ค. |
 | M6 Graph viz + Insights | ✅ 12 ก.ค. |
+| M7 Persona packs + AI | ✅ 12 ก.ค. |
 
 ## สรุปปิด Phase 5 (12 ก.ค. 2026) — ครบทุก milestone M1..M6 ในวันเดียว
 
 UI ยึด studio ครบ (sidebar+badge, header pattern, tabs, tooltip-สูตรทุก metric) +
 หน้าใหม่ 4 หน้า (Compare / Calibration / Watchlist / Insights) + engine เพิ่ม
 tipping detection (ปิดข้อบังคับ PRD ขั้น 7 ที่ตกหล่น), Red Team in-population,
-watchlist retention loop + webhook | tests 253 เขียว | จุดต่างจาก SwarmSight ที่รักษาไว้:
+watchlist retention loop + webhook | tests 268 เขียว (M7 เพิ่มทีหลังปิดเฟส) | จุดต่างจาก SwarmSight ที่รักษาไว้:
 ทุกอย่าง seed-deterministic, resolve เป็น append-only, webhook ไม่แตะ secret, PII/GOV ครบ

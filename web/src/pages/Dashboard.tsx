@@ -105,7 +105,7 @@ export default function Dashboard({
     if (request && !result) {
       setLoading(true);
       setError("");
-      fetchDashboard(request.subject, request.agents)
+      fetchDashboard(request.subject, request.agents, request.packId)
         .then(setResult)
         .catch((e) => setError(String(e.message ?? e)))
         .finally(() => setLoading(false));

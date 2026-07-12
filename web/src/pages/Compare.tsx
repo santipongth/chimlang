@@ -62,7 +62,7 @@ export default function Compare({ request }: { request: RunRequest | null }) {
     if (!request) return;
     setLoading(true);
     setError("");
-    fetchCompare(request.subject, request.agents)
+    fetchCompare(request.subject, request.agents, request.packId)
       .then(setData)
       .catch((e) => setError(String(e.message ?? e)))
       .finally(() => setLoading(false));

@@ -183,14 +183,34 @@ def insights_json(principal: Principal = Depends(get_principal)) -> dict:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
 
 
-def _run_dashboard(subject: str, granularity: str, agents: int = 100) -> Dashboard:
+def _load_pack_factory(pack_id: int | None) -> "PersonaFactory | None":
+    """โหลด PersonaFactory จาก persona pack (P5-M7) — pack ไม่พบ = 404"""
+    if pack_id is None:
+        return None
+    from simulation.persona_packs import PackStore, factory_from_pack
+
+    settings = get_settings()
+    try:
+        store = PackStore(settings.postgres_url)
+        store.setup()
+        pack = store.get(pack_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return factory_from_pack(pack)
+
+
+def _run_dashboard(
+    subject: str, granularity: str, agents: int = 100, factory: PersonaFactory | None = None
+) -> Dashboard:
     settings = get_settings()
     policy = ElectionPolicy(classify_scenario(subject))
     policy.require_aggregate(granularity)  # GOV-02: individual ถูก block ใน election mode
 
     # default 100 (quick tier) — ผู้เรียกขอมากขึ้นได้แต่ไม่เกิน cap ต่อ run
     n = min(agents, settings.max_agents_per_run)
-    factory = PersonaFactory()
+    factory = factory or PersonaFactory()
     fragility, outcomes = run_multiverse_whatif(
         factory,
         n_agents=n,
@@ -249,13 +269,14 @@ def dashboard_json(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     granularity: str = Query("aggregate"),
     agents: int = Query(100, ge=10),
+    pack_id: int | None = Query(None),  # persona pack ที่ผู้ใช้นิยามเอง (P5-M7)
     principal: Principal = Depends(get_principal),
 ) -> dict:
     require(principal, Permission.RUN)
     if ElectionPolicy(classify_scenario(subject)).active:
         require_election(principal)  # GOV-06: election เฉพาะ admin ที่ verify
     try:
-        dash = _run_dashboard(subject, granularity, agents)
+        dash = _run_dashboard(subject, granularity, agents, factory=_load_pack_factory(pack_id))
     except ElectionModeError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
     return dash.to_dict()
@@ -397,6 +418,112 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"runs": runs, "due": due}
 
 
+# ---- Persona Packs (P5-M7) ----
+
+
+class PackBody(BaseModel):
+    label: str
+    segments: list[dict]
+    prompt: str = ""
+
+
+class PackGenerateBody(BaseModel):
+    label: str
+    prompt: str
+
+
+class TryAskBody(BaseModel):
+    segment: dict
+    question: str
+
+
+@app.get("/personas/packs.json")
+def personas_packs_json(principal: Principal = Depends(get_principal)) -> dict:
+    from simulation.persona_packs import PackStore
+
+    settings = get_settings()
+    try:
+        store = PackStore(settings.postgres_url)
+        store.setup()
+        return {"packs": [p.__dict__ for p in store.list_packs()]}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+@app.post("/personas/packs")
+def personas_pack_create(body: PackBody, principal: Principal = Depends(get_principal)) -> dict:
+    """สร้าง pack เอง — validate + PII gate (GOV-01) ด่านเดียวกับ AI-generate"""
+    require(principal, Permission.RUN)
+    from simulation.persona_packs import PackStore, PackValidationError
+
+    settings = get_settings()
+    try:
+        store = PackStore(settings.postgres_url)
+        store.setup()
+        pack_id = store.create(
+            label=body.label.strip(),
+            segments=body.segments,
+            prompt=body.prompt,
+            created_by=principal.user_id,
+        )
+    except PackValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"id": pack_id}
+
+
+@app.post("/personas/packs/generate")
+def personas_pack_generate(
+    body: PackGenerateBody, principal: Principal = Depends(get_principal)
+) -> dict:
+    """AI-generate pack จาก prompt (analyst tier ผ่าน BudgetGuard) — คืน preview ยังไม่บันทึก
+
+    ผู้ใช้ตรวจ segments ก่อนแล้วค่อยกดบันทึกผ่าน POST /personas/packs (มนุษย์อยู่ใน loop)
+    """
+    require(principal, Permission.RUN)
+    from simulation.persona_ai import generate_pack_from_prompt
+    from simulation.persona_packs import PackValidationError
+
+    try:
+        segments = generate_pack_from_prompt(body.prompt.strip(), label=body.label.strip())
+    except PackValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"LLM ไม่พร้อมหรือ generate ไม่สำเร็จ: {e}") from e
+    return {"label": body.label, "prompt": body.prompt, "segments": segments}
+
+
+@app.post("/personas/try-ask")
+def personas_try_ask(body: TryAskBody, principal: Principal = Depends(get_principal)) -> dict:
+    """ลอง ask: segment เดียวตอบ 1 คำถาม (crowd + reasoning=False) — preview ก่อนรันเต็ม"""
+    require(principal, Permission.RUN)
+    from simulation.persona_ai import try_ask
+
+    if len(body.question.strip()) < 4:
+        raise HTTPException(status_code=422, detail="คำถามสั้นเกินไป")
+    try:
+        answer = try_ask(body.segment, body.question.strip())
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"LLM ไม่พร้อม: {e}") from e
+    return {"answer": answer, "segment": body.segment.get("name", "")}
+
+
+@app.delete("/personas/packs/{pack_id}")
+def personas_pack_delete(pack_id: int, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from simulation.persona_packs import PackStore
+
+    settings = get_settings()
+    try:
+        store = PackStore(settings.postgres_url)
+        store.setup()
+        store.delete(pack_id)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True}
+
+
 class WatchlistBody(BaseModel):
     label: str
     subject: str
@@ -512,6 +639,7 @@ def alerts_read(body: AlertReadBody, principal: Principal = Depends(get_principa
 def compare_json(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),
     agents: int = Query(100, ge=10),
+    pack_id: int | None = Query(None),
     principal: Principal = Depends(get_principal),
 ) -> dict:
     """P5-M4 — เทียบ baseline vs +Red Team (seed เดียวกัน): ข้อสรุปทนต่อ adversarial ไหม
@@ -526,7 +654,7 @@ def compare_json(
     settings = get_settings()
     n = min(agents, settings.max_agents_per_run)
     result = run_redteam_compare(
-        PersonaFactory(),
+        _load_pack_factory(pack_id) or PersonaFactory(),
         n_agents=n,
         max_agents=n,
         rounds=20,
