@@ -32,10 +32,13 @@ DEFAULTS: dict = {
     # งบ (P6-M5) — 0 = ใช้ค่า .env; > 0 = ทับ
     "run_budget_usd_cap": 0.0,
     "monthly_budget_usd_cap": 0.0,
+    # News Desk (P7) — ค่าว่าง = ใช้ .env; feeds คั่นด้วย , | Tavily key เก็บ ciphertext (ADR-0007)
+    "news_rss_feeds": "",
+    "tavily_api_key_enc": "",
 }
 _ALLOWED_KEYS = set(DEFAULTS)
 # key ที่ห้ามแก้ผ่าน PUT /settings.json ปกติ (มี endpoint แยกที่จัดการเข้ารหัส/มาสก์)
-_PROTECTED_KEYS = {"llm_api_key_enc"}
+_PROTECTED_KEYS = {"llm_api_key_enc", "tavily_api_key_enc"}
 
 
 def get_app_settings(dsn: str) -> dict:
@@ -95,13 +98,13 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
     return merged
 
 
-def set_llm_api_key(dsn: str, plaintext: str) -> None:
-    """เก็บ LLM API key แบบเข้ารหัส (ADR-0007) — plaintext ว่าง = ลบ key ที่เก็บไว้ (กลับไปใช้ .env)"""
+def _set_encrypted(dsn: str, field: str, plaintext: str) -> None:
+    """เก็บ secret แบบเข้ารหัสในช่อง protected (ADR-0007) — ว่าง = ลบ (กลับไปใช้ .env)"""
     from core.secretbox import encrypt
 
     enc = encrypt(plaintext) if plaintext.strip() else ""
     current = get_app_settings(dsn)
-    current["llm_api_key_enc"] = enc
+    current[field] = enc
     with psycopg.connect(dsn) as conn:
         conn.execute(
             "UPDATE app_settings SET data = %s WHERE id = 1",
@@ -109,9 +112,25 @@ def set_llm_api_key(dsn: str, plaintext: str) -> None:
         )
 
 
-def get_llm_api_key(dsn: str) -> str:
-    """ถอดรหัส key ที่เก็บไว้ — ไม่มี = '' (ผู้เรียก fallback .env เอง)"""
+def _get_encrypted(dsn: str, field: str) -> str:
     from core.secretbox import decrypt
 
-    enc = get_app_settings(dsn).get("llm_api_key_enc", "")
+    enc = get_app_settings(dsn).get(field, "")
     return decrypt(enc) if enc else ""
+
+
+def set_llm_api_key(dsn: str, plaintext: str) -> None:
+    _set_encrypted(dsn, "llm_api_key_enc", plaintext)
+
+
+def get_llm_api_key(dsn: str) -> str:
+    """ถอดรหัส key ที่เก็บไว้ — ไม่มี = '' (ผู้เรียก fallback .env เอง)"""
+    return _get_encrypted(dsn, "llm_api_key_enc")
+
+
+def set_tavily_api_key(dsn: str, plaintext: str) -> None:
+    _set_encrypted(dsn, "tavily_api_key_enc", plaintext)
+
+
+def get_tavily_api_key(dsn: str) -> str:
+    return _get_encrypted(dsn, "tavily_api_key_enc")

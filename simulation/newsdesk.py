@@ -106,6 +106,25 @@ def _tavily_search(query: str, api_key: str, *, max_results: int = 3) -> list[tu
     ]
 
 
+def effective_news_config(settings) -> tuple[list[str], str]:
+    """feeds + Tavily key ที่ใช้จริง — ค่าจากหน้า Settings (DB) ทับ .env; DB ไม่พร้อม = .env"""
+    feeds = settings.news_rss_feeds_list()
+    key = settings.tavily_api_key.strip()
+    try:
+        from core.appsettings import get_app_settings, get_tavily_api_key
+
+        data = get_app_settings(settings.postgres_url)
+        db_feeds = [f.strip() for f in str(data.get("news_rss_feeds", "")).split(",") if f.strip()]
+        if db_feeds:
+            feeds = db_feeds
+        db_key = get_tavily_api_key(settings.postgres_url)
+        if db_key:
+            key = db_key
+    except Exception:
+        pass  # fail-safe: DB/ถอดรหัสพัง = ใช้ .env ต่อ (ไม่ block งาน)
+    return feeds, key
+
+
 def gather(
     dsn: str,
     ctx: RunContext,
@@ -122,16 +141,17 @@ def gather(
     if not settings.pii_detector_enabled:
         raise ValueError("PII detector ถูกปิด — ปฏิเสธการดึงข่าว (GOV-01 fail-closed)")
     detector = PIIDetector(load_allowlist())
-    feeds = feeds if feeds is not None else settings.news_rss_feeds_list()
+    eff_feeds, tavily_key = effective_news_config(settings)
+    feeds = feeds if feeds is not None else eff_feeds
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
 
     raw: list[tuple[str, str, str, str, str]] = []  # (provider, query, url, title, content)
     # ผลค้น (ตรงหัวข้อ) เข้าคิวก่อน RSS (ข่าวแวดล้อม) — กัน RSS ท่วมจนชน cap แล้วผลค้นตกขบวน
     # (บั๊กที่ smoke จริงจับได้ 12 ก.ค.: 3 feeds × 10 = 30 ชน MAX_ITEMS ก่อนถึงคิว search)
-    if queries and settings.tavily_api_key.strip():
+    if queries and tavily_key:
         for q in queries:
             try:
-                for title, url, content in _tavily_search(q, settings.tavily_api_key.strip()):
+                for title, url, content in _tavily_search(q, tavily_key):
                     raw.append(("search", q, url, title, content))
             except Exception:
                 continue

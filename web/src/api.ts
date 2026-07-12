@@ -207,6 +207,23 @@ export interface AppSettings {
     env_run_cap: number;
     env_monthly_cap: number;
   };
+  news_rss_feeds: string;
+  news: {
+    feeds: string[];
+    feeds_source: "db" | "env" | "none";
+    tavily_present: boolean;
+    tavily_masked: string;
+    tavily_source: "db" | "env" | "none";
+  };
+}
+
+export async function saveTavilyKey(apiKey: string): Promise<void> {
+  const r = await fetch("/settings/tavily-key", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
 export async function saveLlmKey(apiKey: string): Promise<void> {

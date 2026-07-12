@@ -469,8 +469,23 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
         spent = round(spent_this_month(settings.postgres_url), 4)
     except Exception:
         spent = 0.0
+    # News Desk (P7): ค่าที่ใช้จริง (DB ทับ .env) — Tavily key มาสก์เท่านั้น
+    from simulation.newsdesk import effective_news_config
+
+    eff_feeds, eff_tavily = effective_news_config(settings)
+    news_cfg = {
+        "feeds": eff_feeds,
+        "feeds_source": "db"
+        if str(data.get("news_rss_feeds", "")).strip()
+        else ("env" if settings.news_rss_feeds_list() else "none"),
+        "tavily_present": bool(eff_tavily),
+        "tavily_masked": mask(eff_tavily) if eff_tavily else "",
+        "tavily_source": "db"
+        if data.get("tavily_api_key_enc")
+        else ("env" if settings.tavily_api_key.strip() else "none"),
+    }
     # อย่าคืน ciphertext ของ key ออกไป
-    safe = {k: v for k, v in data.items() if k != "llm_api_key_enc"}
+    safe = {k: v for k, v in data.items() if k not in ("llm_api_key_enc", "tavily_api_key_enc")}
     return {
         **safe,
         "webhook_configured": bool(settings.alert_webhook_url.strip()),
@@ -500,6 +515,7 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
             "env_run_cap": settings.run_budget_usd_cap,
             "env_monthly_cap": settings.monthly_budget_usd_cap,
         },
+        "news": news_cfg,
     }
 
 
@@ -534,6 +550,23 @@ def settings_llm_key(body: LlmKeyBody, principal: Principal = Depends(get_princi
     settings = get_settings()
     try:
         set_llm_api_key(settings.postgres_url, body.api_key)
+    except MasterKeyMissingError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True, "set": bool(body.api_key.strip())}
+
+
+@app.put("/settings/tavily-key")
+def settings_tavily_key(body: LlmKeyBody, principal: Principal = Depends(get_principal)) -> dict:
+    """ตั้ง/ลบ Tavily search key แบบเข้ารหัส (P7 News Desk) — เงื่อนไขเดียวกับ llm-key"""
+    require(principal, Permission.ADMIN)
+    from core.appsettings import set_tavily_api_key
+    from core.secretbox import MasterKeyMissingError
+
+    settings = get_settings()
+    try:
+        set_tavily_api_key(settings.postgres_url, body.api_key)
     except MasterKeyMissingError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:

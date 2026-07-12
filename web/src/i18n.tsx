@@ -355,6 +355,23 @@ const DICT: Record<string, { th: string; en: string }> = {
   set_budget_active: { th: "ใช้จริง", en: "active" },
   set_budget_from_env: { th: "จากไฟล์ .env", en: "from .env" },
   set_budget_spent: { th: "ใช้ไปเดือนนี้", en: "Spent this month" },
+  set_news_title: { th: "โต๊ะข่าวสด (Live News Desk)", en: "Live News Desk" },
+  set_news_desc: {
+    th: "แหล่งข่าวที่โต๊ะข่าวกลางใช้ดึงให้ตัวแทนจำลองตอนเปิดโหมดข่าวสด — ตั้งจากหน้านี้ได้เลย (ค่าที่ตั้งที่นี่จะทับค่าในไฟล์ .env)",
+    en: "Sources the news desk fetches for agents in live-news mode — set here (overrides .env)",
+  },
+  set_news_feeds: { th: "รายการ RSS feeds (คั่นด้วยเครื่องหมายจุลภาค ,)", en: "RSS feeds (comma-separated)" },
+  set_news_feeds_active: { th: "ใช้งานจริงตอนนี้", en: "Currently active" },
+  set_key_db_short: { th: "จากหน้านี้", en: "from this page" },
+  set_key_env_short: { th: "จากไฟล์ .env", en: "from .env" },
+  set_tavily_none: {
+    th: "ยังไม่ตั้ง — โหมดข่าวสดจะใช้ RSS อย่างเดียว (สมัครฟรีที่ tavily.com เพื่อให้ค้นตรงหัวข้อได้)",
+    en: "Not set — live news uses RSS only (get a free key at tavily.com for topic search)",
+  },
+  wiz_src_need_value: {
+    th: "กรอกลิงก์ (URL/RSS) หรือวางเนื้อหาก่อน จึงจะกดเพิ่มได้",
+    en: "Enter a URL/RSS link or paste text first, then add",
+  },
   set_system: { th: "สถานะระบบ", en: "System status" },
   set_webhook_on: { th: "เชื่อมแล้วผ่าน ALERT_WEBHOOK_URL", en: "connected via ALERT_WEBHOOK_URL" },
   set_webhook_off: { th: "ยังไม่ตั้ง (เพิ่มใน .env)", en: "not set (add to .env)" },

@@ -314,9 +314,17 @@ export default function NewRun({
                 className="w-full rounded-xl border border-border bg-background px-4 py-2 text-sm"
               />
             )}
-            <button onClick={addSource} className="rounded-xl border border-border px-4 py-2 text-sm text-primary-strong hover:bg-primary/5">
+            <button
+              onClick={addSource}
+              disabled={!srcDraft.value.trim()}
+              title={!srcDraft.value.trim() ? t("wiz_src_need_value") : ""}
+              className="rounded-xl border border-border px-4 py-2 text-sm text-primary-strong hover:bg-primary/5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               + {t("wiz_src_add")}
             </button>
+            {!srcDraft.value.trim() && (
+              <p className="text-[11px] text-muted-foreground">💡 {t("wiz_src_need_value")}</p>
+            )}
           </div>
           {sources.length > 0 && (
             <ul className="space-y-1 text-sm">

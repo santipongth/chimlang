@@ -189,3 +189,54 @@ def test_debate_prompts_include_segment_news(monkeypatch):
     # ข่าวจาก intent เข้ารอบถัดไปของกลุ่มนั้น
     assert any("ข่าวใหม่จาก intent" in p for p in seen_prompts)
     assert result.metrics["posts_ok"] == 8
+
+
+# ---- ตั้ง feeds/Tavily key จากหน้า Settings (DB ทับ .env) ----
+
+
+@needs_pg
+def test_effective_news_config_db_overrides_env(monkeypatch):
+    from cryptography.fernet import Fernet
+
+    import core.secretbox as sb
+    from core.appsettings import put_app_settings, set_tavily_api_key
+    from core.config import Settings
+    from simulation.newsdesk import effective_news_config
+
+    key = Fernet.generate_key().decode()
+    monkeypatch.setattr(sb, "get_settings", lambda **kw: Settings(secret_key=key, _env_file=None))
+    env_settings = Settings(
+        news_rss_feeds="https://env.feed/rss", tavily_api_key="env-key", _env_file=None
+    )
+    # ยังไม่ตั้งใน DB → ใช้ .env
+    put_app_settings(DSN, {"news_rss_feeds": ""})
+    set_tavily_api_key(DSN, "")
+    feeds, tk = effective_news_config(env_settings)
+    assert feeds == ["https://env.feed/rss"] and tk == "env-key"
+    # ตั้งใน DB → ทับ .env
+    put_app_settings(DSN, {"news_rss_feeds": "https://db.feed/a, https://db.feed/b"})
+    set_tavily_api_key(DSN, "db-tavily-key")
+    feeds, tk = effective_news_config(env_settings)
+    assert feeds == ["https://db.feed/a", "https://db.feed/b"] and tk == "db-tavily-key"
+    # เก็บกวาด: กลับสู่ค่าว่าง (ใช้ .env จริงของเครื่องต่อ)
+    put_app_settings(DSN, {"news_rss_feeds": ""})
+    set_tavily_api_key(DSN, "")
+
+
+@needs_pg
+def test_tavily_key_protected_and_masked(client_p7):
+    # ห้ามตั้ง ciphertext ผ่าน PUT ปกติ
+    assert client_p7.put("/settings.json", json={"tavily_api_key_enc": "hack"}).status_code == 422
+    # GET ไม่มี ciphertext รั่ว
+    data = client_p7.get("/settings.json").json()
+    assert "tavily_api_key_enc" not in data
+    assert "news" in data and "feeds" in data["news"]
+
+
+@pytest.fixture
+def client_p7():
+    from fastapi.testclient import TestClient
+
+    from api.app import app
+
+    return TestClient(app)

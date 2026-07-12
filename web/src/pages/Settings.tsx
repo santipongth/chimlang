@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppSettings, fetchSettings, saveLlmKey, saveSettings } from "../api";
+import { AppSettings, fetchSettings, saveLlmKey, saveSettings, saveTavilyKey } from "../api";
 import { useLang } from "../i18n";
 import { PageHeader, SelectCard } from "../ui";
 
@@ -14,6 +14,8 @@ export default function Settings() {
   const [keyBusy, setKeyBusy] = useState(false);
   const [prices, setPrices] = useState<Record<string, { input_usd_per_m: number; output_usd_per_m: number }>>({});
   const [newModel, setNewModel] = useState("");
+  const [tavilyDraft, setTavilyDraft] = useState("");
+  const [tavilyBusy, setTavilyBusy] = useState(false);
 
   const load = () => {
     fetchSettings()
@@ -341,6 +343,75 @@ export default function Settings() {
                   style={{ width: `${Math.min(100, (data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective)) * 100)}%` }}
                 />
               </div>
+            </div>
+          </section>
+          )}
+
+          {/* News Desk (P7) — feeds + Tavily key ตั้งจากหน้านี้ (DB ทับ .env) */}
+          {data.news && (
+          <section className={card + " space-y-3"}>
+            <h2 className="font-semibold">🌐 {t("set_news_title")}</h2>
+            <p className="text-xs text-muted-foreground">{t("set_news_desc")}</p>
+            <label className="block text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("set_news_feeds")}
+              </span>
+              <textarea
+                value={data.news_rss_feeds}
+                onChange={(e) => setData({ ...data, news_rss_feeds: e.target.value })}
+                onBlur={() => patch({ news_rss_feeds: data.news_rss_feeds } as any)}
+                placeholder="https://www.thairath.co.th/rss/news, https://..."
+                rows={2}
+                className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+              />
+              <span className="text-[11px] text-muted-foreground">
+                {t("set_news_feeds_active")}: {data.news.feeds.length} feeds ({data.news.feeds_source === "db" ? t("set_key_db_short") : data.news.feeds_source === "env" ? t("set_key_env_short") : "—"})
+              </span>
+            </label>
+            <div className="rounded-xl border border-border bg-background p-3 space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                🔎 Tavily Search API key
+              </div>
+              <div className="text-xs">
+                {data.news.tavily_source === "db"
+                  ? `✅ ${t("set_key_db")} (${data.news.tavily_masked})`
+                  : data.news.tavily_source === "env"
+                    ? `✅ ${t("set_key_env")} (${data.news.tavily_masked})`
+                    : `⚠️ ${t("set_tavily_none")}`}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={tavilyDraft}
+                  onChange={(e) => setTavilyDraft(e.target.value)}
+                  placeholder={t("set_key_ph")}
+                  disabled={!data.llm?.master_key_present}
+                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs disabled:opacity-50"
+                />
+                <button
+                  onClick={async () => {
+                    setTavilyBusy(true);
+                    try { await saveTavilyKey(tavilyDraft.trim()); setTavilyDraft(""); await load(); }
+                    catch (e: any) { setError(String(e.message ?? e)); }
+                    finally { setTavilyBusy(false); }
+                  }}
+                  disabled={tavilyBusy || !tavilyDraft.trim() || !data.llm?.master_key_present}
+                  className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white disabled:opacity-40"
+                >
+                  {tavilyBusy ? "⏳" : t("set_key_save")}
+                </button>
+                {data.news.tavily_source === "db" && (
+                  <button
+                    onClick={() => saveTavilyKey("").then(load)}
+                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
+                  >
+                    🗑 {t("set_key_clear")}
+                  </button>
+                )}
+              </div>
+              {!data.llm?.master_key_present && (
+                <p className="text-[11px] text-amber-700">⚠️ {t("set_key_no_master")}</p>
+              )}
             </div>
           </section>
           )}
