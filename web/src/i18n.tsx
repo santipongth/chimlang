@@ -51,7 +51,14 @@ const DICT: Record<string, { th: string; en: string }> = {
   wiz_step3: { th: "ยืนยัน & รัน", en: "Review & Run" },
   wiz_q_label: { th: "คำถาม / หัวข้อ SCENARIO", en: "QUESTION / SCENARIO" },
   wiz_q_ph: { th: "จะเกิดอะไรถ้า...", en: "What if..." },
-  wiz_domain: { th: "โดเมน", en: "DOMAIN" },
+  wiz_domain: { th: "หมวดหมู่", en: "DOMAIN" },
+  // หมวดหมู่ 6 อันตาม studio ต้นทาง
+  domain_finance: { th: "การเงิน/ตลาดทุน", en: "Finance" },
+  domain_product: { th: "สินค้า/ผลิตภัณฑ์", en: "Product" },
+  domain_social: { th: "กระแสสังคม", en: "Social" },
+  domain_policy: { th: "นโยบายสาธารณะ", en: "Policy" },
+  domain_science: { th: "วิทยาศาสตร์/เทคโนโลยี", en: "Science" },
+  domain_general: { th: "ทั่วไป", en: "General" },
   wiz_agents: { th: "จำนวน agents", en: "Agents" },
   wiz_agents_note: {
     th: "มากขึ้น = เสถียรขึ้นแต่ช้าลง (cap 1,000/run — ระดับ 5,000 ต้องขออนุมัติ)",

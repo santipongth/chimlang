@@ -16,15 +16,27 @@ import type { RunRequest } from "../App";
 // Wizard (P6-M1/M3): คำถาม → เครื่องยนต์ → [แหล่งข้อมูล ถ้า debate] → agents → ยืนยัน
 // ทุก run ถูกเก็บถาวร (P6-M2) → เปิดหน้า Run detail; fabric + Red Team A/B → หน้า Compare เดิม
 
+// หมวดหมู่ 6 อันตาม studio ต้นทาง (finance/product/social/policy/science/general)
+// เก็บลง DB เป็นภาษาไทย canonical เสมอ (calibration จัดกลุ่มตาม string) — UI แสดงตามภาษา
+const DOMAIN_KEYS = ["finance", "product", "social", "policy", "science", "general"] as const;
+const DOMAIN_TH: Record<(typeof DOMAIN_KEYS)[number], string> = {
+  finance: "การเงิน/ตลาดทุน",
+  product: "สินค้า/ผลิตภัณฑ์",
+  social: "กระแสสังคม",
+  policy: "นโยบายสาธารณะ",
+  science: "วิทยาศาสตร์/เทคโนโลยี",
+  general: "ทั่วไป",
+};
+
 const TEMPLATES = [
-  { label: "ค่าธรรมเนียมรถติด", q: "มาตรการค่าธรรมเนียมรถติด กทม.", domain: "นโยบายสาธารณะ" },
-  { label: "ขึ้นราคา 15%", q: "แคมเปญขึ้นราคาสินค้า 15% พร้อมข้อความสื่อสารใหม่", domain: "ธุรกิจ/การตลาด" },
-  { label: "เวลาขายแอลกอฮอล์", q: "นโยบายจำกัดเวลาขายแอลกอฮอล์รอบใหม่", domain: "นโยบายสาธารณะ" },
-  { label: "ซ้อมแถลงดราม่า", q: "แบรนด์ถูกกล่าวหาเรื่องคุณภาพสินค้า — ควรแถลงด้วยข้อความแบบไหน", domain: "กระแสสังคม" },
-  { label: "เปลี่ยนโมเดลราคา", q: "เปิดตัวบริการสมัครสมาชิกรายเดือนแทนการซื้อขาด", domain: "ธุรกิจ/การตลาด" },
-  { label: "ข่าวลือน้ำประปา", q: "ข่าวลือเรื่องคุณภาพน้ำประปาในเขตเมืองกำลังแพร่ในกลุ่มปิด", domain: "กระแสสังคม" },
+  { label: "ค่าธรรมเนียมรถติด", q: "มาตรการค่าธรรมเนียมรถติด กทม.", domain: DOMAIN_TH.policy },
+  { label: "ขึ้นราคา 15%", q: "แคมเปญขึ้นราคาสินค้า 15% พร้อมข้อความสื่อสารใหม่", domain: DOMAIN_TH.product },
+  { label: "เวลาขายแอลกอฮอล์", q: "นโยบายจำกัดเวลาขายแอลกอฮอล์รอบใหม่", domain: DOMAIN_TH.policy },
+  { label: "ซ้อมแถลงดราม่า", q: "แบรนด์ถูกกล่าวหาเรื่องคุณภาพสินค้า — ควรแถลงด้วยข้อความแบบไหน", domain: DOMAIN_TH.social },
+  { label: "เปลี่ยนโมเดลราคา", q: "เปิดตัวบริการสมัครสมาชิกรายเดือนแทนการซื้อขาด", domain: DOMAIN_TH.product },
+  { label: "ข่าวลือน้ำประปา", q: "ข่าวลือเรื่องคุณภาพน้ำประปาในเขตเมืองกำลังแพร่ในกลุ่มปิด", domain: DOMAIN_TH.social },
 ];
-const DOMAINS = ["นโยบายสาธารณะ", "ธุรกิจ/การตลาด", "กระแสสังคม", "ทั่วไป"];
+const DOMAINS = DOMAIN_KEYS.map((k) => DOMAIN_TH[k]);
 
 function Steps({ step, labels, onJump }: { step: number; labels: string[]; onJump: (i: number) => void }) {
   return (
@@ -189,10 +201,11 @@ export default function NewRun({
           </div>
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t("wiz_domain")}</div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {DOMAINS.map((d) => (
-                <SelectCard key={d} active={domain === d} onClick={() => setDomain(d)}>
-                  <span className="text-sm">{d}</span>
+            {/* grid 2/3 คอลัมน์แบบ studio — แสดง label ตามภาษา, เก็บค่า canonical ไทย */}
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+              {DOMAIN_KEYS.map((k) => (
+                <SelectCard key={k} active={domain === DOMAIN_TH[k]} onClick={() => setDomain(DOMAIN_TH[k])}>
+                  <span className="text-sm">{t(`domain_${k}`)}</span>
                 </SelectCard>
               ))}
             </div>
