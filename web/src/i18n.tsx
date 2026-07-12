@@ -18,7 +18,6 @@ const DICT: Record<string, { th: string; en: string }> = {
   nav_insights: { th: "ภาพรวมสถิติ (Insights)", en: "Insights" },
   nav_watchlist: { th: "รายการติดตาม (Watchlist)", en: "Watchlist" },
   nav_gallery: { th: "แกลเลอรีสาธารณะ", en: "Public Gallery" },
-  nav_citizen: { th: "โหมดประชาชน", en: "Citizen Mode" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
   // Landing
   landing_eyebrow: { th: "DIGITAL SANDBOX", en: "DIGITAL SANDBOX" },
@@ -129,19 +128,6 @@ const DICT: Record<string, { th: string; en: string }> = {
   compare_title: { th: "เปรียบเทียบ Scenario — สัดส่วนผู้เชื่อข่าวลือรายกลุ่ม", en: "Scenario comparison — rumor belief by segment" },
   pop_share: { th: "สัดส่วนประชากรต่อกลุ่ม", en: "Population share by segment" },
   pop_note: { th: "เสียงที่ปรากฏบนช่องทาง ≠ สัดส่วนคนจริง — อย่าอ่านเสียงดังแทนประชากร", en: "Voice share ≠ population share — don't read the loud as the many" },
-  // Citizen
-  cit_title: { th: "ครัวเรือนแบบฉัน (Personal Impact Twin)", en: "A household like mine (Personal Impact Twin)" },
-  cit_sub: {
-    th: "ตอบ 6 ข้อ (ตัวเลือกปิดทั้งหมด — เราไม่รับข้อความอิสระและไม่บันทึกคำตอบของคุณ: session-only)",
-    en: "Answer 6 closed-choice questions — no free text, and your answers are never stored (session-only).",
-  },
-  cit_submit: { th: "ดูผลกระทบต่อครัวเรือนแบบฉัน", en: "See impact on households like mine" },
-  cit_no_response: { th: "ถ้าไม่มีคำชี้แจงจากหน่วยงาน", en: "Without an official clarification" },
-  cit_with_response: { th: "ถ้ามีคำชี้แจงชัดเจน", en: "With a clear clarification" },
-  cit_worry: { th: "ของคนกลุ่มเดียวกับคุณกังวลเรื่องนี้", en: "of people like you are concerned" },
-  cit_worry_after: { th: "ความกังวลลดลงเหลือประมาณนี้", en: "concern drops to roughly this" },
-  cit_your_group: { th: "กลุ่มของคุณ", en: "Your segment" },
-  cit_feedback: { th: "ร่วมส่งเสียงของคุณ (เปิดเผยเมื่อกลุ่มมีผู้ตอบครบ 20 คน — คุ้มครองตัวตน)", en: "Add your voice (published once your group reaches 20 responses — k-anonymity)" },
   f_income: { th: "ช่วงรายได้ต่อเดือน", en: "Monthly income band" },
   f_region: { th: "พื้นที่อยู่อาศัย", en: "Where you live" },
   f_commute: { th: "การเดินทางหลัก", en: "Main commute" },
@@ -205,17 +191,6 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "ทุก run ถูกเก็บถาวร (เปิดย้อนหลัง/replay ได้ที่เมนูประวัติรัน) และลงทะเบียนคำทำนายแบบแก้ไม่ได้ 1 รายการเสมอ",
     en: "Every run is persisted (revisit/replay from History) and always registers one immutable prediction",
   },
-  wiz_real_title: { th: "คำทำนายจริง (ปลดล็อก calibration)", en: "REAL-WORLD PREDICTION (UNLOCKS CALIBRATION)" },
-  wiz_real_desc: {
-    th: "ถ้าหัวข้อนี้เป็นเหตุการณ์จริงที่จะรู้ผล — ตั้งคำทำนายที่วัดได้ + วันครบกำหนด แล้วเมื่อถึงวันไปบันทึกผลจริงที่เมนู Calibration (ไม่กรอก = ระบบตั้งคำทำนายเชิงเทคนิคให้)",
-    en: "If this is a real event with a knowable outcome — set a measurable claim + due date, then log the real outcome in Calibration when due (leave blank for an auto technical claim)",
-  },
-  wiz_claim_ph: {
-    th: "คำทำนายที่วัดได้ เช่น 'หลังแถลง เสียงคัดค้านในโพลสำนัก X จะต่ำกว่า 50%'",
-    en: "Measurable claim e.g. 'After the announcement, opposition in poll X drops below 50%'",
-  },
-  wiz_measure_ph: { th: "จะวัดด้วยอะไร เช่น โพลจริง/ยอดขาย/มติที่ประชุม", en: "How it will be measured e.g. real poll / sales / vote" },
-  wiz_due_days: { th: "ครบกำหนด (วัน)", en: "Due (days)" },
   hist_eyebrow: { th: "ย้อนดูได้ทุกรัน", en: "EVERY RUN, REVISITABLE" },
   hist_title: { th: "ประวัติรัน", en: "Run history" },
   hist_sub: {

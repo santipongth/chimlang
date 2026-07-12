@@ -88,9 +88,6 @@ export default function NewRun({
   const [packId, setPackId] = useState<number | null>(null);
   const [packModalOpen, setPackModalOpen] = useState(false);
   const [sources, setSources] = useState<SourceInput[]>([]);
-  const [claim, setClaim] = useState("");
-  const [measurement, setMeasurement] = useState("");
-  const [dueDays, setDueDays] = useState(30);
   const [pool, setPool] = useState<PoolSegment[]>([]);
   const [poolOpen, setPoolOpen] = useState(false);
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
@@ -168,9 +165,6 @@ export default function NewRun({
         pack_id: packId,
         red_team: redTeam,
         sources: isDebate ? sources : [],
-        claim: claim.trim(),
-        measurement: measurement.trim(),
-        due_days: dueDays,
         views,
         live_news: isDebate && liveNews,
       });
@@ -469,39 +463,6 @@ export default function NewRun({
           </div>
           {isDebate && <p className="text-xs text-amber-700">💰 {t("wiz_cost_note")}</p>}
 
-          {/* เหตุการณ์จริง (จุดปลดล็อก calibration): ตั้งคำทำนายที่วัดผลได้เอง */}
-          <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-primary-strong">
-              🎯 {t("wiz_real_title")}
-            </div>
-            <p className="text-xs text-muted-foreground">{t("wiz_real_desc")}</p>
-            <textarea
-              value={claim}
-              onChange={(e) => setClaim(e.target.value)}
-              placeholder={t("wiz_claim_ph")}
-              rows={2}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            />
-            <div className="grid gap-2 sm:grid-cols-[1fr_150px]">
-              <input
-                value={measurement}
-                onChange={(e) => setMeasurement(e.target.value)}
-                placeholder={t("wiz_measure_ph")}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              />
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                {t("wiz_due_days")}
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={dueDays}
-                  onChange={(e) => setDueDays(parseInt(e.target.value) || 30)}
-                  className="w-16 rounded-lg border border-border bg-background px-2 py-2 text-sm text-foreground"
-                />
-              </label>
-            </div>
-          </div>
           <p className="text-xs text-muted-foreground">🔒 {t("wiz_persist_note")}</p>
         </div>
       )}

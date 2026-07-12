@@ -8,13 +8,10 @@ import {
   Languages,
   Plus,
   Settings as SettingsIcon,
-  Target,
-  Users,
-} from "lucide-react";
+  Target } from "lucide-react";
 import { LangProvider, useLang } from "./i18n";
 import Landing from "./pages/Landing";
 import NewRun from "./pages/NewRun";
-import Citizen from "./pages/Citizen";
 import Runs from "./pages/Runs";
 import Calibration from "./pages/Calibration";
 import Compare from "./pages/Compare";
@@ -35,7 +32,6 @@ export type Page =
   | "calibration"
   | "watchlist"
   | "gallery"
-  | "citizen"
   | "settings";
 
 export interface RunRequest {
@@ -46,7 +42,7 @@ export interface RunRequest {
 }
 
 // Sidebar ตาม studio ต้นทาง (route.tsx ของ swarm-visionary-forge): lucide icons +
-// ลำดับเมนูเดียวกัน + Settings อยู่ท้าย nav | เพิ่มของเรา: Citizen Mode (persona P4 ของ PRD)
+// ลำดับเมนูเดียวกัน + Settings อยู่ท้าย nav
 function Sidebar({
   page,
   setPage,
@@ -64,7 +60,6 @@ function Sidebar({
     { id: "calibration", icon: Target, label: t("nav_calibration") },
     { id: "gallery", icon: Globe, label: t("nav_gallery") },
     { id: "watchlist", icon: Bell, label: t("nav_watchlist") },
-    { id: "citizen", icon: Users, label: t("nav_citizen") },
     { id: "settings", icon: SettingsIcon, label: t("nav_settings") },
   ];
   return (
@@ -135,13 +130,11 @@ function Shell() {
     return () => clearInterval(timer);
   }, []);
 
-  const wide = !["new", "home", "citizen"].includes(page);
-
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar page={page} setPage={setPage} badges={{ watchlist: unread }} />
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className={`mx-auto ${wide ? "max-w-4xl" : "max-w-3xl"}`}>
+      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
+        <div className="w-full">
           {page === "home" && <Landing onStart={() => setPage("new")} />}
           {page === "new" && (
             <NewRun
@@ -169,7 +162,6 @@ function Shell() {
           {page === "calibration" && <Calibration />}
           {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
           {page === "gallery" && <Gallery />}
-          {page === "citizen" && <Citizen />}
           {page === "settings" && <Settings />}
         </div>
       </main>
