@@ -37,3 +37,14 @@ body {
   font-family: Georgia, "Times New Roman", "Noto Serif Thai", serif;
   letter-spacing: -0.01em;
 }
+
+/* ทุกอย่างที่คลิกได้ต้องขึ้นรูปมือ (Tailwind v4 เปลี่ยน default ปุ่มเป็น cursor:default)
+   — ยกเว้นปุ่ม disabled ที่คงลูกศรปกติเพื่อสื่อว่ากดไม่ได้ */
+button:not(:disabled),
+a,
+[role="button"]:not([aria-disabled="true"]),
+label:has(> input[type="file"]),
+input[type="range"],
+summary {
+  cursor: pointer;
+}
