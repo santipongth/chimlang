@@ -197,6 +197,17 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "ทุก run ถูกเก็บถาวร (เปิดย้อนหลัง/replay ได้ที่เมนูประวัติรัน) และลงทะเบียนคำทำนายแบบแก้ไม่ได้ 1 รายการเสมอ",
     en: "Every run is persisted (revisit/replay from History) and always registers one immutable prediction",
   },
+  wiz_real_title: { th: "คำทำนายจริง (ปลดล็อก calibration)", en: "REAL-WORLD PREDICTION (UNLOCKS CALIBRATION)" },
+  wiz_real_desc: {
+    th: "ถ้าหัวข้อนี้เป็นเหตุการณ์จริงที่จะรู้ผล — ตั้งคำทำนายที่วัดได้ + วันครบกำหนด แล้วเมื่อถึงวันไปบันทึกผลจริงที่เมนู Calibration (ไม่กรอก = ระบบตั้งคำทำนายเชิงเทคนิคให้)",
+    en: "If this is a real event with a knowable outcome — set a measurable claim + due date, then log the real outcome in Calibration when due (leave blank for an auto technical claim)",
+  },
+  wiz_claim_ph: {
+    th: "คำทำนายที่วัดได้ เช่น 'หลังแถลง เสียงคัดค้านในโพลสำนัก X จะต่ำกว่า 50%'",
+    en: "Measurable claim e.g. 'After the announcement, opposition in poll X drops below 50%'",
+  },
+  wiz_measure_ph: { th: "จะวัดด้วยอะไร เช่น โพลจริง/ยอดขาย/มติที่ประชุม", en: "How it will be measured e.g. real poll / sales / vote" },
+  wiz_due_days: { th: "ครบกำหนด (วัน)", en: "Due (days)" },
   hist_eyebrow: { th: "ย้อนดูได้ทุกรัน", en: "EVERY RUN, REVISITABLE" },
   hist_title: { th: "ประวัติรัน", en: "Run history" },
   hist_sub: {

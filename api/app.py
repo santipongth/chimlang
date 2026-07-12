@@ -486,6 +486,10 @@ class RunBody(BaseModel):
     red_team: bool = False  # debate: ฝัง adversarial 2 ตัว (fabric ใช้หน้า compare อยู่แล้ว)
     # P6-M3: เอกสารอ้างอิง (เฉพาะ debate) — {kind: text|url|rss, label, url?, text?}
     sources: list[dict] = []
+    # เหตุการณ์จริง (ปลดล็อก calibration): ผู้ใช้ตั้งคำทำนายที่วัดผลได้เอง — ว่าง = heuristic
+    claim: str = ""
+    measurement: str = ""
+    due_days: int = 30
 
 
 @app.get("/engines.json")
@@ -495,11 +499,22 @@ def engines_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"engines": [e.to_dict() for e in ENGINES.values()]}
 
 
-def _register_run_prediction(store, run_id: str, subject: str, domain: str, payload: dict) -> None:
-    """กฎเหล็กข้อ 3: ทุก run ต้องมี prediction ≥1 — heuristic v1 (บันทึกตรงๆ ว่าเป็น heuristic)
+def _register_run_prediction(
+    store,
+    run_id: str,
+    subject: str,
+    domain: str,
+    payload: dict,
+    *,
+    claim: str = "",
+    measurement: str = "",
+    due_days: int = 30,
+) -> None:
+    """กฎเหล็กข้อ 3: ทุก run ต้องมี prediction ≥1
 
-    fabric: ทิศจาก headline range (CI ไม่คร่อม 0 = มีทิศ, confidence ลดตาม fragility)
-    debate: ทิศจากจุดยืนเฉลี่ยรอบสุดท้าย, confidence จาก synthesis (ถูกลดตาม failed แล้ว)
+    ผู้ใช้ตั้ง claim/measurement/due_days เองได้ (เหตุการณ์จริง — จุดปลดล็อก calibration);
+    ไม่ตั้ง = heuristic v1: fabric ทิศจาก headline range (confidence ลดตาม fragility),
+    debate ทิศจากจุดยืนเฉลี่ยรอบสุดท้าย (confidence จาก synthesis ถูกลดตาม failed แล้ว)
     """
     from datetime import date, timedelta
 
@@ -514,20 +529,20 @@ def _register_run_prediction(store, run_id: str, subject: str, domain: str, payl
             direction, conf = "เพิ่มขึ้น", round(max(0.5, 0.75 * (1 - frag / 100)), 2)
         else:
             direction, conf = "ไม่ชัด", 0.5
-        claim = f"{subject}: ทิศทาง delta ของความเชื่อจะ{direction}เมื่อทดสอบซ้ำด้วยชุด parameter ใหม่"
+        auto_claim = f"{subject}: ทิศทาง delta ของความเชื่อจะ{direction}เมื่อทดสอบซ้ำด้วยชุด parameter ใหม่"
     else:  # debate payload
         avg = (payload.get("metrics", {}).get("per_round_avg_stance") or [0])[-1]
         direction = "เพิ่มขึ้น" if avg > 0.15 else "ลดลง" if avg < -0.15 else "ไม่ชัด"
         conf = float(payload.get("synthesis", {}).get("confidence", 0.5))
-        claim = f"{subject}: ฉันทามติของวงดีเบตเอนไปทาง '{direction}' และจะคงทิศเมื่อดีเบตซ้ำ"
+        auto_claim = f"{subject}: ฉันทามติของวงดีเบตเอนไปทาง '{direction}' และจะคงทิศเมื่อดีเบตซ้ำ"
     store.register_prediction(
         run_id,
         Prediction(
-            claim=claim,
+            claim=claim.strip() or auto_claim,
             direction=direction,
             confidence=max(0.01, min(0.99, conf)),
-            measurement="ผู้ใช้ป้อนผลจริงเมื่อครบกำหนด (หน้า Calibration ใน /app)",
-            due_date=date.today() + timedelta(days=30),
+            measurement=measurement.strip() or "ผู้ใช้ป้อนผลจริงเมื่อครบกำหนด (หน้า Calibration ใน /app)",
+            due_date=date.today() + timedelta(days=max(1, min(365, due_days))),
             model_version="chimlang-run@p6",
             domain=domain,
         ),
@@ -636,7 +651,16 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                 "context_used": len(context),
             }
         rstore.finish(run_id, payload)
-        _register_run_prediction(gov, run_id, subject, body.domain, payload)
+        _register_run_prediction(
+            gov,
+            run_id,
+            subject,
+            body.domain,
+            payload,
+            claim=body.claim,
+            measurement=body.measurement,
+            due_days=body.due_days,
+        )
         gov.finalize_run(run_id)  # ไม่มี prediction = raise (กฎเหล็กข้อ 3)
         gov.append_audit(
             actor=principal.user_id, action="run_completed", run_id=run_id, config_hash="-"

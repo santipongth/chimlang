@@ -279,3 +279,35 @@ def test_settings_get_put_cycle(client):
     assert client.put("/settings.json", json={"default_engine": "quantum"}).status_code == 422
     assert client.put("/settings.json", json={"unknown_key": 1}).status_code == 422
     client.put("/settings.json", json={"default_engine": "fabric", "default_agents": 100})
+
+
+@needs_pg
+def test_post_runs_user_claim_registered(client):
+    # เหตุการณ์จริง: claim/measurement/due_days ที่ผู้ใช้ตั้งต้องเข้า registry ตรงตัว
+    from datetime import date, timedelta
+
+    r = client.post(
+        "/runs",
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบเหตุการณ์จริงจาก UI",
+            "agents": 20,
+            "claim": "โพลสำนัก X หลังแถลงจะต่ำกว่า 50%",
+            "measurement": "โพลสำนัก X รอบสิ้นเดือน",
+            "due_days": 14,
+        },
+    )
+    assert r.status_code == 200
+    rid = r.json()["run_id"]
+    import psycopg
+
+    with psycopg.connect(DSN) as conn:
+        row = conn.execute(
+            "SELECT claim, measurement, due_date FROM prediction_registry "
+            "WHERE run_id = %s ORDER BY id DESC LIMIT 1",
+            (rid,),
+        ).fetchone()
+    assert row[0] == "โพลสำนัก X หลังแถลงจะต่ำกว่า 50%"
+    assert row[1] == "โพลสำนัก X รอบสิ้นเดือน"
+    assert row[2] == date.today() + timedelta(days=14)
+    client.delete(f"/runs/{rid}")

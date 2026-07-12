@@ -76,6 +76,10 @@ export interface CreateRunBody {
   pack_id?: number | null;
   red_team?: boolean;
   sources?: SourceInput[];
+  // เหตุการณ์จริง: ตั้งคำทำนายที่วัดผลได้เอง (ว่าง = ระบบตั้ง heuristic ให้)
+  claim?: string;
+  measurement?: string;
+  due_days?: number;
 }
 
 export async function createRun(body: CreateRunBody): Promise<string> {
