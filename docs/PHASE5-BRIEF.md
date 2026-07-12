@@ -82,6 +82,14 @@
 - [x] live smoke ยิง server จริง: ทุก endpoint ใหม่ตอบถูก (signal คืน 8 features, compare ที่ n=20 red team พลิกข้อสรุปจริง dd=+0.112, UI 200)
 - [x] tests +2 (รวม 285 เขียว)
 
+## แผนระยะยาว (มติผู้ใช้ 12 ก.ค. 2569: บันทึกไว้ ทำในอนาคต — ยังไม่เริ่ม)
+
+**GA hardening** (จาก security-review — ผู้ใช้สั่งพักงานนี้ระหว่างทำแล้ว revert ออก):
+1. TLS reverse proxy: เพิ่ม Caddy service ใน compose.prod (auto Let's Encrypt ผ่าน env DOMAIN, พอร์ต api ผูก localhost)
+2. Rate limit ครอบทุก endpoint: per-IP middleware (default ปิดใน dev/test — full suite ยิงเป็นพันครั้ง/นาที; เปิดใน compose.prod) + log 401/403
+3. Dependency scanning ใน CI: pip-audit + npm audit
+4. Pen test อิสระ + SSO/SAML + multi-tenant workspace isolation (ต้องจ้าง/ตัดสินใจภายนอก)
+
 ## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
 
 

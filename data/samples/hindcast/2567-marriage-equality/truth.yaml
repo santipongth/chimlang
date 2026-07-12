@@ -1,0 +1,3 @@
+# machine-readable ground truth — โหลดโดย scorer เท่านั้น ห้าม loader/agent แตะ
+senate_approves: true
+effective_by_jan2025: true

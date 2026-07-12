@@ -149,14 +149,19 @@ class GovernanceStore:
 
     # --- Calibration Engine (TRUST-02) ---
 
-    def due_unresolved(self, as_of: date) -> list[DuePrediction]:
-        """prediction ที่ครบกำหนดแล้วแต่ยังไม่ resolve — คิวงานของ Calibration Engine"""
+    def due_unresolved(self, as_of: date, *, include_test: bool = True) -> list[DuePrediction]:
+        """prediction ที่ครบกำหนดแล้วแต่ยังไม่ resolve — คิวงานของ Calibration Engine
+
+        include_test=False: กรอง domain 'ทดสอบ%' ออก (ขยะจาก test suite ใน dev DB —
+        registry เป็น append-only ลบไม่ได้ จึงกรองที่ชั้นอ่านแทน; UI ใช้โหมดนี้)
+        """
+        cond = "" if include_test else " AND p.domain NOT LIKE 'ทดสอบ%%'"
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT p.id, p.run_id, p.claim, p.confidence, p.domain, p.due_date "
                 "FROM prediction_registry p "
                 "LEFT JOIN prediction_resolution r ON r.prediction_id = p.id "
-                "WHERE p.due_date <= %s AND r.id IS NULL ORDER BY p.due_date, p.id",
+                f"WHERE p.due_date <= %s AND r.id IS NULL{cond} ORDER BY p.due_date, p.id",
                 (as_of,),
             ).fetchall()
         return [
@@ -212,25 +217,27 @@ class GovernanceStore:
             DomainCalibration(domain=r[0], resolved=int(r[1]), mean_brier=float(r[2])) for r in rows
         ]
 
-    def calibration_detail(self, as_of: date) -> dict:
+    def calibration_detail(self, as_of: date, *, include_test: bool = True) -> dict:
         """ข้อมูลครบสำหรับหน้า Calibration (P5-M3) — อ่านอย่างเดียว
 
         คืน: overall Brier, per-domain (นับ ✓/~/✗), weekly trend, รายการ resolved,
         คิวครบกำหนด (due) และคำทำนายที่ยังไม่ถึงกำหนด (upcoming)
+        include_test=False: กรอง domain 'ทดสอบ%' ออกทุกส่วน (UI ใช้โหมดนี้ — ดู due_unresolved)
         """
+        cond = "" if include_test else " AND p.domain NOT LIKE 'ทดสอบ%%'"
         with self._conn() as conn:
             resolved_rows = conn.execute(
                 "SELECT p.id, p.run_id, p.claim, p.domain, p.confidence, "
                 "COALESCE(r.outcome_value, CASE WHEN r.outcome THEN 1.0 ELSE 0.0 END) AS value, "
                 "r.brier, r.ts, r.note "
                 "FROM prediction_resolution r JOIN prediction_registry p ON p.id = r.prediction_id "
-                "ORDER BY r.ts DESC"
+                f"WHERE true{cond} ORDER BY r.ts DESC"
             ).fetchall()
             upcoming_rows = conn.execute(
                 "SELECT p.id, p.claim, p.domain, p.confidence, p.due_date "
                 "FROM prediction_registry p "
                 "LEFT JOIN prediction_resolution r ON r.prediction_id = p.id "
-                "WHERE p.due_date > %s AND r.id IS NULL ORDER BY p.due_date, p.id",
+                f"WHERE p.due_date > %s AND r.id IS NULL{cond} ORDER BY p.due_date, p.id",
                 (as_of,),
             ).fetchall()
 
@@ -297,7 +304,7 @@ class GovernanceStore:
                 "confidence": p.confidence,
                 "due_date": p.due_date.isoformat(),
             }
-            for p in self.due_unresolved(as_of)
+            for p in self.due_unresolved(as_of, include_test=include_test)
         ]
         upcoming = [
             {

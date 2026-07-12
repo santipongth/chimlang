@@ -55,6 +55,11 @@ def test_dashboard_pdf_endpoint():
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/pdf"
     assert r.content.startswith(b"%PDF")
+    # PRD pipeline ขั้น 7: Tipping Points ต้องอยู่ใน PDF เสมอแม้ไม่พบจุดพลิก (P5 เก็บตก)
+    from io import BytesIO
+
+    pdf_text = "".join(p.extract_text() for p in PdfReader(BytesIO(r.content)).pages)
+    assert "Tipping Points" in pdf_text
 
     # GOV-02: election + individual = 403; election + aggregate = ได้แต่ต้องติดป้ายบังคับ
     blocked = client.get(

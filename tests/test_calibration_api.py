@@ -113,7 +113,9 @@ def test_resolve_requires_run_permission(client, store, monkeypatch):
     )
 
 
-def test_calibration_json_shape(client, store):
+def test_calibration_json_shape_and_test_domain_filtered(client, store):
+    from datetime import date
+
     pid = _register(store, "run-p5m3-shape", confidence=0.9)
     store.resolve_prediction(pid, outcome=0.5, resolver="test")
     data = client.get("/calibration.json").json()
@@ -126,7 +128,12 @@ def test_calibration_json_shape(client, store):
         "due",
         "upcoming",
     }
-    dom = next(d for d in data["domains"] if d["domain"] == "ทดสอบ-p5m3")
-    assert dom["partial"] >= 1  # นับ ~ แยกจาก ✓/✗ จริง
-    item = next(i for i in data["items"] if i["prediction_id"] == pid)
+    # UI/API กรอง domain 'ทดสอบ%' ออก (ขยะ test — registry ลบไม่ได้จึงกรองชั้นอ่าน)
+    assert all(not d["domain"].startswith("ทดสอบ") for d in data["domains"])
+    assert all(i["prediction_id"] != pid for i in data["items"])
+    # แต่ชั้น store (include_test default) ยังเห็นครบ — partial=0.5 นับแยกจริง
+    detail = store.calibration_detail(date.today())
+    dom = next(d for d in detail["domains"] if d["domain"] == "ทดสอบ-p5m3")
+    assert dom["partial"] >= 1
+    item = next(i for i in detail["items"] if i["prediction_id"] == pid)
     assert item["outcome_value"] == 0.5

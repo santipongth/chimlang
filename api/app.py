@@ -335,6 +335,24 @@ def dashboard_pdf(
         row = " | ".join(f"{sc.belief_by_segment.get(seg, 0):.0%}" for sc in dash.scenarios)
         lines.append(f"| {seg} | {row} |")
 
+    # PRD pipeline ขั้น 7: Tipping Points บังคับใน "ทุกรายงาน" — PDF ด้วย (P5 เก็บตก 12 ก.ค.)
+    lines += [
+        "",
+        "## Tipping Points — จุดที่กระแสพลิก" if th else "## Tipping points — narrative flips",
+    ]
+    if dash.tipping_points:
+        for tp in dash.tipping_points:
+            lines.append(
+                f"- {tp['scenario']} round {tp['round']}: "
+                f"{tp['before']:.0%} → {tp['after']:.0%} ({tp['delta']:+.0%})"
+            )
+    else:
+        lines.append(
+            "- ไม่พบจุดพลิก (ไม่มี round ที่ความเชื่อเปลี่ยน ≥ 15%) — การแพร่ค่อยเป็นค่อยไป"
+            if th
+            else "- none detected (no round moved belief ≥ 15%) — diffusion was gradual"
+        )
+
     settings = get_settings()
     run_id = f"dashpdf-{datetime.now():%Y%m%d-%H%M%S}"
     # GOV-02: scenario เลือกตั้ง (ระดับ aggregate ที่อนุญาต) ต้องติดป้ายบังคับ 3 ชนิดใน PDF ด้วย
@@ -411,7 +429,7 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
                 "domain": p.domain,
                 "due_date": p.due_date.isoformat(),
             }
-            for p in store.due_unresolved(date.today())
+            for p in store.due_unresolved(date.today(), include_test=False)
         ]
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -834,7 +852,8 @@ def calibration_json(principal: Principal = Depends(get_principal)) -> dict:
     try:
         store = GovernanceStore(settings.postgres_url)
         store.setup()
-        return store.calibration_detail(date.today())
+        # UI ไม่โชว์ขยะจาก test suite (domain ทดสอบ%) — registry ลบไม่ได้จึงกรองที่ชั้นอ่าน
+        return store.calibration_detail(date.today(), include_test=False)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
 

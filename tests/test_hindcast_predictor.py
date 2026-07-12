@@ -31,9 +31,10 @@ def test_majority_fail_closed_on_tie_or_no_votes():
     assert majority([yes, bad, bad]) is True  # เสียงเสียไม่นับ
 
 
-def test_all_five_events_load_with_truth():
+def test_all_benchmark_events_load_with_truth():
     event_dirs = sorted(d for d in HINDCAST_DIR.iterdir() if d.is_dir())
-    assert len(event_dirs) == 5  # exit criteria ต้องมี 5 เหตุการณ์
+    # exit criteria Phase 0 ต้องมี ≥5 — ขยายเป็น 10 เมื่อ 12 ก.ค. 2569 (business goal ≥10 เผยแพร่)
+    assert len(event_dirs) >= 10
     for d in event_dirs:
         event = load_event(d)
         truth = load_truth(d)
