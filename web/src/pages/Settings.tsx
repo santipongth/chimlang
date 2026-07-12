@@ -1,13 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  AppSettings,
-  PersonaPack,
-  deletePack,
-  fetchPacks,
-  fetchSettings,
-  saveLlmKey,
-  saveSettings,
-} from "../api";
+import { AppSettings, fetchSettings, saveLlmKey, saveSettings } from "../api";
 import { useLang } from "../i18n";
 import { PageHeader, SelectCard } from "../ui";
 
@@ -16,7 +8,6 @@ import { PageHeader, SelectCard } from "../ui";
 export default function Settings() {
   const { t } = useLang();
   const [data, setData] = useState<AppSettings | null>(null);
-  const [packs, setPacks] = useState<PersonaPack[]>([]);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [keyDraft, setKeyDraft] = useState("");
@@ -32,7 +23,6 @@ export default function Settings() {
         setPrices({ ...(d.llm?.yaml_prices ?? {}), ...(d.llm_prices ?? {}) });
       })
       .catch((e) => setError(String(e.message ?? e)));
-    fetchPacks().then(setPacks).catch(() => {});
   };
   useEffect(load, []);
 
@@ -114,31 +104,6 @@ export default function Settings() {
                 />
               </label>
             </div>
-          </section>
-
-          <section className={card}>
-            <h2 className="font-semibold mb-3">★ Persona packs</h2>
-            {packs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("set_no_packs")}</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {packs.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="font-medium">{p.label}</div>
-                      <div className="truncate text-xs text-muted-foreground">{p.segments.map((s) => s.name).join(", ")}</div>
-                    </div>
-                    <button
-                      onClick={() => deletePack(p.id).then(load)}
-                      className="shrink-0 text-xs text-muted-foreground hover:text-red-600"
-                    >
-                      🗑 {t("set_delete")}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-3 text-xs text-muted-foreground">{t("set_packs_note")}</p>
           </section>
 
           {/* LLM ปรับเองได้ (ADR-0006) — API key ยังตั้งใน .env เท่านั้น
