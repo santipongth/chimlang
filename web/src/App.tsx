@@ -5,9 +5,10 @@ import NewRun from "./pages/NewRun";
 import Dashboard from "./pages/Dashboard";
 import Citizen from "./pages/Citizen";
 import Runs from "./pages/Runs";
+import Calibration from "./pages/Calibration";
 import type { DashboardData } from "./api";
 
-export type Page = "home" | "new" | "dashboard" | "citizen" | "runs";
+export type Page = "home" | "new" | "dashboard" | "calibration" | "citizen" | "runs";
 export interface RunRequest {
   subject: string;
   agents: number;
@@ -30,6 +31,7 @@ function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page
     { id: "home", icon: "🏠", label: t("nav_home") },
     { id: "new", icon: "＋", label: t("nav_new_run") },
     { id: "dashboard", icon: "📊", label: t("nav_dashboard") },
+    { id: "calibration", icon: "🎯", label: t("nav_calibration") },
     { id: "citizen", icon: "👥", label: t("nav_citizen") },
     { id: "runs", icon: "🕘", label: t("nav_runs") },
   ];
@@ -96,12 +98,13 @@ function Shell() {
         <Sidebar page={page} setPage={setPage} />
         <main className="min-w-0 flex-1 px-8 py-10">
           {/* dashboard/runs กว้าง max-w-4xl แบบ studio; ฟอร์ม/wizard แคบ max-w-3xl */}
-          <div className={`mx-auto ${page === "dashboard" || page === "runs" ? "max-w-4xl" : "max-w-3xl"}`}>
+          <div className={`mx-auto ${page === "dashboard" || page === "runs" || page === "calibration" ? "max-w-4xl" : "max-w-3xl"}`}>
           {page === "home" && <Landing onStart={() => setPage("new")} />}
           {page === "new" && <NewRun onRun={startRun} />}
           {page === "dashboard" && (
             <Dashboard request={request} result={result} setResult={setResult} onNew={() => setPage("new")} />
           )}
+          {page === "calibration" && <Calibration />}
           {page === "citizen" && <Citizen />}
           {page === "runs" && <Runs />}
           </div>

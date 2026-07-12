@@ -12,6 +12,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   nav_home: { th: "หน้าแรก", en: "Home" },
   nav_new_run: { th: "รันใหม่", en: "New run" },
   nav_dashboard: { th: "แดชบอร์ดผู้บริหาร", en: "Executive Dashboard" },
+  nav_calibration: { th: "Calibration", en: "Calibration" },
   nav_citizen: { th: "โหมดประชาชน", en: "Citizen Mode" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
   // Landing
@@ -150,6 +151,39 @@ const DICT: Record<string, { th: string; en: string }> = {
     en: "Every run has an immutable audit log and ≥1 registered prediction — resolve via scripts/resolve_predictions.py",
   },
   db_down: { th: "เชื่อมต่อฐานข้อมูลไม่ได้ (docker compose up -d)", en: "Database unavailable (docker compose up -d)" },
+  // Calibration (P5-M3)
+  cal_eyebrow: { th: "การปรับเทียบ", en: "CALIBRATION" },
+  cal_title: { th: "ระบบทายแม่นแค่ไหน?", en: "How well does the system predict?" },
+  cal_sub: {
+    th: "บันทึกผลจริงของคำทำนายที่ครบกำหนด — ระบบคำนวณ Brier score (ต่ำ = แม่นกว่า) แยกตามโดเมน; ทุกการ resolve เป็น append-only แก้ย้อนหลังไม่ได้",
+    en: "Mark real outcomes of due predictions — we compute Brier scores (lower = better) per domain; every resolution is append-only and immutable.",
+  },
+  tip_brier: {
+    th: "Brier score = ค่าเฉลี่ยของ (ความมั่นใจ − ผลจริง)²\n• 0 = สมบูรณ์แบบ\n• 0.10–0.20 = ดี\n• 0.25 = สุ่มเดา (โยนเหรียญ)\n• > 0.25 = มั่นใจเกินจริง\nผลจริง: เกิดขึ้น = 1, บางส่วน = 0.5, ไม่เกิด = 0",
+    en: "Brier score = mean of (confidence − actual)²\n• 0 = perfect\n• 0.10–0.20 = good\n• 0.25 = coin flip baseline\n• > 0.25 = overconfident\nActual: happened = 1, partial = 0.5, didn't = 0",
+  },
+  cal_scale_note: { th: "0 = สมบูรณ์แบบ · 0.25 = สุ่มเดา", en: "0 = perfect · 0.25 = coin flip" },
+  cal_resolved: { th: "ผลที่บันทึกแล้ว", en: "Outcomes marked" },
+  cal_best_domain: { th: "โดเมนแม่นสุด", en: "Best domain" },
+  cal_no_data: { th: "ยังไม่มีข้อมูล", en: "No data yet" },
+  cal_trend: { th: "แนวโน้ม Brier รายสัปดาห์", en: "Weekly Brier trend" },
+  cal_lower_better: { th: "ต่ำลง = แม่นขึ้น", en: "lower = better" },
+  cal_by_domain: { th: "ความแม่นตามโดเมน", en: "Accuracy by domain" },
+  cal_due_title: { th: "คำทำนายครบกำหนด — บันทึกผลจริง", en: "Due predictions — log outcomes" },
+  cal_immutable_note: {
+    th: "บันทึกแล้วแก้ไม่ได้ (append-only, TRUST-01) — โปรดใส่แหล่งอ้างอิงผลจริงทุกครั้ง",
+    en: "Resolutions are immutable (append-only, TRUST-01) — always cite the real-world source",
+  },
+  cal_happened: { th: "✓ เกิดจริง", en: "✓ Happened" },
+  cal_partial: { th: "~ บางส่วน", en: "~ Partial" },
+  cal_didnt: { th: "✗ ไม่เกิด", en: "✗ Didn't" },
+  cal_confirm_prefix: { th: "ยืนยันบันทึกผล", en: "Confirm outcome" },
+  cal_confirm_suffix: { th: "บันทึกแล้วแก้ไม่ได้", en: "this cannot be undone" },
+  cal_note_ph: { th: "แหล่งอ้างอิงผลจริง (ลิงก์ข่าว/ประกาศ/ตัวเลขทางการ)", en: "Real-world source (news link / official figure)" },
+  cal_confirm_btn: { th: "ยืนยัน (แก้ไม่ได้)", en: "Confirm (immutable)" },
+  cal_cancel: { th: "ยกเลิก", en: "Cancel" },
+  cal_resolved_list: { th: "ผลที่บันทึกแล้ว (อ่านอย่างเดียว)", en: "Resolved (read-only)" },
+  cal_upcoming: { th: "ยังไม่ถึงกำหนด", en: "Not yet due" },
 };
 
 const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }>({

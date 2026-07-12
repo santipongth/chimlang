@@ -27,12 +27,12 @@
 - [x] Opinion canvas ระดับ segment: x=เชื่อ baseline, y=เชื่อหลังคำชี้แจง, ขนาดฟอง=สัดส่วนประชากร, เส้นทแยง=ไม่เปลี่ยน (ระดับ segment เท่านั้น — SIM-09)
 - [x] unit tests: มี/ไม่มี tipping, deterministic ต่อ seed
 
-### P5-M3 — Calibration UI (append-only)
-- [ ] Backend: `GET /calibration.json` (Brier รวม + rating bands + trend รายสัปดาห์ + per-domain + รายการ prediction ครบกำหนด/ยัง)
-- [ ] `POST /predictions/{id}/resolve` outcome `true|partial|false` (+note) — **partial = 0.5 ใน Brier**; เขียนเป็น resolution record ใหม่ (append-only ตาม TRUST-01) ผ่าน RBAC (analyst ขึ้นไป)
-- [ ] หน้า Calibration: 3 stat cards (serif 4xl), sparkline เส้นอ้างอิง 0/0.25, domain rows ✓/~/✗, outcome pills, tooltip สูตรทุกจุด
-- [ ] ปลดล็อก resolve #161 ผ่าน UI ได้จริง
-- [ ] tests: partial Brier, append-only (ยิง resolve ซ้ำ = record ใหม่ไม่ทับ), RBAC
+### P5-M3 — Calibration UI (append-only) ✅ (12 ก.ค. 2026)
+- [x] Backend: `GET /calibration.json` (Brier รวม + rating bands + trend รายสัปดาห์ + per-domain + รายการ prediction ครบกำหนด/ยัง)
+- [x] `POST /predictions/{id}/resolve` outcome `true|partial|false` (+note) — **partial = 0.5 ใน Brier**; เขียนเป็น resolution record ใหม่ (append-only ตาม TRUST-01) ผ่าน RBAC (analyst ขึ้นไป)
+- [x] หน้า Calibration: 3 stat cards (serif 4xl), sparkline เส้นอ้างอิง 0/0.25, domain rows ✓/~/✗, outcome pills, tooltip สูตรทุกจุด
+- [x] ปลดล็อก resolve #161 ผ่าน UI ได้จริง
+- [x] tests: partial Brier, append-only (ยิง resolve ซ้ำ = record ใหม่ไม่ทับ), RBAC
 
 ### P5-M4 — Red Team in-population + Compare
 - [ ] persona factory: flag `red_team=True` → แทน 2 agents สุดท้ายด้วย contrarian (prior −0.6) + auditor (−0.3) — ไม่แตะ cap/BudgetGuard
@@ -66,7 +66,7 @@
 |---|---|
 | M1 UI shell | ✅ 12 ก.ค. |
 | M2 Tipping + canvas | ✅ 12 ก.ค. |
-| M3 Calibration UI | ⏳ กำลังทำ |
-| M4 Red Team + Compare | รอ |
+| M3 Calibration UI | ✅ 12 ก.ค. |
+| M4 Red Team + Compare | ⏳ กำลังทำ |
 | M5 Watchlist + webhook | รอ |
 | M6 Graph viz + Insights | รอ |

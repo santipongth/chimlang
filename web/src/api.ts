@@ -46,6 +46,50 @@ export async function fetchRuns(): Promise<RunsData> {
   return r.json();
 }
 
+// ---- Calibration (P5-M3) ----
+
+export interface CalibrationItem {
+  prediction_id: number;
+  run_id: string;
+  claim: string;
+  domain: string;
+  confidence: number;
+  outcome_value: number; // 1 | 0.5 | 0
+  brier: number;
+  resolved_at: string;
+  note: string;
+}
+
+export interface CalibrationData {
+  overall_brier: number | null;
+  resolved_total: number;
+  domains: { domain: string; n: number; brier: number; happened: number; partial: number; didnt: number }[];
+  trend: { t: number; brier: number; n: number }[];
+  items: CalibrationItem[];
+  due: { prediction_id: number; claim: string; domain: string; confidence: number; due_date: string }[];
+  upcoming: { prediction_id: number; claim: string; domain: string; confidence: number; due_date: string }[];
+}
+
+export async function fetchCalibration(): Promise<CalibrationData> {
+  const r = await fetch("/calibration.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function resolvePrediction(
+  id: number,
+  outcome: "true" | "partial" | "false",
+  note: string,
+): Promise<{ brier: number }> {
+  const r = await fetch(`/predictions/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ outcome, note }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function fetchImpact(body: Record<string, string | number>): Promise<ImpactResult> {
   const r = await fetch("/citizen/impact.json", {
     method: "POST",

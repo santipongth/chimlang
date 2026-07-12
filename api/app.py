@@ -356,6 +356,77 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"runs": runs, "due": due}
 
 
+@app.get("/calibration.json")
+def calibration_json(principal: Principal = Depends(get_principal)) -> dict:
+    """หน้า Calibration (P5-M3): Brier รวม/รายโดเมน + trend รายสัปดาห์ + คิว resolve
+
+    อ่านอย่างเดียว — แค่ authenticate (viewer ดูได้ เหมือน /runs.json)
+    """
+    from datetime import date
+
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        store = GovernanceStore(settings.postgres_url)
+        store.setup()
+        return store.calibration_detail(date.today())
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+class ResolveBody(BaseModel):
+    outcome: str  # "true" | "partial" | "false"
+    note: str = ""
+
+
+@app.post("/predictions/{prediction_id}/resolve")
+def resolve_prediction_api(
+    prediction_id: int,
+    body: ResolveBody,
+    principal: Principal = Depends(get_principal),
+) -> dict:
+    """Resolve คำทำนาย (TRUST-02) — append-only: บันทึกแล้วแก้ไม่ได้ (TRUST-01)
+
+    partial = เกิดขึ้นบางส่วน → outcome_value 0.5 ใน Brier | ต้องสิทธิ์ RUN (analyst ขึ้นไป)
+    """
+    require(principal, Permission.RUN)
+    values = {"true": 1.0, "partial": 0.5, "false": 0.0}
+    if body.outcome not in values:
+        raise HTTPException(status_code=422, detail="outcome ต้องเป็น true/partial/false")
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        store = GovernanceStore(settings.postgres_url)
+        store.setup()
+        brier = store.resolve_prediction(
+            prediction_id,
+            outcome=values[body.outcome],
+            resolver=principal.user_id,
+            note=body.note,
+        )
+        store.append_audit(
+            actor=principal.user_id,
+            action="prediction_resolved",
+            run_id=f"prediction-{prediction_id}",
+            config_hash="-",
+            detail=f"outcome={body.outcome} brier={brier:.3f} note={body.note[:120]}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        msg = str(e)
+        if "duplicate key" in msg or "prediction_resolution_prediction_id_key" in msg:
+            # UNIQUE ที่ DB: resolve ซ้ำ = แก้ผลย้อนหลัง — ห้ามตามกฎเหล็กข้อ 3
+            raise HTTPException(
+                status_code=409,
+                detail=f"prediction {prediction_id} ถูก resolve ไปแล้ว — แก้ผลไม่ได้ (TRUST-01)",
+            ) from e
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {msg}") from e
+    return {"prediction_id": prediction_id, "outcome": body.outcome, "brier": round(brier, 4)}
+
+
 @app.get("/dashboard.html", response_class=HTMLResponse)
 def dashboard_html(
     subject: str = Query("มาตรการค่าธรรมเนียมรถติด กทม."),

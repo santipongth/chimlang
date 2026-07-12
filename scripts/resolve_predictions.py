@@ -18,7 +18,11 @@ from trust.calibration import render_calibration_dashboard
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--id", type=int, help="prediction id ที่จะ resolve")
-    parser.add_argument("--outcome", choices=["true", "false"], help="ผลจริงตรงตาม claim ไหม")
+    parser.add_argument(
+        "--outcome",
+        choices=["true", "partial", "false"],
+        help="ผลจริงตรงตาม claim ไหม (partial = เกิดขึ้นบางส่วน → 0.5 ใน Brier)",
+    )
     parser.add_argument("--note", default="", help="แหล่งอ้างอิงผลจริง")
     args = parser.parse_args()
 
@@ -27,10 +31,9 @@ def main() -> None:
 
     if args.id is not None:
         if args.outcome is None:
-            raise SystemExit("ต้องระบุ --outcome true/false คู่กับ --id")
-        brier = store.resolve_prediction(
-            args.id, outcome=args.outcome == "true", resolver=getuser(), note=args.note
-        )
+            raise SystemExit("ต้องระบุ --outcome true/partial/false คู่กับ --id")
+        value = {"true": 1.0, "partial": 0.5, "false": 0.0}[args.outcome]
+        brier = store.resolve_prediction(args.id, outcome=value, resolver=getuser(), note=args.note)
         store.append_audit(
             actor=getuser(),
             action="prediction_resolved",
