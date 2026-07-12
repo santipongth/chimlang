@@ -80,6 +80,24 @@ export interface CreateRunBody {
   claim?: string;
   measurement?: string;
   due_days?: number;
+  views?: string[]; // มุมมองที่จะเปิดใช้ (P6-M6)
+}
+
+// พูลของ persona (P6-M6)
+export interface PoolSegment {
+  id: string;
+  name: string;
+  share: number;
+  cultural_priors: Record<string, number>;
+  channel_mix: Record<string, number>;
+  traits: string[];
+}
+
+export async function fetchPool(packId?: number | null): Promise<{ source: string; segments: PoolSegment[] }> {
+  const q = packId != null ? `?pack_id=${packId}` : "";
+  const r = await fetch(`/personas/pool.json${q}`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
 }
 
 export async function createRun(body: CreateRunBody): Promise<string> {

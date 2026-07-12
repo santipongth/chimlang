@@ -558,6 +558,8 @@ class RunBody(BaseModel):
     claim: str = ""
     measurement: str = ""
     due_days: int = 30
+    # มุมมองผลลัพธ์ที่จะเปิดใช้ (P6-M6) — RunDetail แสดงเฉพาะ tab เหล่านี้; ว่าง = ครบทุกมุม
+    views: list[str] = []
 
 
 @app.get("/engines.json")
@@ -659,10 +661,13 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
 
+    valid_views = {"overview", "debate", "canvas", "evidence"}
+    views = [v for v in body.views if v in valid_views] or list(valid_views)
     config = {
         "pack_id": body.pack_id,
         "red_team": body.red_team,
         "requested_agents": body.agents,
+        "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
     }
     rstore.create(
         run_id=run_id,
@@ -974,6 +979,43 @@ class PackGenerateBody(BaseModel):
 class TryAskBody(BaseModel):
     segment: dict
     question: str
+
+
+@app.get("/personas/pool.json")
+def personas_pool_json(
+    pack_id: int | None = Query(None), principal: Principal = Depends(get_principal)
+) -> dict:
+    """พูลของ persona (P6-M6) — segments + สัดส่วนที่จะใช้จริงในรัน (default สำมะโน หรือ pack)"""
+    settings = get_settings()
+    if pack_id is not None:
+        from simulation.persona_packs import PackStore
+
+        try:
+            store = PackStore(settings.postgres_url)
+            store.setup()
+            pack = store.get(pack_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+        segments, source = pack.segments, f"pack:{pack.label}"
+    else:
+        segments = PersonaFactory().segments
+        source = "census"
+    return {
+        "source": source,
+        "segments": [
+            {
+                "id": s.get("id", ""),
+                "name": s.get("name", ""),
+                "share": s.get("share", 0),
+                "cultural_priors": s.get("cultural_priors", {}),
+                "channel_mix": s.get("channel_mix", {}),
+                "traits": s.get("traits", []),
+            }
+            for s in segments
+        ],
+    }
 
 
 @app.get("/personas/packs.json")

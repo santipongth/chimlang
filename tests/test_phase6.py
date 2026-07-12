@@ -490,3 +490,70 @@ def test_budget_override_from_settings(client):
         and data["budget"]["monthly_cap_effective"] == 20.0
     )
     client.put("/settings.json", json={"run_budget_usd_cap": 0.0, "monthly_budget_usd_cap": 0.0})
+
+
+# ---- P6-M6: persona pool + view toggles ----
+
+
+@needs_pg
+def test_persona_pool_census_and_pack(client):
+    # default = สำมะโน (census); ระบุ pack = segments ของ pack
+    census = client.get("/personas/pool.json").json()
+    assert census["source"] == "census" and len(census["segments"]) >= 2
+    assert all("name" in s and "share" in s for s in census["segments"])
+    assert abs(sum(s["share"] for s in census["segments"]) - 1.0) < 0.02
+
+    r = client.post(
+        "/personas/packs",
+        json={"label": "pool ทดสอบ", "segments": _pool_segments(), "prompt": ""},
+    )
+    pid = r.json()["id"]
+    pack = client.get("/personas/pool.json", params={"pack_id": pid}).json()
+    assert pack["source"].startswith("pack:") and len(pack["segments"]) == 2
+    assert client.get("/personas/pool.json", params={"pack_id": 99999999}).status_code == 404
+
+
+@needs_pg
+def test_run_stores_selected_views(client):
+    r = client.post(
+        "/runs",
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบ views",
+            "agents": 20,
+            "views": ["overview", "canvas"],
+        },
+    )
+    rid = r.json()["run_id"]
+    detail = client.get(f"/runs/{rid}.json").json()
+    assert set(detail["config"]["views"]) == {"overview", "canvas"}  # เก็บเฉพาะที่เลือก
+    client.delete(f"/runs/{rid}")
+
+
+@needs_pg
+def test_run_views_empty_defaults_to_all(client):
+    r = client.post("/runs", json={"engine": "fabric", "subject": "ทดสอบ views ว่าง", "agents": 20})
+    rid = r.json()["run_id"]
+    views = client.get(f"/runs/{rid}.json").json()["config"]["views"]
+    assert set(views) == {"overview", "debate", "canvas", "evidence"}  # ว่าง = ครบ
+    client.delete(f"/runs/{rid}")
+
+
+def _pool_segments():
+    return [
+        {
+            "id": f"pool_{i}",
+            "name": f"กลุ่ม pool {i}",
+            "share": 0.5,
+            "voice_activity": 0.5,
+            "cultural_priors": {"kreng_jai": 0.5, "say_do_gap": 0.4, "sarcasm_meme": 0.3},
+            "channel_mix": {
+                "line_closed_group": 0.3,
+                "public_feed": 0.3,
+                "algo_feed": 0.25,
+                "offline_wom": 0.15,
+            },
+            "traits": ["ทดสอบ"],
+        }
+        for i in range(2)
+    ]

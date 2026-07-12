@@ -4,11 +4,14 @@ import { PageHeader, SelectCard } from "../ui";
 import {
   EngineInfo,
   PersonaPack,
+  PoolSegment,
   SourceInput,
   createRun,
   fetchEngines,
   fetchPacks,
+  fetchPool,
   fetchSettings,
+  pct,
 } from "../api";
 import PersonaPackModal from "../PersonaPackModal";
 import type { RunRequest } from "../App";
@@ -88,11 +91,18 @@ export default function NewRun({
   const [claim, setClaim] = useState("");
   const [measurement, setMeasurement] = useState("");
   const [dueDays, setDueDays] = useState(30);
+  const [pool, setPool] = useState<PoolSegment[]>([]);
+  const [poolOpen, setPoolOpen] = useState(false);
+  const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const loadPacks = () => fetchPacks().then(setPacks).catch(() => {});
+  // โหลดพูลของ persona ทุกครั้งที่เปลี่ยน pack (P6-M6)
+  useEffect(() => {
+    fetchPool(packId).then((d) => setPool(d.segments)).catch(() => setPool([]));
+  }, [packId]);
   useEffect(() => {
     loadPacks();
     fetchEngines().then(setEngines).catch(() => {});
@@ -160,6 +170,7 @@ export default function NewRun({
         claim: claim.trim(),
         measurement: measurement.trim(),
         due_days: dueDays,
+        views,
       });
       onCreated(runId);
     } catch (e: any) {
@@ -339,6 +350,63 @@ export default function NewRun({
             <button type="button" onClick={() => setPackModalOpen(true)} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">
               ✨ {t("wiz_persona_create")}
             </button>
+
+            {/* พูลของ persona — เห็นองค์ประกอบก่อนรัน (P6-M6) */}
+            {pool.length > 0 && (
+              <div className="mt-3 rounded-xl border border-border bg-background p-3">
+                <button type="button" onClick={() => setPoolOpen(!poolOpen)} className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground">
+                  <span>👥 {t("wiz_pool_title")} ({pool.length} {t("wiz_pool_unit")})</span>
+                  <span>{poolOpen ? "▲" : "▼"}</span>
+                </button>
+                {poolOpen && (
+                  <div className="mt-2 space-y-1.5">
+                    {pool.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 text-xs">
+                        <span className="w-40 shrink-0 truncate">{s.name}</span>
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                          <div className="h-full bg-primary" style={{ width: `${s.share * 100}%` }} />
+                        </div>
+                        <span className="w-9 shrink-0 text-right tabular-nums text-muted-foreground">{pct(s.share)}</span>
+                      </div>
+                    ))}
+                    <p className="pt-1 text-[11px] text-muted-foreground">{t("wiz_pool_note")}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* มุมมองผลลัพธ์ที่จะเปิดใช้ (P6-M6) */}
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_views_title")}</div>
+            <p className="mt-1 text-xs text-muted-foreground">{t("wiz_views_desc")}</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {([
+                ["overview", "📊", t("wiz_view_overview")],
+                ["debate", "🗣", t("wiz_view_debate")],
+                ["canvas", "🫧", t("wiz_view_canvas")],
+                ["evidence", "🔍", t("wiz_view_evidence")],
+              ] as const)
+                .filter(([id]) => id !== "debate" || isDebate) // การถกเถียงเฉพาะ debate engine
+                .map(([id, icon, label]) => {
+                  const on = views.includes(id) || id === "overview";
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={id === "overview"}
+                      onClick={() => setViews(on ? views.filter((v) => v !== id) : [...views, id])}
+                      className={`flex items-center gap-2 rounded-xl border p-2.5 text-left text-sm transition disabled:opacity-100 ${
+                        on ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"
+                      }`}
+                    >
+                      <span>{icon}</span>
+                      <span className="flex-1">{label}</span>
+                      {on && <span className="text-xs text-primary-strong">✓</span>}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
 
           {/* เลือก ON = โทนเขียว primary (มติผู้ใช้ 12 ก.ค. — สถานะ "เปิดใช้" ควรสื่อเชิงบวก) */}

@@ -5,7 +5,7 @@ import { InfoTip, PageHeader, Tabs } from "../ui";
 
 // Run detail (P6-M2) — หน้าเดียวรองรับทั้ง fabric (dashboard payload) และ debate (posts+replay)
 
-type Tab = "overview" | "debate" | "report";
+type Tab = "overview" | "debate" | "canvas" | "evidence" | "report";
 
 function StanceBar({ v }: { v: number }) {
   // จุดยืน -1..1 → แถบซ้าย(แดง)/ขวา(เขียว) จากกึ่งกลาง
@@ -18,6 +18,33 @@ function StanceBar({ v }: { v: number }) {
       />
       <span className="absolute left-1/2 top-[-2px] h-3 w-px bg-border" />
     </span>
+  );
+}
+
+// แผนภาพสวอร์มของ debate — จุดยืน agent รอบสุดท้าย (x = จุดยืน −1..1, สี = ทิศ)
+function DebateScatter({ posts, rounds, t }: { posts: any[]; rounds: number; t: (k: string) => string }) {
+  const last = posts.filter((x) => x.round_no === rounds - 1 && !x.failed);
+  const W = 560, H = 260, P = 40;
+  const sx = (s: number) => P + ((s + 1) / 2) * (W - P * 2);
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+        <line x1={P} y1={H / 2} x2={W - P} y2={H / 2} stroke="var(--color-border)" />
+        <line x1={W / 2} y1={30} x2={W / 2} y2={H - 30} stroke="var(--color-border)" strokeDasharray="4,4" />
+        <text x={P} y={H - 12} fontSize="10" fill="var(--color-muted-foreground)">← {t("rd_scatter_oppose")}</text>
+        <text x={W - P} y={H - 12} textAnchor="end" fontSize="10" fill="var(--color-muted-foreground)">{t("rd_scatter_support")} →</text>
+        {last.map((x, i) => {
+          const jitter = ((i * 53) % 100) - 50;
+          const color = x.stance > 0.2 ? "var(--color-primary)" : x.stance < -0.2 ? "oklch(0.65 0.22 25)" : "oklch(0.6 0.02 250)";
+          return (
+            <circle key={i} cx={sx(x.stance)} cy={H / 2 + jitter * 0.9} r={7} fill={color} fillOpacity={0.6} stroke="white" strokeWidth={1.2}>
+              <title>{`${x.segment}: ${x.stance >= 0 ? "+" : ""}${x.stance.toFixed(2)}\n${x.content}`}</title>
+            </circle>
+          );
+        })}
+      </svg>
+      <p className="text-xs text-muted-foreground">{last.length} {t("rd_scatter_agents")}</p>
+    </div>
   );
 }
 
@@ -38,6 +65,9 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   const card = "bg-card border border-border rounded-2xl p-6";
   const isDebate = data?.engine === "debate";
   const p = data?.payload ?? {};
+  // มุมมองที่ผู้ใช้เลือกเปิดตอนสั่งรัน (P6-M6) — ว่าง = ครบทุกมุม
+  const enabledViews: string[] = data?.config?.views ?? ["overview", "debate", "canvas", "evidence"];
+  const showView = (v: string) => v === "report" || enabledViews.includes(v);
   const rounds = useMemo(
     () => (data ? [...new Set(data.posts.map((x) => x.round_no))].sort((a, b) => a - b) : []),
     [data],
@@ -67,9 +97,11 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
         <>
           <Tabs<Tab>
             tabs={[
-              { id: "overview", label: t("rd_tab_overview") },
-              ...(isDebate ? [{ id: "debate" as Tab, label: t("rd_tab_debate") }] : []),
-              { id: "report", label: t("rd_tab_report") },
+              { id: "overview" as Tab, label: t("rd_tab_overview") },
+              ...(isDebate && showView("debate") ? [{ id: "debate" as Tab, label: t("rd_tab_debate") }] : []),
+              ...(showView("canvas") ? [{ id: "canvas" as Tab, label: t("rd_tab_canvas") }] : []),
+              ...(showView("evidence") ? [{ id: "evidence" as Tab, label: t("rd_tab_evidence") }] : []),
+              { id: "report" as Tab, label: t("rd_tab_report") },
             ]}
             active={tab}
             onChange={setTab}
@@ -215,6 +247,76 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                     </li>
                   ))}
               </ul>
+            </section>
+          )}
+
+          {/* แผนภาพสวอร์ม — จุดยืน/ความเชื่อรายกลุ่ม (P6-M6) */}
+          {tab === "canvas" && (
+            <section className={card}>
+              <h2 className="font-semibold mb-1">🫧 {t("rd_tab_canvas")}</h2>
+              <p className="text-xs text-muted-foreground mb-4">{t("rd_canvas_note")}</p>
+              {isDebate ? (
+                // debate: scatter จุดยืนต่อ agent รอบสุดท้าย (x=จุดยืน, y=กระจายกัน)
+                <DebateScatter posts={data.posts} rounds={data.rounds} t={t} />
+              ) : (
+                // fabric: สัดส่วนเชื่อรายกลุ่ม baseline vs หลังคำชี้แจง
+                <div className="space-y-1.5">
+                  {Object.entries((p.scenarios?.[p.scenarios.length - 1]?.belief_by_segment ?? {}) as Record<string, number>).map(([seg, v]) => (
+                    <div key={seg} className="flex items-center gap-2 text-xs">
+                      <span className="w-44 shrink-0 truncate text-muted-foreground">{seg}</span>
+                      <div className="h-3 flex-1 overflow-hidden rounded-full bg-secondary">
+                        <div className="h-full bg-primary" style={{ width: `${v * 100}%` }} />
+                      </div>
+                      <span className="w-10 text-right tabular-nums">{pct(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* เส้นทางหลักฐาน (P6-M6) — debate: เอกสารอ้างอิง; fabric: ร่องรอยกลไก */}
+          {tab === "evidence" && (
+            <section className={card + " space-y-3"}>
+              <h2 className="font-semibold mb-1">🔍 {t("rd_tab_evidence")}</h2>
+              {isDebate ? (
+                (p.sources ?? []).length > 0 ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">{t("rd_evidence_debate")}</p>
+                    <ul className="space-y-1.5 text-sm">
+                      {p.sources.map((s: any, i: number) => (
+                        <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{s.status === "ready" ? "✅" : s.status === "blocked" ? "⛔" : "⚠️"} {s.label}</span>
+                            <span className="text-xs text-muted-foreground">{s.chunks} {t("rd_evidence_chunks")}</span>
+                          </div>
+                          {s.error && <div className="mt-1 text-xs text-red-700">{s.error}</div>}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-muted-foreground">{t("rd_evidence_used")}: {p.context_used ?? 0}</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("rd_evidence_none")}</p>
+                )
+              ) : (
+                // fabric: ไม่มี LLM cite — แสดง tipping + ร่องรอยกลไก (ซื่อสัตย์กับ engine จริง)
+                <>
+                  <p className="text-xs text-muted-foreground">{t("rd_evidence_fabric")}</p>
+                  {(p.tipping_points ?? []).length > 0 ? (
+                    <ul className="space-y-1 text-sm">
+                      {p.tipping_points.map((tp: any, i: number) => (
+                        <li key={i} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                          ⚡ {tp.scenario} · {t("rd_round_word")} {tp.round}: {pct(tp.before)} → {pct(tp.after)} ({tp.delta > 0 ? "+" : ""}{Math.round(tp.delta * 100)}%)
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("tipping_none")}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">🔗 {t("rd_evidence_trace")}</p>
+                </>
+              )}
             </section>
           )}
 
