@@ -560,6 +560,8 @@ class RunBody(BaseModel):
     due_days: int = 30
     # มุมมองผลลัพธ์ที่จะเปิดใช้ (P6-M6) — RunDetail แสดงเฉพาะ tab เหล่านี้; ว่าง = ครบทุกมุม
     views: list[str] = []
+    # News Desk (P7, SIM-11): เปิดโต๊ะข่าวสด (debate เท่านั้น) — agent ได้ข่าวตาม media diet กลุ่มตัวเอง
+    live_news: bool = False
 
 
 @app.get("/engines.json")
@@ -668,6 +670,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
         "red_team": body.red_team,
         "requested_agents": body.agents,
         "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
+        "live_news": body.live_news,  # provenance: run นี้ใช้ข่าวสดหรือไม่ (P7)
     }
     rstore.create(
         run_id=run_id,
@@ -706,6 +709,51 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
 
                 source_status = ingest_sources(settings.postgres_url, run_id, body.sources)
             context = retrieve_context(settings.postgres_url, run_id, subject, k=6)
+            # News Desk (P7, SIM-11): โต๊ะข่าวกลางดึงข่าวสด → media diet รายกลุ่ม
+            segment_news: dict[str, tuple[str, ...]] = {}
+            news_fetcher = None
+            news_status: dict = {"enabled": False}
+            if body.live_news:
+                from core.run_context import RunContext
+                from simulation.newsdesk import gather, load_items, segment_feed
+
+                ctx = RunContext(run_id=run_id, seed=settings.default_seed)
+                seg_mixes = {p.segment_name: p.channel_mix for p in personas}
+
+                def _diet(items) -> dict[str, tuple[str, ...]]:
+                    return {
+                        seg: tuple(
+                            f"{it.title}: {it.content[:250]}"
+                            for it in segment_feed(
+                                items, mix, subject, k=4, seed=settings.default_seed
+                            )
+                        )
+                        for seg, mix in seg_mixes.items()
+                    }
+
+                gather(settings.postgres_url, ctx, queries=[subject])
+                all_items = load_items(settings.postgres_url, run_id)
+                segment_news = _diet(all_items)
+
+                def news_fetcher(queries: list[str]) -> dict[str, tuple[str, ...]]:
+                    # intent ระหว่างรอบ: ค้นเพิ่ม (gate+PII+snapshot ใน gather) → diet ใหม่
+                    gather(settings.postgres_url, ctx, feeds=[], queries=queries)
+                    return _diet(load_items(settings.postgres_url, run_id))
+
+                news_status = {
+                    "enabled": True,
+                    "items": [
+                        {
+                            "provider": it.provider,
+                            "title": it.title,
+                            "url": it.url,
+                            "fetched_at": it.fetched_at,
+                            "status": it.status,
+                            "error": it.error,
+                        }
+                        for it in all_items
+                    ],
+                }
             result = run_debate(
                 personas,
                 subject=subject,
@@ -713,12 +761,29 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                 seed=settings.default_seed,
                 adapter=make_debate_adapter(n, rounds),
                 context_chunks=context,
+                segment_news=segment_news,
+                news_fetcher=news_fetcher,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
             # งบรวมเดือน (P6-M5): บันทึกยอดจ่ายจริงเพื่อคุมสะสมทั้งเดือน
             from core.llm.budget import record_spend
 
             record_spend(settings.postgres_url, result.cost_usd, run_id=run_id)
+            # อัปเดตรายการข่าวหลังรัน (รวมที่ค้นเพิ่มจาก intent ระหว่างรอบ)
+            if news_status.get("enabled"):
+                from simulation.newsdesk import load_items as _reload_news
+
+                news_status["items"] = [
+                    {
+                        "provider": it.provider,
+                        "title": it.title,
+                        "url": it.url,
+                        "fetched_at": it.fetched_at,
+                        "status": it.status,
+                        "error": it.error,
+                    }
+                    for it in _reload_news(settings.postgres_url, run_id)
+                ]
             payload = {
                 "synthesis": result.synthesis,
                 "metrics": result.metrics,
@@ -726,6 +791,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                 "red_team": body.red_team,
                 "sources": source_status,
                 "context_used": len(context),
+                "news": news_status,
             }
         rstore.finish(run_id, payload)
         _register_run_prediction(

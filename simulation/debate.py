@@ -39,6 +39,7 @@ class DebatePost:
     stance: float
     sentiment: float
     failed: bool = False
+    want_to_know: str = ""  # query intent (P7-M3) — สิ่งที่ agent อยากรู้เพิ่ม → โต๊ะข่าวค้นให้
 
     def to_dict(self) -> dict:
         return {
@@ -49,6 +50,7 @@ class DebatePost:
             "stance": round(self.stance, 4),
             "sentiment": round(self.sentiment, 4),
             "failed": self.failed,
+            "want_to_know": self.want_to_know,
         }
 
 
@@ -115,7 +117,7 @@ def _persona_system(p: Persona) -> str:
     )
 
 
-def _parse_post(text: str) -> tuple[str, float, float]:
+def _parse_post(text: str) -> tuple[str, float, float, str]:
     clean = sanitize_llm_text(text)
     clean = re.sub(r"^```(?:json)?|```$", "", clean.strip(), flags=re.MULTILINE).strip()
     data = json.loads(clean)
@@ -124,7 +126,8 @@ def _parse_post(text: str) -> tuple[str, float, float]:
         raise ValueError("content ว่าง")
     stance = max(-1.0, min(1.0, float(data["stance"])))
     sentiment = max(-1.0, min(1.0, float(data.get("sentiment", 0))))
-    return content, stance, sentiment
+    want = str(data.get("want_to_know", "")).strip()[:120]
+    return content, stance, sentiment, want
 
 
 def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> dict:
@@ -178,6 +181,8 @@ def run_debate(
     seed: int,
     adapter: LLMAdapter,
     context_chunks: tuple[str, ...] = (),
+    segment_news: dict[str, tuple[str, ...]] | None = None,
+    news_fetcher=None,  # callable(list[str]) -> dict[segment, tuple[str,...]] — โต๊ะข่าวค้นตาม intent
     on_round=None,
 ) -> DebateResult:
     settings = get_settings()
@@ -189,6 +194,7 @@ def run_debate(
     rng = Random(seed)
     stances = [_initial_stance(p) for p in personas]
     all_posts: list[DebatePost] = []
+    news: dict[str, tuple[str, ...]] = dict(segment_news or {})  # media diet รายกลุ่ม (P7)
     context_block = (
         "\n".join(f"[{i + 1}] {c[:600]}" for i, c in enumerate(context_chunks[:6]))
         if context_chunks
@@ -208,18 +214,32 @@ def run_debate(
                 or "(ยังไม่มีโพสต์ก่อนหน้า — นี่คือรอบเปิด แสดงมุมมองตั้งต้นของคุณ)"
             )
 
+        # ฟีดข่าวของกลุ่ม (media diet — P7): แต่ละ segment เห็นชุดข่าวไม่เหมือนกัน
+        news_snapshot = dict(news)  # freeze ต่อรอบ ให้ทุก thread เห็นชุดเดียวกัน
+
         def ask(
-            idx: int, r: int = r, feeds: list[str] = feeds
+            idx: int, r: int = r, feeds: list[str] = feeds, news_now: dict = news_snapshot
         ) -> DebatePost:  # bind ค่าปัจจุบันของ loop
             p = personas[idx]
+            seg_news = news_now.get(p.segment_name, ())
+            news_block = (
+                "\nข่าวล่าสุดที่คนกลุ่มคุณเห็นในฟีดตัวเอง:\n"
+                + "\n".join(f"• {ln[:300]}" for ln in seg_news[:4])
+                + "\n"
+                if seg_news
+                else ""
+            )
+            want_hint = (
+                ', "want_to_know": "สิ่งที่อยากรู้เพิ่มก่อนตัดสินใจ (สั้นๆ หรือเว้นว่าง)"' if news_fetcher else ""
+            )
             user = (
                 f"หัวข้อดีเบต: {subject}\n\n"
-                f"ข้อมูลอ้างอิง:\n{context_block}\n\n"
+                f"ข้อมูลอ้างอิง:\n{context_block}\n{news_block}\n"
                 f"จุดยืนปัจจุบันของคุณ: {stances[idx]:+.2f} (−1 คัดค้านสุด … +1 เห็นด้วยสุด)\n\n"
                 f"โพสต์ล่าสุดจากคนอื่น (รอบ {r}):\n{feeds[idx]}\n\n"
                 "เขียนโพสต์ 1 โพสต์ (ไม่เกิน 60 คำ) ตามเสียงของกลุ่มคุณ — โต้ตอบประเด็น/โพสต์อื่นได้\n"
                 'ตอบ JSON: {"content": "ข้อความโพสต์", "stance": จุดยืนใหม่ -1..1, '
-                '"sentiment": โทนอารมณ์ -1..1}'
+                f'"sentiment": โทนอารมณ์ -1..1{want_hint}}}'
             )
             try:
                 result = adapter.chat(
@@ -233,8 +253,10 @@ def run_debate(
                     seed=seed + r * 1000 + idx,  # best-effort pin ต่อ (round, agent)
                     reasoning=False,
                 )
-                content, stance, sentiment = _parse_post(result.text)
-                return DebatePost(r, idx, p.segment_name, content, stance, sentiment)
+                content, stance, sentiment, want = _parse_post(result.text)
+                return DebatePost(
+                    r, idx, p.segment_name, content, stance, sentiment, want_to_know=want
+                )
             except Exception:
                 # fail-closed: ติดธง ไม่ปนใน metrics — จุดยืนเดิมคงไว้
                 return DebatePost(r, idx, p.segment_name, "", stances[idx], 0.0, failed=True)
@@ -245,6 +267,18 @@ def run_debate(
             if not post.failed:
                 stances[post.agent_idx] = post.stance
         all_posts.extend(round_posts)
+        # query intent (P7-M3): รวบสิ่งที่ agent อยากรู้ → โต๊ะข่าวค้นให้ก่อนรอบถัดไป
+        if news_fetcher and r < rounds - 1:
+            from simulation.newsdesk import dedupe_intents
+
+            intents = dedupe_intents([p.want_to_know for p in round_posts if p.want_to_know])
+            if intents:
+                try:
+                    fresh = news_fetcher(intents)  # โต๊ะข่าว: gather+PII+snapshot+diet ภายใน
+                    for seg, lines in (fresh or {}).items():
+                        news[seg] = tuple(lines)[:6]
+                except Exception:
+                    pass  # ค้นไม่ได้ = รอบถัดไปใช้ข่าวชุดเดิม (degrade ไม่พัง)
         if on_round:
             on_round(r, round_posts)
 

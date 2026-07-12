@@ -94,6 +94,7 @@ export default function NewRun({
   const [pool, setPool] = useState<PoolSegment[]>([]);
   const [poolOpen, setPoolOpen] = useState(false);
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
+  const [liveNews, setLiveNews] = useState(false);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -171,6 +172,7 @@ export default function NewRun({
         measurement: measurement.trim(),
         due_days: dueDays,
         views,
+        live_news: isDebate && liveNews,
       });
       onCreated(runId);
     } catch (e: any) {
@@ -261,6 +263,23 @@ export default function NewRun({
         <div className={card + " space-y-4"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">📎 {t("wiz_src_title")}</div>
           <p className="text-xs text-muted-foreground">{t("wiz_src_desc")}</p>
+
+          {/* โต๊ะข่าวสด (P7, SIM-11) — โต๊ะข่าวกลางดึงข่าวให้ agent ตาม media diet ของกลุ่ม */}
+          <button
+            type="button"
+            onClick={() => setLiveNews(!liveNews)}
+            className={`flex w-full items-center justify-between rounded-xl border p-3 text-left text-sm transition ${
+              liveNews ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"
+            }`}
+          >
+            <span>
+              <span className="font-medium">🌐 {t("wiz_news_title")}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{t("wiz_news_desc")}</span>
+            </span>
+            <span className={`ml-3 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${liveNews ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
+              {liveNews ? "ON" : "OFF"}
+            </span>
+          </button>
           <div className="flex flex-wrap gap-2">
             {(["url", "rss", "text"] as const).map((k) => (
               <button

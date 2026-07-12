@@ -279,6 +279,30 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
           {tab === "evidence" && (
             <section className={card + " space-y-3"}>
               <h2 className="font-semibold mb-1">🔍 {t("rd_tab_evidence")}</h2>
+              {/* ข่าวจากโต๊ะข่าวสด (P7) — snapshot ที่ agent เห็นจริง พร้อมเวลา+สถานะ PII */}
+              {isDebate && p.news?.enabled && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">🌐 {t("rd_news_head")} ({(p.news.items ?? []).length})</p>
+                  <ul className="space-y-1.5 text-sm">
+                    {(p.news.items ?? []).map((n: any, i: number) => (
+                      <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate font-medium">
+                            {n.status === "ready" ? "✅" : "⛔"} {n.title || n.url}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {n.provider === "search" ? "🔎 search" : "📡 RSS"} · {String(n.fetched_at).slice(0, 16).replace("T", " ")}
+                          </span>
+                        </div>
+                        {n.url && n.provider === "search" && (
+                          <a href={n.url} target="_blank" rel="noreferrer" className="text-xs text-primary-strong hover:underline">{n.url}</a>
+                        )}
+                        {n.error && <div className="mt-1 text-xs text-red-700">{n.error}</div>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {isDebate ? (
                 (p.sources ?? []).length > 0 ? (
                   <>

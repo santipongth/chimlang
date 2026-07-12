@@ -257,6 +257,15 @@ const DICT: Record<string, { th: string; en: string }> = {
     en: "Documents fed to agents to cite during the debate — all passed the PII check",
   },
   rd_evidence_chunks: { th: "ท่อน", en: "chunks" },
+  rd_news_head: {
+    th: "ข่าวสดจากโต๊ะข่าวกลางที่ตัวแทนจำลองเห็น (แช่แข็งเป็น snapshot — ตรวจย้อนได้)",
+    en: "Live news the agents saw via the central news desk (frozen snapshot — auditable)",
+  },
+  wiz_news_title: { th: "โต๊ะข่าวสด (Live News Desk)", en: "Live News Desk" },
+  wiz_news_desc: {
+    th: "ระบบดึงข่าวล่าสุดจากอินเทอร์เน็ต (RSS + ค้นหา) ให้ตัวแทนจำลองใช้ระหว่างถกเถียง — แต่ละกลุ่มเห็นข่าวต่างกันตามพฤติกรรมสื่อของกลุ่ม ทุกชิ้นผ่านตัวกรองข้อมูลส่วนบุคคลและถูกบันทึกถาวรเพื่อตรวจย้อน",
+    en: "Fetch the latest news (RSS + search) for agents during the debate — each group sees different news per its media diet; every item is PII-screened and snapshotted for audit",
+  },
   rd_evidence_used: { th: "ท่อนที่ดึงมาใช้จริง", en: "chunks retrieved" },
   rd_evidence_none: { th: "รันนี้ไม่ได้แนบเอกสารอ้างอิง — ตัวแทนจำลองใช้มุมมองของกลุ่มล้วนๆ", en: "No sources attached — agents argued from persona priors" },
   rd_evidence_fabric: {

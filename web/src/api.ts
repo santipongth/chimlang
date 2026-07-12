@@ -81,6 +81,7 @@ export interface CreateRunBody {
   measurement?: string;
   due_days?: number;
   views?: string[]; // มุมมองที่จะเปิดใช้ (P6-M6)
+  live_news?: boolean; // โต๊ะข่าวสด (P7, debate เท่านั้น)
 }
 
 // พูลของ persona (P6-M6)
