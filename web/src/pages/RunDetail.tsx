@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { SimRunDetail, fetchRunDetail, pct, shareToGallery } from "../api";
+import { SimRunDetail, fetchRunDetail, pct, shareRun, unshareRun } from "../api";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader, Tabs } from "../ui";
 
@@ -54,7 +54,10 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
   const [replayRound, setReplayRound] = useState<number | null>(null);
-  const [shareState, setShareState] = useState<"idle" | "busy" | "done" | string>("idle");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareErr, setShareErr] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchRunDetail(runId)
@@ -377,27 +380,82 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   >
                     ⬇ {lang === "th" ? "PDF (มี watermark)" : "PDF (watermarked)"}
                   </a>
-                  <button
-                    disabled={shareState === "busy"}
-                    onClick={() => {
-                      setShareState("busy");
-                      shareToGallery(data.subject, data.agents)
-                        .then(() => setShareState("done"))
-                        .catch((e) => setShareState(String(e.message ?? e)));
-                    }}
-                    className="rounded-xl border border-border px-5 py-2.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-40"
-                  >
-                    {shareState === "busy" ? "⏳" : "🌐"} {t("share_gallery")}
-                  </button>
-                  {shareState === "done" && <span className="text-xs text-primary-strong">✅ {t("share_done")}</span>}
-                  {shareState !== "idle" && shareState !== "busy" && shareState !== "done" && (
-                    <span className="text-xs text-red-700">{shareState}</span>
-                  )}
                 </div>
               )}
+              <button
+                onClick={() => { setShareErr(""); setShareOpen(true); }}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm text-muted-foreground hover:bg-muted"
+              >
+                {data.share_token ? "🌐" : "🔒"} {t("share_btn")}
+                {data.share_token && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary-strong">{t("share_public")}</span>}
+              </button>
             </section>
           )}
         </>
+      )}
+
+      {/* Share dialog (แบบ studio): toggle เปิด/ปิด + copy link — governance ADR-0004 อยู่ฝั่ง API */}
+      {shareOpen && data && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={() => setShareOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-2xl font-semibold">🌐 {t("share_title")}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{t("share_desc")}</p>
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-background p-3 text-sm">
+              <span className="flex items-center gap-2">
+                {data.share_token ? "🌐" : "🔒"}
+                <span>{data.share_token ? t("share_on") : t("share_off")}</span>
+              </span>
+              <button
+                disabled={shareBusy}
+                onClick={async () => {
+                  setShareBusy(true);
+                  setShareErr("");
+                  try {
+                    if (data.share_token) await unshareRun(runId);
+                    else await shareRun(runId);
+                    const fresh = await fetchRunDetail(runId);
+                    setData(fresh);
+                  } catch (e: any) {
+                    setShareErr(String(e.message ?? e));
+                  } finally {
+                    setShareBusy(false);
+                  }
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50 ${
+                  data.share_token
+                    ? "border border-border text-muted-foreground hover:bg-muted"
+                    : "bg-primary text-white hover:bg-primary-strong"
+                }`}
+              >
+                {shareBusy ? "⏳" : data.share_token ? t("share_turn_off") : t("share_turn_on")}
+              </button>
+            </div>
+            {shareErr && <p className="mt-2 text-xs text-red-700">{shareErr}</p>}
+            {data.share_token && (
+              <div className="mt-3 flex gap-2">
+                <input
+                  readOnly
+                  value={`${window.location.origin}/app/#gallery/${data.share_token}`}
+                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/app/#gallery/${data.share_token}`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                  className="rounded-lg border border-border px-3 py-2 text-xs hover:bg-muted"
+                >
+                  {copied ? "✅" : "📋"} {t("share_copy")}
+                </button>
+              </div>
+            )}
+            <p className="mt-3 text-[11px] text-muted-foreground">🛡️ {t("share_gov_note")}</p>
+            <button onClick={() => setShareOpen(false)} className="mt-4 w-full rounded-xl border border-border py-2 text-sm text-muted-foreground hover:bg-muted">
+              {t("close")}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

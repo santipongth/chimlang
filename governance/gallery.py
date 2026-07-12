@@ -33,8 +33,10 @@ CREATE TABLE IF NOT EXISTS gallery_shares (
     payload JSONB NOT NULL,
     watermark JSONB NOT NULL,
     created_by TEXT NOT NULL,
-    active BOOLEAN NOT NULL DEFAULT true
+    active BOOLEAN NOT NULL DEFAULT true,
+    run_id TEXT NOT NULL DEFAULT ''
 );
+ALTER TABLE gallery_shares ADD COLUMN IF NOT EXISTS run_id TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS gallery_votes (
     id BIGSERIAL PRIMARY KEY,
     ts TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -94,7 +96,9 @@ class GalleryStore:
         with self._conn() as conn:
             conn.execute(_SCHEMA)
 
-    def share(self, *, subject: str, agents: int, payload: dict, created_by: str) -> str:
+    def share(
+        self, *, subject: str, agents: int, payload: dict, created_by: str, run_id: str = ""
+    ) -> str:
         """แชร์ snapshot — guard_share ต้องผ่านก่อนเสมอ (เรียกจากชั้น API)"""
         token = uuid.uuid4().hex
         watermark = {
@@ -106,8 +110,8 @@ class GalleryStore:
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO gallery_shares "
-                "(share_token, subject, agents, payload, watermark, created_by) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
+                "(share_token, subject, agents, payload, watermark, created_by, run_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (
                     token,
                     subject,
@@ -115,6 +119,7 @@ class GalleryStore:
                     json.dumps(payload, ensure_ascii=False),
                     json.dumps(watermark, ensure_ascii=False),
                     created_by,
+                    run_id,
                 ),
             )
         return token
@@ -159,6 +164,18 @@ class GalleryStore:
         if not found:
             raise ValueError("ไม่พบรายการแชร์นี้ (อาจถูกถอนแล้ว)")
         return found[0]
+
+    def find_by_run(self, run_id: str) -> str | None:
+        """token ที่ยัง active ของ run นี้ — ใช้แสดงสถานะเปิด/ปิดการแชร์"""
+        if not run_id:
+            return None
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT share_token FROM gallery_shares "
+                "WHERE run_id = %s AND active ORDER BY id DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+        return row[0] if row else None
 
     def unshare(self, token: str) -> None:
         """ถอนจากสาธารณะ — record ยังอยู่ (audit ได้) แค่ไม่แสดง"""

@@ -873,16 +873,111 @@ def simruns_json(
 @app.get("/runs/{run_id}.json")
 def run_detail_json(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
     from core.runstore import RunStore
+    from governance.gallery import GalleryStore
 
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
         store.setup()
-        return store.get(run_id)
+        detail = store.get(run_id)
+        # สถานะแชร์สาธารณะ (toggle เปิด/ปิด) — token ที่ยัง active ของ run นี้
+        gstore = GalleryStore(settings.postgres_url)
+        gstore.setup()
+        detail["share_token"] = gstore.find_by_run(run_id)
+        return detail
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+@app.post("/runs/{run_id}/share")
+def run_share(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """เปิดแชร์ run นี้สู่ Public Gallery — snapshot payload ที่เก็บไว้จริง (ไม่รันใหม่)
+
+    ด่าน ADR-0004 ครบ: EXPORT perm + election ห้ามแชร์ + watermark ต้องเปิด + PII gate ที่ subject
+    เปิดซ้ำขณะแชร์อยู่ = idempotent (คืน token เดิม)
+    """
+    require(principal, Permission.EXPORT)
+    from core.runstore import RunStore
+    from governance.gallery import GalleryStore, guard_share
+    from governance.store import GovernanceStore
+    from governance.watermark import WatermarkDisabledError
+
+    settings = get_settings()
+    try:
+        rstore = RunStore(settings.postgres_url)
+        rstore.setup()
+        detail = rstore.get(run_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    if detail.get("status") != "complete":
+        raise HTTPException(status_code=422, detail="แชร์ได้เฉพาะ run ที่เสร็จแล้ว")
+    try:
+        guard_share(detail["subject"])
+    except ElectionModeError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except WatermarkDisabledError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    try:
+        gstore = GalleryStore(settings.postgres_url)
+        gstore.setup()
+        existing = gstore.find_by_run(run_id)
+        if existing:
+            return {"share_token": existing, "url": f"/app/#gallery/{existing}"}
+        payload = {**(detail.get("payload") or {}), "engine": detail.get("engine", "fabric")}
+        token = gstore.share(
+            subject=detail["subject"],
+            agents=int(detail.get("agents") or 0),
+            payload=payload,
+            created_by=principal.user_id,
+            run_id=run_id,
+        )
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id,
+            action="gallery_shared",
+            run_id=run_id,
+            config_hash="-",
+            detail=f"token={token[:12]} subject={detail['subject'][:60]}",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"share_token": token, "url": f"/app/#gallery/{token}"}
+
+
+@app.delete("/runs/{run_id}/share")
+def run_unshare(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """ปิดแชร์ run นี้ (ถอน snapshot ออกจาก gallery) — audit ทุกครั้ง"""
+    require(principal, Permission.EXPORT)
+    from governance.gallery import GalleryStore
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        gstore = GalleryStore(settings.postgres_url)
+        gstore.setup()
+        token = gstore.find_by_run(run_id)
+        if not token:
+            return {"ok": True, "shared": False}
+        gstore.unshare(token)
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id,
+            action="gallery_unshared",
+            run_id=run_id,
+            config_hash="-",
+            detail=f"token={token[:12]}",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True, "shared": False}
 
 
 @app.delete("/runs/{run_id}")

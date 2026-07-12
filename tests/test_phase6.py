@@ -557,3 +557,42 @@ def _pool_segments():
         }
         for i in range(2)
     ]
+
+
+# ---- Share toggle ต่อ run (P7 — เปิด/ปิดแชร์สู่ gallery แบบ studio) ----
+
+
+@needs_pg
+def test_run_share_toggle_cycle(client):
+    r = client.post(
+        "/runs", json={"engine": "fabric", "subject": "ทดสอบ share toggle", "agents": 20}
+    )
+    rid = r.json()["run_id"]
+    # ยังไม่แชร์
+    assert client.get(f"/runs/{rid}.json").json()["share_token"] is None
+    # เปิดแชร์ → snapshot payload จริงของ run (ไม่รันใหม่) + idempotent
+    t1 = client.post(f"/runs/{rid}/share").json()["share_token"]
+    assert client.post(f"/runs/{rid}/share").json()["share_token"] == t1
+    assert client.get(f"/runs/{rid}.json").json()["share_token"] == t1
+    g = client.get(f"/gallery/{t1}.json").json()
+    assert g["subject"] == "ทดสอบ share toggle"
+    assert g["payload"]["engine"] == "fabric"  # payload มาจาก run ที่เก็บไว้
+    # ปิดแชร์ → ลิงก์เดิมตาย + สถานะกลับเป็นไม่แชร์
+    client.delete(f"/runs/{rid}/share")
+    assert client.get(f"/runs/{rid}.json").json()["share_token"] is None
+    assert client.get(f"/gallery/{t1}.json").status_code == 404
+    # เปิดใหม่ = token ใหม่ (snapshot ใหม่ — ของเดิมถูกถอนถาวร)
+    t2 = client.post(f"/runs/{rid}/share").json()["share_token"]
+    assert t2 != t1
+    client.delete(f"/runs/{rid}/share")
+    client.delete(f"/runs/{rid}")
+
+
+@needs_pg
+def test_run_share_blocks_election(client):
+    r = client.post(
+        "/runs", json={"engine": "fabric", "subject": "ทดสอบ ผลเลือกตั้งผู้ว่าฯ รอบใหม่", "agents": 20}
+    )
+    rid = r.json()["run_id"]
+    assert client.post(f"/runs/{rid}/share").status_code == 403  # election ห้ามแชร์ (ADR-0004)
+    client.delete(f"/runs/{rid}")

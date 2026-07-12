@@ -134,6 +134,7 @@ export interface DebatePostItem {
 }
 
 export interface SimRunDetail extends SimRunSummary {
+  share_token?: string | null;
   seed: number;
   config: Record<string, any>;
   payload: Record<string, any> | null;
@@ -343,14 +344,15 @@ export async function fetchGalleryDetail(token: string): Promise<GalleryDetail> 
   return r.json();
 }
 
-export async function shareToGallery(subject: string, agents: number): Promise<string> {
-  const r = await fetch("/gallery/share", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subject, agents }),
-  });
+export async function shareRun(runId: string): Promise<string> {
+  const r = await fetch(`/runs/${runId}/share`, { method: "POST" });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return (await r.json()).share_token;
+}
+
+export async function unshareRun(runId: string): Promise<void> {
+  const r = await fetch(`/runs/${runId}/share`, { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
 export async function voteGallery(
