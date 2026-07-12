@@ -89,7 +89,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                       ⚠️ {p.metrics.posts_failed} {t("rd_failed_posts")}
                     </span>
                   )}
-                  {p.cost_usd != null && <span className="text-xs text-muted-foreground">cost ${p.cost_usd}</span>}
+                  {p.cost_usd != null && <span className="text-xs text-muted-foreground">{t("rd_cost")} ${p.cost_usd}</span>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(p.synthesis?.distribution ?? []).map((d: any) => (
@@ -120,7 +120,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <div className="flex items-end gap-2 h-24">
                   {(p.metrics?.per_round_avg_stance ?? []).map((s: number, i: number) => (
                     <div key={i} className="flex-1 text-center">
-                      <div className="mx-auto w-3/4 rounded-t bg-primary/70" style={{ height: `${((s + 1) / 2) * 90 + 5}%` }} title={`รอบ ${i}: ${s.toFixed(2)}`} />
+                      <div className="mx-auto w-3/4 rounded-t bg-primary/70" style={{ height: `${((s + 1) / 2) * 90 + 5}%` }} title={`${t("rd_round_word")} ${i}: ${s.toFixed(2)}`} />
                       <div className="mt-1 text-[10px] text-muted-foreground">r{i}</div>
                     </div>
                   ))}
@@ -141,7 +141,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
           {tab === "overview" && !isDebate && (
             <>
               <section className={card + " space-y-3"}>
-                <h2 className="font-semibold">สรุปสำหรับผู้บริหาร (Executive Brief)</h2>
+                <h2 className="font-semibold">{t("rd_brief_title")}</h2>
                 <ul className="space-y-1.5 text-sm">
                   {(p.brief?.lines ?? []).map((ln: any, i: number) => (
                     <li key={i} className={ln.kind === "risk" ? "text-red-700" : "text-primary-strong"}>

@@ -140,10 +140,10 @@ export default function PersonaPackModal({
                   </button>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="rounded-full bg-muted px-2 py-0.5">เกรงใจ {s.cultural_priors.kreng_jai}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5">{t("pk_prior_kreng")} {s.cultural_priors.kreng_jai}</span>
                   <span className="rounded-full bg-muted px-2 py-0.5">say-do gap {s.cultural_priors.say_do_gap}</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5">มีม/ประชด {s.cultural_priors.sarcasm_meme}</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5">เสียง {s.voice_activity}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5">{t("pk_prior_meme")} {s.cultural_priors.sarcasm_meme}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5">{t("pk_prior_voice")} {s.voice_activity}</span>
                 </div>
                 {s.traits.length > 0 && (
                   <div className="mt-1 text-xs text-muted-foreground">{s.traits.join(" · ")}</div>

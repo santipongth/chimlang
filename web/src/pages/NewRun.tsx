@@ -28,13 +28,15 @@ const DOMAIN_TH: Record<(typeof DOMAIN_KEYS)[number], string> = {
   general: "ทั่วไป",
 };
 
-const TEMPLATES = [
-  { label: "ค่าธรรมเนียมรถติด", q: "มาตรการค่าธรรมเนียมรถติด กทม.", domain: DOMAIN_TH.policy },
-  { label: "ขึ้นราคา 15%", q: "แคมเปญขึ้นราคาสินค้า 15% พร้อมข้อความสื่อสารใหม่", domain: DOMAIN_TH.product },
-  { label: "เวลาขายแอลกอฮอล์", q: "นโยบายจำกัดเวลาขายแอลกอฮอล์รอบใหม่", domain: DOMAIN_TH.policy },
-  { label: "ซ้อมแถลงดราม่า", q: "แบรนด์ถูกกล่าวหาเรื่องคุณภาพสินค้า — ควรแถลงด้วยข้อความแบบไหน", domain: DOMAIN_TH.social },
-  { label: "เปลี่ยนโมเดลราคา", q: "เปิดตัวบริการสมัครสมาชิกรายเดือนแทนการซื้อขาด", domain: DOMAIN_TH.product },
-  { label: "ข่าวลือน้ำประปา", q: "ข่าวลือเรื่องคุณภาพน้ำประปาในเขตเมืองกำลังแพร่ในกลุ่มปิด", domain: DOMAIN_TH.social },
+// template สองภาษา — label โชว์บนปุ่ม, q เป็น scenario ที่จะกลายเป็น subject จริง, domain เป็น key
+type DomainKey = (typeof DOMAIN_KEYS)[number];
+const TEMPLATES: { label: { th: string; en: string }; q: { th: string; en: string }; domain: DomainKey }[] = [
+  { label: { th: "ค่าธรรมเนียมรถติด", en: "Congestion charge" }, q: { th: "มาตรการค่าธรรมเนียมรถติด กทม.", en: "Bangkok congestion charge scheme" }, domain: "policy" },
+  { label: { th: "ขึ้นราคา 15%", en: "15% price hike" }, q: { th: "แคมเปญขึ้นราคาสินค้า 15% พร้อมข้อความสื่อสารใหม่", en: "A 15% price increase with new messaging" }, domain: "product" },
+  { label: { th: "เวลาขายแอลกอฮอล์", en: "Alcohol sale hours" }, q: { th: "นโยบายจำกัดเวลาขายแอลกอฮอล์รอบใหม่", en: "New restrictions on alcohol sale hours" }, domain: "policy" },
+  { label: { th: "ซ้อมแถลงดราม่า", en: "Crisis statement" }, q: { th: "แบรนด์ถูกกล่าวหาเรื่องคุณภาพสินค้า — ควรแถลงด้วยข้อความแบบไหน", en: "A brand accused over product quality — what statement works best?" }, domain: "social" },
+  { label: { th: "เปลี่ยนโมเดลราคา", en: "New pricing model" }, q: { th: "เปิดตัวบริการสมัครสมาชิกรายเดือนแทนการซื้อขาด", en: "Launching a monthly subscription instead of one-time purchase" }, domain: "product" },
+  { label: { th: "ข่าวลือน้ำประปา", en: "Tap water rumor" }, q: { th: "ข่าวลือเรื่องคุณภาพน้ำประปาในเขตเมืองกำลังแพร่ในกลุ่มปิด", en: "A rumor about tap water quality spreading in closed groups" }, domain: "social" },
 ];
 const DOMAINS = DOMAIN_KEYS.map((k) => DOMAIN_TH[k]);
 
@@ -188,15 +190,18 @@ export default function NewRun({
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_templates_title")}</div>
             <p className="text-xs text-muted-foreground mt-1 mb-2">{t("wiz_templates_hint")}</p>
             <div className="grid sm:grid-cols-2 gap-2">
-              {TEMPLATES.map((tpl) => (
-                <SelectCard key={tpl.label} active={subject === tpl.q} onClick={() => { setSubject(tpl.q); setDomain(tpl.domain); }}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{tpl.label}</span>
-                    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{tpl.domain}</span>
-                  </div>
-                  <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{tpl.q}</div>
-                </SelectCard>
-              ))}
+              {TEMPLATES.map((tpl) => {
+                const q = tpl.q[lang];
+                return (
+                  <SelectCard key={tpl.label.en} active={subject === q} onClick={() => { setSubject(q); setDomain(DOMAIN_TH[tpl.domain]); }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{tpl.label[lang]}</span>
+                      <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{t(`domain_${tpl.domain}`)}</span>
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{q}</div>
+                  </SelectCard>
+                );
+              })}
             </div>
           </div>
           <div>
@@ -361,7 +366,7 @@ export default function NewRun({
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_review")}</div>
           <div className="grid grid-cols-[130px_1fr] gap-y-2">
             <span className="text-muted-foreground">{t("wiz_step1")}</span><span className="font-medium">{subject || "—"}</span>
-            <span className="text-muted-foreground">Engine</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : " · 5 universes"}</span>
+            <span className="text-muted-foreground">Engine</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : ` · ${t("wiz_universes_short")}`}</span>
             <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{Math.min(agents, cap).toLocaleString()}</span>
             <span className="text-muted-foreground">Personas</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
             {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
