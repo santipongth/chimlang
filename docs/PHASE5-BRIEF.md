@@ -1,0 +1,73 @@
+# PHASE 5 BRIEF — SwarmSight Integration (UI ยึด studio + ปิด gap)
+
+เริ่ม 12 ก.ค. 2026 — **ผู้ใช้ approve**: "วางแผนที่ดีที่สุดให้ฉัน แล้วเริ่มได้เลย"
+ที่มา: `docs/reports/swarmsight-research-v2.md` (gap analysis 13 ข้อ + UI spec แกะจากโค้ด studio จริง)
+หลักการ: ทุก milestone เป็น **vertical slice** (จบแล้วใช้ได้จริง end-to-end ไม่มี UI หลอกที่ backend ยังไม่มี)
+
+## กติกาที่สืบทอด (ห้ามหย่อน)
+
+- governance ทุกด่านคงเดิม: watermark / audit / registry append-only / election GOV-02 / PII GOV-01 / GOV-05
+- seed determinism + BudgetGuard ทุก run | test เขียวก่อน commit | ไทย first-class
+- **ไม่เลียนจุดอ่อน SwarmSight**: ไม่มี Math.random ไร้ seed, ไม่มี outcome mutable, ไม่มี silent agent-fail, ไม่มี ingest ที่ไม่ผ่าน PII gate
+- Design convention ใหม่ (จาก studio): **metric ทุกตัวใน UI ต้องมี tooltip อธิบายสูตร inline**
+
+## Milestones
+
+### P5-M1 — UI shell ตาม studio (frontend ล้วน) ✅ (12 ก.ค. 2026)
+- [x] tokens เพิ่มใน `web/src/index.css`: `sidebar-accent`, `ring`, `chart-1..5` (hue 160/240/80/30/300), popover
+- [x] Sidebar nav แบบ studio: icon 16px + `rounded-lg px-3 py-2`, active = `bg-sidebar-accent`, โลโก้ icon ใน `bg-primary/10` + ชื่อ serif, รองรับ badge ตัวเลข (ใช้จริง M5)
+- [x] Page header pattern ทุกหน้า: eyebrow (uppercase tracking-wider + icon primary) → serif text-4xl → คำอธิบาย
+- [x] Wizard: template gallery แบบ card 2 คอลัมน์ (แทน/เสริม chips เดิม), selection card `border-primary bg-primary/5`
+- [x] Dashboard: โครง tabs (ผลรวม/เสียง/รายงาน) เตรียมรับ canvas ใน M2
+- [x] `npm run build` ผ่าน + tests เดิมเขียว
+
+### P5-M2 — Tipping point detection + opinion swarm canvas
+- [ ] `simulation/metrics` (หรือจุดที่เหมาะ): detect รอบที่ Δ(avg belief) ≥ threshold (default 0.25 บนสเกลของ engine เรา) → บันทึก `[{round, from, to, delta}]`
+- [ ] บังคับใน output: dashboard.json + รายงาน what-if (PRD pipeline ขั้น 7 — Tipping Points ทุกรายงาน)
+- [ ] Opinion swarm canvas ใน dashboard: scatter x=stance, y=confidence, สี=ทิศ, tooltip ต่อ agent (agent จำลอง ระดับ segment — ไม่ map บุคคลจริง)
+- [ ] unit tests: มี/ไม่มี tipping, deterministic ต่อ seed
+
+### P5-M3 — Calibration UI (append-only)
+- [ ] Backend: `GET /calibration.json` (Brier รวม + rating bands + trend รายสัปดาห์ + per-domain + รายการ prediction ครบกำหนด/ยัง)
+- [ ] `POST /predictions/{id}/resolve` outcome `true|partial|false` (+note) — **partial = 0.5 ใน Brier**; เขียนเป็น resolution record ใหม่ (append-only ตาม TRUST-01) ผ่าน RBAC (analyst ขึ้นไป)
+- [ ] หน้า Calibration: 3 stat cards (serif 4xl), sparkline เส้นอ้างอิง 0/0.25, domain rows ✓/~/✗, outcome pills, tooltip สูตรทุกจุด
+- [ ] ปลดล็อก resolve #161 ผ่าน UI ได้จริง
+- [ ] tests: partial Brier, append-only (ยิง resolve ซ้ำ = record ใหม่ไม่ทับ), RBAC
+
+### P5-M4 — Red Team in-population + Compare
+- [ ] persona factory: flag `red_team=True` → แทน 2 agents สุดท้ายด้วย contrarian (prior −0.6) + auditor (−0.3) — ไม่แตะ cap/BudgetGuard
+- [ ] endpoint รันคู่: baseline + red team ด้วย **seed เดียวกัน** → คืน run id คู่ + delta
+- [ ] หน้า Compare: delta banner (ไอคอนขึ้น/ลง/คงที่) + 2 panes + CalculationModal (breakdown per-segment + สูตร delta)
+- [ ] GOV-05: Red Team ให้ insight ช่องโหว่เท่านั้น ห้าม generate สารตอบโต้ | tests
+
+### P5-M5 — Watchlist + alerts + webhook
+- [ ] ตาราง PG: `watchlists` (question, domain, cadence, active, last_run_at), `alerts` (kind, payload, read_at) — ผ่าน governance store pattern เดิม
+- [ ] Alert 2 ชนิด: `tipping_point` (จาก M2 detector) + `consensus_shift` (เทียบ run ก่อนหน้าของคำถามเดิม |Δ| ≥ 0.1)
+- [ ] Webhook: POST https-only, payload `{text, content, kind, ...}` เข้ากันได้ Slack/Discord/generic, **best-effort** (พังห้ามทำ run พัง), ไม่ log URL/secret
+- [ ] Re-run ตาม cadence ผ่าน Celery beat — ทุกครั้งผ่าน BudgetGuard + cost estimate
+- [ ] หน้า Watchlist (list + toggle + Run now + alerts feed) + unread badge ที่ sidebar
+- [ ] tests: shift detection, webhook ไม่ยิง http://, run พังไม่กระทบ
+
+### P5-M6 — Knowledge graph viz + Insights
+- [ ] `GET /graph/summary.json`: nodes+edges จาก Neo4j + degree + hub (top 15% ไม่เกิน 6) + cluster ตาม kind
+- [ ] Interactive SVG แบบ studio: wedge layout ตาม cluster, hub วงแหวน, click node → side panel connections, filter chips ตาม kind
+- [ ] หน้า Insights: runs timeline + factor cloud + metric averages จาก registry/audit (ของเรามีข้อมูลครบอยู่แล้ว)
+- [ ] tests: summary endpoint (mock Neo4j), hub calculation
+
+## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
+
+- Persona packs + AI-generate + single-persona simulator ("ลอง ask")
+- MCP tools surface (create-run/get-run) — ต้องผ่าน auth/RBAC
+- Public gallery + agree/disagree votes — ต้อง GOV-02/watermark review
+
+## สถานะ
+
+| M | สถานะ |
+|---|---|
+| M1 UI shell | ✅ 12 ก.ค. |
+
+| M2 Tipping + canvas | ⏳ กำลังทำ |
+| M3 Calibration UI | รอ |
+| M4 Red Team + Compare | รอ |
+| M5 Watchlist + webhook | รอ |
+| M6 Graph viz + Insights | รอ |

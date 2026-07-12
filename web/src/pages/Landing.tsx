@@ -10,8 +10,8 @@ export default function Landing({ onStart }: { onStart: () => void }) {
   return (
     <div className="space-y-10">
       <div className="pt-6">
-        <div className="text-primary-strong text-xs font-semibold tracking-widest mb-3">
-          ✦ {t("landing_eyebrow")}
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          <span className="text-primary">✦</span> {t("landing_eyebrow")}
         </div>
         <h1 className="font-display text-4xl font-semibold leading-tight mb-4">{t("landing_title")}</h1>
         <p className="text-muted-foreground max-w-xl leading-relaxed">{t("landing_sub")}</p>

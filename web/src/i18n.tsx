@@ -61,8 +61,38 @@ const DICT: Record<string, { th: string; en: string }> = {
   next: { th: "ถัดไป →", en: "Next →" },
   run_now: { th: "รันจำลอง →", en: "Run simulation →" },
   running: { th: "กำลังจำลอง...", en: "Simulating..." },
+  wiz_templates_title: { th: "ตัวอย่างพร้อมใช้", en: "STARTER TEMPLATES" },
+  wiz_templates_hint: {
+    th: "คลิกเพื่อเซ็ตคำถามและโดเมนอัตโนมัติ — แก้ต่อได้",
+    en: "One click fills the question and domain — edit freely after",
+  },
   // Dashboard
   dash_eyebrow: { th: "ผลจำลองล่าสุด", en: "LATEST RESULT" },
+  dash_tab_overview: { th: "ภาพรวม", en: "Overview" },
+  dash_tab_voices: { th: "เสียงสะท้อน", en: "Voices" },
+  dash_tab_report: { th: "รายงาน & Export", en: "Report & Export" },
+  voices_title: { th: "เสียงจำลองรายกลุ่ม (Synthetic Voices)", en: "Synthetic voices by segment" },
+  voices_note: {
+    th: "เสียงจำลองจาก agent — สังเกต say-do gap: สิ่งที่พูดต่อสาธารณะ ≠ สิ่งที่คิดจริง",
+    en: "Simulated agent voices — note the say-do gap between public statements and private views",
+  },
+  voice_public: { th: "พูดต่อสาธารณะ", en: "Says publicly" },
+  voice_private: { th: "คิดในใจ", en: "Thinks privately" },
+  report_title: { th: "สรุปตัวเลขหลัก + ดาวน์โหลดรายงาน", en: "Key figures + report download" },
+  pdf_th: { th: "PDF ภาษาไทย", en: "PDF (Thai)" },
+  pdf_en: { th: "PDF English", en: "PDF (English)" },
+  pdf_note: {
+    th: "ทุกไฟล์ export ผ่าน watermark module เสมอ (GOV-03) — มีทั้งป้ายมองเห็นและ metadata ตรวจกลับได้",
+    en: "Every export passes the watermark module (GOV-03) — visible label + machine-readable metadata",
+  },
+  tip_fragility: {
+    th: "Fragility Index = สัดส่วนจักรวาลคู่ขนาน (5 universes) ที่ข้อสรุปหลักพลิกเมื่อเขย่าสมมติฐานเล็กน้อย\n0-40 = มั่นคง | 41-70 = ลด confidence อัตโนมัติ | >70 = ห้าม export ตัวเลขเดี่ยว (TRUST-05)",
+    en: "Fragility Index = share of the 5 parallel universes where the main conclusion flips under small perturbations.\n0-40 = stable | 41-70 = confidence auto-downgraded | >70 = single-figure export blocked (TRUST-05)",
+  },
+  tip_range: {
+    th: "ช่วงจากการรัน 5 จักรวาลคู่ขนาน (perturb สมมติฐาน ±10% + seed) — ระบบไม่รายงานตัวเลขเดี่ยวโดยเจตนา (TRUST-09)",
+    en: "Range across 5 parallel universes (assumptions perturbed ±10% + seeds) — we deliberately never report a point estimate (TRUST-09)",
+  },
   dash_empty: { th: "ยังไม่มีผลรัน — เริ่มที่เมนู \"รันใหม่\"", en: "No results yet — start from \"New run\"" },
   brief_title: { th: "Executive Brief", en: "Executive Brief" },
   headline_range: { th: "ช่วงผลหลัก", en: "Headline range" },

@@ -22,7 +22,9 @@ function WatermarkBanner() {
   );
 }
 
-function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) {
+// Sidebar ตาม layout studio: w-60, nav item rounded-lg px-3 py-2, active = bg-sidebar-accent,
+// รองรับ badge ตัวเลขชิดขวา (ใช้จริงกับ alerts ใน P5-M5)
+function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page) => void; badges?: Partial<Record<Page, number>> }) {
   const { lang, setLang, t } = useLang();
   const items: { id: Page; icon: string; label: string }[] = [
     { id: "home", icon: "🏠", label: t("nav_home") },
@@ -32,29 +34,34 @@ function Sidebar({ page, setPage }: { page: Page; setPage: (p: Page) => void }) 
     { id: "runs", icon: "🕘", label: t("nav_runs") },
   ];
   return (
-    <aside className="w-64 shrink-0 bg-sidebar border-r border-border flex flex-col min-h-screen">
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="w-9 h-9 rounded-full bg-primary-soft flex items-center justify-center text-lg">🐟</div>
+    <aside className="w-60 shrink-0 bg-sidebar border-r border-border flex flex-col min-h-screen p-4">
+      <button onClick={() => setPage("home")} className="mb-6 flex items-center gap-2 px-2 text-left">
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">🐟</div>
         <div>
           <div className="font-display text-lg font-semibold leading-tight">ชิมลาง</div>
           <div className="text-[11px] text-muted-foreground leading-tight">CHIMLANG</div>
         </div>
-      </div>
-      <nav className="px-3 space-y-1 flex-1">
+      </button>
+      <nav className="flex flex-1 flex-col gap-1 text-sm">
         {items.map((it) => (
           <button
             key={it.id}
             onClick={() => setPage(it.id)}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-left transition ${
-              page === it.id ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-muted"
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
+              page === it.id ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60"
             }`}
           >
-            <span className="w-5 text-center">{it.icon}</span>
+            <span className="w-4 text-center text-[13px]">{it.icon}</span>
             {it.label}
+            {(badges[it.id] ?? 0) > 0 && (
+              <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">
+                {badges[it.id]}
+              </span>
+            )}
           </button>
         ))}
       </nav>
-      <div className="px-5 py-4 border-t border-border">
+      <div className="border-t border-border pt-3">
         <div className="flex rounded-full border border-border overflow-hidden text-xs">
           {(["th", "en"] as const).map((l) => (
             <button
@@ -87,8 +94,9 @@ function Shell() {
       <WatermarkBanner />
       <div className="flex">
         <Sidebar page={page} setPage={setPage} />
-        <main className="flex-1 px-8 py-10">
-          <div className="max-w-3xl mx-auto">
+        <main className="min-w-0 flex-1 px-8 py-10">
+          {/* dashboard/runs กว้าง max-w-4xl แบบ studio; ฟอร์ม/wizard แคบ max-w-3xl */}
+          <div className={`mx-auto ${page === "dashboard" || page === "runs" ? "max-w-4xl" : "max-w-3xl"}`}>
           {page === "home" && <Landing onStart={() => setPage("new")} />}
           {page === "new" && <NewRun onRun={startRun} />}
           {page === "dashboard" && (

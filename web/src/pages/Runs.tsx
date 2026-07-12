@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RunsData, fetchRuns } from "../api";
 import { useLang } from "../i18n";
+import { PageHeader } from "../ui";
 
 export default function Runs() {
   const { t } = useLang();
@@ -17,11 +18,7 @@ export default function Runs() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="text-primary-strong text-xs font-semibold tracking-widest mb-2">✦ {t("runs_eyebrow")}</div>
-        <h1 className="font-display text-3xl font-semibold">{t("runs_title")}</h1>
-        <p className="text-sm text-muted-foreground mt-2">{t("runs_note")}</p>
-      </div>
+      <PageHeader eyebrow={t("runs_eyebrow")} title={t("runs_title")} desc={t("runs_note")} />
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 text-sm">{error}</div>}
 

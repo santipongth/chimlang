@@ -15,6 +15,15 @@
   --color-destructive: oklch(62% 0.22 25);
   --color-border: oklch(92% 0.008 240);
   --color-sidebar: oklch(98% 0.005 240);
+  --color-sidebar-accent: oklch(95% 0.01 240);
+  --color-popover: oklch(100% 0 0);
+  --color-ring: oklch(70% 0.15 160);
+  /* chart palette ตาม studio (hue 160/240/80/30/300) — ใช้กับ canvas/graph/sparkline */
+  --color-chart-1: oklch(70% 0.15 160);
+  --color-chart-2: oklch(65% 0.18 240);
+  --color-chart-3: oklch(75% 0.15 80);
+  --color-chart-4: oklch(65% 0.2 30);
+  --color-chart-5: oklch(60% 0.2 300);
   --radius: 0.75rem;
 }
 
@@ -26,4 +35,5 @@ body {
 
 .font-display {
   font-family: Georgia, "Times New Roman", "Noto Serif Thai", serif;
+  letter-spacing: -0.01em;
 }

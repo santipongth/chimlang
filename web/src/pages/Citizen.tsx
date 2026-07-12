@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CHOICES, ImpactResult, STANCES, fetchImpact, pct, sendFeedback } from "../api";
 import { useLang } from "../i18n";
+import { PageHeader } from "../ui";
 
 export default function Citizen() {
   const { t } = useLang();
@@ -38,11 +39,7 @@ export default function Citizen() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="text-primary-strong text-xs font-semibold tracking-widest mb-2">✦ CITIZEN</div>
-        <h1 className="font-display text-3xl font-semibold">{t("cit_title")}</h1>
-        <p className="text-sm text-muted-foreground mt-2">{t("cit_sub")}</p>
-      </div>
+      <PageHeader eyebrow="CITIZEN" title={t("cit_title")} desc={t("cit_sub")} />
 
       <section className={card}>
         <form onSubmit={submit} className="grid sm:grid-cols-2 gap-4">
