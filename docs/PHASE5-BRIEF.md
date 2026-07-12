@@ -21,11 +21,11 @@
 - [x] Dashboard: โครง tabs (ผลรวม/เสียง/รายงาน) เตรียมรับ canvas ใน M2
 - [x] `npm run build` ผ่าน + tests เดิมเขียว
 
-### P5-M2 — Tipping point detection + opinion swarm canvas
-- [ ] `simulation/metrics` (หรือจุดที่เหมาะ): detect รอบที่ Δ(avg belief) ≥ threshold (default 0.25 บนสเกลของ engine เรา) → บันทึก `[{round, from, to, delta}]`
-- [ ] บังคับใน output: dashboard.json + รายงาน what-if (PRD pipeline ขั้น 7 — Tipping Points ทุกรายงาน)
-- [ ] Opinion swarm canvas ใน dashboard: scatter x=stance, y=confidence, สี=ทิศ, tooltip ต่อ agent (agent จำลอง ระดับ segment — ไม่ map บุคคลจริง)
-- [ ] unit tests: มี/ไม่มี tipping, deterministic ต่อ seed
+### P5-M2 — Tipping point detection + opinion swarm canvas ✅ (12 ก.ค. 2026)
+- [x] `simulation/tipping.py`: detect รอบที่ |Δ belief share| ≥ 0.15/round จาก reasoning trail (เทียบเท่า 0.25 บนสเกล stance ของ SwarmSight — ดู docstring เหตุผล) → `[{round, before, after, delta}]`
+- [x] บังคับใน output: dashboard.json (key `tipping_points` มีเสมอ) + รายงาน what-if (section แสดงเสมอแม้ไม่พบ — PRD pipeline ขั้น 7)
+- [x] Opinion canvas ระดับ segment: x=เชื่อ baseline, y=เชื่อหลังคำชี้แจง, ขนาดฟอง=สัดส่วนประชากร, เส้นทแยง=ไม่เปลี่ยน (ระดับ segment เท่านั้น — SIM-09)
+- [x] unit tests: มี/ไม่มี tipping, deterministic ต่อ seed
 
 ### P5-M3 — Calibration UI (append-only)
 - [ ] Backend: `GET /calibration.json` (Brier รวม + rating bands + trend รายสัปดาห์ + per-domain + รายการ prediction ครบกำหนด/ยัง)
@@ -65,9 +65,8 @@
 | M | สถานะ |
 |---|---|
 | M1 UI shell | ✅ 12 ก.ค. |
-
-| M2 Tipping + canvas | ⏳ กำลังทำ |
-| M3 Calibration UI | รอ |
+| M2 Tipping + canvas | ✅ 12 ก.ค. |
+| M3 Calibration UI | ⏳ กำลังทำ |
 | M4 Red Team + Compare | รอ |
 | M5 Watchlist + webhook | รอ |
 | M6 Graph viz + Insights | รอ |

@@ -6,6 +6,71 @@ import type { RunRequest } from "../App";
 
 type Tab = "overview" | "voices" | "report";
 
+// Opinion canvas ระดับ segment (SIM-09: ห้ามลึกกว่า segment): x = เชื่อใน baseline,
+// y = เชื่อหลังมีคำชี้แจง, ขนาดฟอง = สัดส่วนประชากร — ใต้เส้นทแยง = คำชี้แจงได้ผล
+function SegmentCanvas({
+  scenarios,
+  popShare,
+  labels,
+}: {
+  scenarios: DashboardData["scenarios"];
+  popShare: DashboardData["voice_population_share"];
+  labels: { title: string; note: string; x: string; y: string };
+}) {
+  if (scenarios.length < 2) return null;
+  const [base, variant] = scenarios;
+  const segs = Object.keys(base.belief_by_segment);
+  const W = 560;
+  const H = 320;
+  const P = 44;
+  const sx = (v: number) => P + v * (W - P * 2);
+  const sy = (v: number) => H - P - v * (H - P * 2);
+  const share = (seg: string) => popShare.find((p) => p.segment === seg)?.population_share ?? 0.1;
+  const colors = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6">
+      <h2 className="font-semibold mb-1">{labels.title}</h2>
+      <p className="text-xs text-muted-foreground mb-3">{labels.note}</p>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+        {/* กรอบ + เส้นทแยง (ไม่เปลี่ยน) */}
+        <rect x={P} y={P} width={W - P * 2} height={H - P * 2} fill="none" stroke="var(--color-border)" />
+        <line x1={sx(0)} y1={sy(0)} x2={sx(1)} y2={sy(1)} stroke="var(--color-border)" strokeDasharray="4,4" />
+        <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="10" fill="var(--color-muted-foreground)">
+          {labels.x} →
+        </text>
+        <text x={14} y={H / 2} textAnchor="middle" fontSize="10" fill="var(--color-muted-foreground)" transform={`rotate(-90 14 ${H / 2})`}>
+          {labels.y} →
+        </text>
+        {[0, 0.5, 1].map((v) => (
+          <g key={v}>
+            <text x={sx(v)} y={H - P + 14} textAnchor="middle" fontSize="9" fill="var(--color-muted-foreground)">
+              {Math.round(v * 100)}%
+            </text>
+            <text x={P - 8} y={sy(v) + 3} textAnchor="end" fontSize="9" fill="var(--color-muted-foreground)">
+              {Math.round(v * 100)}%
+            </text>
+          </g>
+        ))}
+        {segs.map((seg, i) => {
+          const x = base.belief_by_segment[seg] ?? 0;
+          const y = variant.belief_by_segment[seg] ?? 0;
+          const r = 8 + share(seg) * 40;
+          return (
+            <g key={seg}>
+              <circle cx={sx(x)} cy={sy(y)} r={r} fill={colors[i % colors.length]} fillOpacity={0.55} stroke="white" strokeWidth={1.5}>
+                <title>{`${seg}\n${labels.x}: ${Math.round(x * 100)}% → ${labels.y}: ${Math.round(y * 100)}%`}</title>
+              </circle>
+              <text x={sx(x)} y={sy(y) - r - 4} textAnchor="middle" fontSize="10" fill="var(--color-foreground)">
+                {seg}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 function FragilityBadge({ index, label, tip }: { index: number; label: string; tip: string }) {
   const cls =
     index > 70
@@ -112,6 +177,7 @@ export default function Dashboard({
           />
 
           {tab === "overview" && (
+            <>
             <section className={card}>
               <h2 className="font-semibold mb-4">{t("compare_title")}</h2>
               <table className="w-full text-sm">
@@ -145,6 +211,38 @@ export default function Dashboard({
                 </tbody>
               </table>
             </section>
+
+            {/* Tipping points — PRD บังคับแสดงทุกรายงาน แม้ไม่พบ */}
+            <section className={card}>
+              <h2 className="font-semibold mb-1">
+                ⚡ {t("tipping_title")} <InfoTip text={t("tip_tipping")} />
+              </h2>
+              {result.tipping_points.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("tipping_none")}</p>
+              ) : (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {result.tipping_points.map((tp, i) => (
+                    <span
+                      key={i}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs ${
+                        tp.delta > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-primary/30 bg-primary-soft text-primary-strong"
+                      }`}
+                      title={`${tp.scenario} · round ${tp.round}: ${pct(tp.before)} → ${pct(tp.after)}`}
+                    >
+                      {tp.scenario} · r{tp.round}
+                      <b className="tabular-nums">{tp.delta > 0 ? "+" : ""}{Math.round(tp.delta * 100)}%</b>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <SegmentCanvas
+              scenarios={result.scenarios}
+              popShare={result.voice_population_share}
+              labels={{ title: t("canvas_title"), note: t("canvas_note"), x: t("canvas_x"), y: t("canvas_y") }}
+            />
+            </>
           )}
 
           {tab === "voices" && (

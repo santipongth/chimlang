@@ -89,6 +89,22 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "Fragility Index = สัดส่วนจักรวาลคู่ขนาน (5 universes) ที่ข้อสรุปหลักพลิกเมื่อเขย่าสมมติฐานเล็กน้อย\n0-40 = มั่นคง | 41-70 = ลด confidence อัตโนมัติ | >70 = ห้าม export ตัวเลขเดี่ยว (TRUST-05)",
     en: "Fragility Index = share of the 5 parallel universes where the main conclusion flips under small perturbations.\n0-40 = stable | 41-70 = confidence auto-downgraded | >70 = single-figure export blocked (TRUST-05)",
   },
+  tipping_title: { th: "Tipping Points — จุดที่กระแสพลิก", en: "Tipping points — where the narrative flips" },
+  tipping_none: {
+    th: "ไม่พบ tipping point — การแพร่เป็นแบบค่อยเป็นค่อยไปตลอดการจำลอง (ไม่มี round ที่ความเชื่อเปลี่ยน ≥ 15%)",
+    en: "No tipping point — diffusion was gradual throughout (no round moved belief ≥ 15%)",
+  },
+  tip_tipping: {
+    th: "Tipping point = round ที่สัดส่วนผู้เชื่อเปลี่ยน ≥ 15% ภายใน round เดียว (คำนวณจาก reasoning trail — deterministic ต่อ seed)\nสีแดง = ข่าวลือพุ่ง | สีเขียว = คำชี้แจงดึงกลับ",
+    en: "Tipping point = a round where belief share moves ≥ 15% in a single round (computed from the reasoning trail — deterministic per seed).\nRed = rumor surge | green = correction pulling back",
+  },
+  canvas_title: { th: "Opinion canvas รายกลุ่ม", en: "Segment opinion canvas" },
+  canvas_note: {
+    th: "แต่ละฟอง = 1 กลุ่มประชากร (ระดับ segment เท่านั้น — SIM-09) ขนาดฟอง = สัดส่วนประชากร; ใต้เส้นทแยง = คำชี้แจงลดความเชื่อข่าวลือได้",
+    en: "Each bubble = one population segment (segment-level only — SIM-09), sized by population share; below the diagonal = the clarification reduced rumor belief",
+  },
+  canvas_x: { th: "เชื่อข่าวลือ (baseline)", en: "Believe rumor (baseline)" },
+  canvas_y: { th: "เชื่อข่าวลือ (มีคำชี้แจง)", en: "Believe rumor (with clarification)" },
   tip_range: {
     th: "ช่วงจากการรัน 5 จักรวาลคู่ขนาน (perturb สมมติฐาน ±10% + seed) — ระบบไม่รายงานตัวเลขเดี่ยวโดยเจตนา (TRUST-09)",
     en: "Range across 5 parallel universes (assumptions perturbed ±10% + seeds) — we deliberately never report a point estimate (TRUST-09)",

@@ -179,6 +179,14 @@ def _run_dashboard(subject: str, granularity: str, agents: int = 100) -> Dashboa
         subject=subject,
     )
     cards = build_cards()
+    # PRD pipeline ขั้น 7: Tipping Points บังคับทุกรายงาน — จาก run ตัวแทน (seed แรก)
+    from simulation.tipping import tipping_from_run
+
+    tipping = tuple(
+        {"scenario": name, **tp.to_dict()}
+        for name, run in (("baseline", base.baseline), ("variant", base.variant))
+        for tp in tipping_from_run(run, "rumor")
+    )
     dash = Dashboard(
         subject=subject,
         brief=brief,
@@ -190,6 +198,7 @@ def _run_dashboard(subject: str, granularity: str, agents: int = 100) -> Dashboa
         voice_population_share=tuple(
             {"segment": c.segment_name, "population_share": c.share} for c in cards
         ),
+        tipping_points=tipping,
     )
     return dash
 

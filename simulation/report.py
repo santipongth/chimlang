@@ -8,6 +8,7 @@ from collections import Counter
 
 from simulation.engine import RunResult
 from simulation.experiment import DeltaEstimate, ForkOutcome
+from simulation.tipping import DEFAULT_THRESHOLD, tipping_from_run
 
 
 def voice_vs_population(result: RunResult, msg_id: str) -> list[tuple[str, float, float]]:
@@ -88,7 +89,32 @@ def render_whatif_report(
                 f"| [{ulo:+.1%}, {uhi:+.1%}] | {u.conclusion} |"
             )
         lines.append("")
+    # PRD pipeline ขั้น 7: Tipping Points เป็น output บังคับของทุกรายงาน — แสดงเสมอแม้ไม่พบ
     lines += [
+        "## Tipping Points (pipeline ขั้น 7 — จุดที่ narrative พลิกอย่างมีนัยสำคัญ)",
+        "",
+        f"นิยาม: round ที่สัดส่วนผู้เชื่อเปลี่ยน ≥ {DEFAULT_THRESHOLD:.0%} ภายใน round เดียว "
+        "(จาก reasoning trail — deterministic ต่อ seed)",
+        "",
+    ]
+    tipping_rows = [
+        (name, tp)
+        for name, run in (("baseline", example.baseline), ("variant", example.variant))
+        for tp in tipping_from_run(run, base_msg_id)
+    ]
+    if tipping_rows:
+        lines += ["| scenario | round | ก่อน | หลัง | Δ |", "|---|---|---|---|---|"]
+        lines += [
+            f"| {name} | r{tp.round_no} | {tp.before:.0%} | {tp.after:.0%} | {tp.delta:+.0%} |"
+            for name, tp in tipping_rows
+        ]
+    else:
+        lines.append(
+            f"- ไม่พบ tipping point (ไม่มี round ที่ belief share เปลี่ยน ≥ {DEFAULT_THRESHOLD:.0%}) "
+            "— การแพร่เป็นแบบค่อยเป็นค่อยไปตลอดการจำลอง"
+        )
+    lines += [
+        "",
         "## Voice share vs Population share (baseline, seed แรก — TRUST-07)",
         "",
         "| กลุ่ม | population share | voice share |",
