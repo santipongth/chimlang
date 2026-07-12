@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { LangProvider, useLang } from "./i18n";
 import Landing from "./pages/Landing";
 import NewRun from "./pages/NewRun";
-import Dashboard from "./pages/Dashboard";
 import Citizen from "./pages/Citizen";
 import Runs from "./pages/Runs";
 import Calibration from "./pages/Calibration";
@@ -10,25 +9,28 @@ import Compare from "./pages/Compare";
 import Watchlist from "./pages/Watchlist";
 import Insights from "./pages/Insights";
 import Gallery from "./pages/Gallery";
+import RunDetail from "./pages/RunDetail";
+import Settings from "./pages/Settings";
 import { fetchWatchlists } from "./api";
-import type { DashboardData } from "./api";
 
 export type Page =
   | "home"
   | "new"
-  | "dashboard"
+  | "run" // run detail (P6-M2)
   | "compare"
+  | "history"
   | "insights"
   | "calibration"
   | "watchlist"
   | "gallery"
   | "citizen"
-  | "runs";
+  | "settings";
+
 export interface RunRequest {
   subject: string;
   agents: number;
-  redTeam?: boolean; // A/B: เปิด = เทียบ baseline vs +Red Team ในหน้า compare
-  packId?: number | null; // persona pack ที่ผู้ใช้นิยามเอง (P5-M7) — null = สำมะโน default
+  redTeam?: boolean; // fabric A/B → หน้า Compare
+  packId?: number | null;
 }
 
 function WatermarkBanner() {
@@ -40,20 +42,18 @@ function WatermarkBanner() {
   );
 }
 
-// Sidebar ตาม layout studio: w-60, nav item rounded-lg px-3 py-2, active = bg-sidebar-accent,
-// รองรับ badge ตัวเลขชิดขวา (ใช้จริงกับ alerts ใน P5-M5)
+// Sidebar ตาม layout studio: nav หลัก + Settings ล่างสุด (แบบเดียวกับต้นแบบ)
 function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page) => void; badges?: Partial<Record<Page, number>> }) {
   const { lang, setLang, t } = useLang();
   const items: { id: Page; icon: string; label: string }[] = [
     { id: "home", icon: "🏠", label: t("nav_home") },
     { id: "new", icon: "＋", label: t("nav_new_run") },
-    { id: "dashboard", icon: "📊", label: t("nav_dashboard") },
+    { id: "history", icon: "🕘", label: t("nav_history") },
     { id: "insights", icon: "📈", label: t("nav_insights") },
     { id: "calibration", icon: "🎯", label: t("nav_calibration") },
     { id: "watchlist", icon: "🔔", label: t("nav_watchlist") },
     { id: "gallery", icon: "🌐", label: t("nav_gallery") },
     { id: "citizen", icon: "👥", label: t("nav_citizen") },
-    { id: "runs", icon: "🕘", label: t("nav_runs") },
   ];
   return (
     <aside className="w-60 shrink-0 bg-sidebar border-r border-border flex flex-col min-h-screen p-4">
@@ -76,13 +76,20 @@ function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page
             <span className="w-4 text-center text-[13px]">{it.icon}</span>
             {it.label}
             {(badges[it.id] ?? 0) > 0 && (
-              <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">
-                {badges[it.id]}
-              </span>
+              <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">{badges[it.id]}</span>
             )}
           </button>
         ))}
       </nav>
+      <button
+        onClick={() => setPage("settings")}
+        className={`mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+          page === "settings" ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60"
+        }`}
+      >
+        <span className="w-4 text-center text-[13px]">⚙️</span>
+        {t("nav_settings")}
+      </button>
       <div className="border-t border-border pt-3">
         <div className="flex rounded-full border border-border overflow-hidden text-xs">
           {(["th", "en"] as const).map((l) => (
@@ -103,10 +110,9 @@ function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page
 function Shell() {
   const [page, setPage] = useState<Page>("home");
   const [request, setRequest] = useState<RunRequest | null>(null);
-  const [result, setResult] = useState<DashboardData | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
 
-  // badge alerts ที่ sidebar — โหลดตอนเปิด + refresh ทุก 60 วิ (เบา ไม่มี LLM)
   const refreshUnread = () =>
     fetchWatchlists()
       .then((d) => setUnread(d.unread))
@@ -117,11 +123,7 @@ function Shell() {
     return () => clearInterval(timer);
   }, []);
 
-  const startRun = (req: RunRequest) => {
-    setRequest(req);
-    setResult(null);
-    setPage(req.redTeam ? "compare" : "dashboard");
-  };
+  const wide = !["new", "home", "citizen"].includes(page);
 
   return (
     <div className="min-h-screen">
@@ -129,20 +131,36 @@ function Shell() {
       <div className="flex">
         <Sidebar page={page} setPage={setPage} badges={{ watchlist: unread }} />
         <main className="min-w-0 flex-1 px-8 py-10">
-          {/* dashboard/runs กว้าง max-w-4xl แบบ studio; ฟอร์ม/wizard แคบ max-w-3xl */}
-          <div className={`mx-auto ${page === "new" || page === "home" || page === "citizen" ? "max-w-3xl" : "max-w-4xl"}`}>
-          {page === "home" && <Landing onStart={() => setPage("new")} />}
-          {page === "new" && <NewRun onRun={startRun} />}
-          {page === "dashboard" && (
-            <Dashboard request={request} result={result} setResult={setResult} onNew={() => setPage("new")} />
-          )}
-          {page === "compare" && <Compare request={request} />}
-          {page === "insights" && <Insights />}
-          {page === "calibration" && <Calibration />}
-          {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
-          {page === "gallery" && <Gallery />}
-          {page === "citizen" && <Citizen />}
-          {page === "runs" && <Runs />}
+          <div className={`mx-auto ${wide ? "max-w-4xl" : "max-w-3xl"}`}>
+            {page === "home" && <Landing onStart={() => setPage("new")} />}
+            {page === "new" && (
+              <NewRun
+                onCompare={(req) => {
+                  setRequest(req);
+                  setPage("compare");
+                }}
+                onCreated={(id) => {
+                  setRunId(id);
+                  setPage("run");
+                }}
+              />
+            )}
+            {page === "run" && runId && <RunDetail runId={runId} onBack={() => setPage("history")} />}
+            {page === "compare" && <Compare request={request} />}
+            {page === "history" && (
+              <Runs
+                onOpen={(id) => {
+                  setRunId(id);
+                  setPage("run");
+                }}
+              />
+            )}
+            {page === "insights" && <Insights />}
+            {page === "calibration" && <Calibration />}
+            {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
+            {page === "gallery" && <Gallery />}
+            {page === "citizen" && <Citizen />}
+            {page === "settings" && <Settings />}
           </div>
         </main>
       </div>

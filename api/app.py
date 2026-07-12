@@ -436,6 +436,277 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"runs": runs, "due": due}
 
 
+# ---- App settings (P6-M4) ----
+
+
+@app.get("/settings.json")
+def settings_json(principal: Principal = Depends(get_principal)) -> dict:
+    from core.appsettings import get_app_settings
+
+    settings = get_settings()
+    try:
+        data = get_app_settings(settings.postgres_url)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {
+        **data,
+        "webhook_configured": bool(settings.alert_webhook_url.strip()),
+        "auth_enabled": settings.auth_enabled,
+        "caps": {
+            "fabric": settings.max_agents_per_run,
+            "debate": settings.max_agents_per_debate,
+        },
+    }
+
+
+@app.put("/settings.json")
+def settings_put(patch: dict, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.appsettings import put_app_settings
+
+    settings = get_settings()
+    try:
+        return put_app_settings(settings.postgres_url, patch)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+# ---- Persistent runs (P6-M1/M2): เลือก engine → รัน → เก็บถาวร → History/Replay ----
+
+
+class RunBody(BaseModel):
+    engine: str = "fabric"  # fabric | debate
+    subject: str
+    domain: str = "ทั่วไป"
+    agents: int = 100
+    rounds: int = 3  # ใช้กับ debate เท่านั้น (fabric ใช้ config ภายใน 20)
+    pack_id: int | None = None
+    red_team: bool = False  # debate: ฝัง adversarial 2 ตัว (fabric ใช้หน้า compare อยู่แล้ว)
+    # P6-M3: เอกสารอ้างอิง (เฉพาะ debate) — {kind: text|url|rss, label, url?, text?}
+    sources: list[dict] = []
+
+
+@app.get("/engines.json")
+def engines_json(principal: Principal = Depends(get_principal)) -> dict:
+    from simulation.engines import ENGINES
+
+    return {"engines": [e.to_dict() for e in ENGINES.values()]}
+
+
+def _register_run_prediction(store, run_id: str, subject: str, domain: str, payload: dict) -> None:
+    """กฎเหล็กข้อ 3: ทุก run ต้องมี prediction ≥1 — heuristic v1 (บันทึกตรงๆ ว่าเป็น heuristic)
+
+    fabric: ทิศจาก headline range (CI ไม่คร่อม 0 = มีทิศ, confidence ลดตาม fragility)
+    debate: ทิศจากจุดยืนเฉลี่ยรอบสุดท้าย, confidence จาก synthesis (ถูกลดตาม failed แล้ว)
+    """
+    from datetime import date, timedelta
+
+    from governance.store import Prediction
+
+    if "brief" in payload:  # fabric dashboard payload
+        lo, hi = payload["brief"]["headline_range"]
+        frag = payload["brief"]["fragility_index"]
+        if hi < 0:
+            direction, conf = "ลดลง", round(max(0.5, 0.75 * (1 - frag / 100)), 2)
+        elif lo > 0:
+            direction, conf = "เพิ่มขึ้น", round(max(0.5, 0.75 * (1 - frag / 100)), 2)
+        else:
+            direction, conf = "ไม่ชัด", 0.5
+        claim = f"{subject}: ทิศทาง delta ของความเชื่อจะ{direction}เมื่อทดสอบซ้ำด้วยชุด parameter ใหม่"
+    else:  # debate payload
+        avg = (payload.get("metrics", {}).get("per_round_avg_stance") or [0])[-1]
+        direction = "เพิ่มขึ้น" if avg > 0.15 else "ลดลง" if avg < -0.15 else "ไม่ชัด"
+        conf = float(payload.get("synthesis", {}).get("confidence", 0.5))
+        claim = f"{subject}: ฉันทามติของวงดีเบตเอนไปทาง '{direction}' และจะคงทิศเมื่อดีเบตซ้ำ"
+    store.register_prediction(
+        run_id,
+        Prediction(
+            claim=claim,
+            direction=direction,
+            confidence=max(0.01, min(0.99, conf)),
+            measurement="ผู้ใช้ป้อนผลจริงเมื่อครบกำหนด (หน้า Calibration ใน /app)",
+            due_date=date.today() + timedelta(days=30),
+            model_version="chimlang-run@p6",
+            domain=domain,
+        ),
+    )
+
+
+@app.post("/runs")
+def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+    """สร้าง run ถาวร (P6-M2) — governance ครบ: PII gate, election, audit, prediction, cap"""
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore, new_run_id
+    from governance.pii import PIIDetector, load_allowlist
+    from governance.store import GovernanceStore
+    from simulation.engines import get_engine
+
+    settings = get_settings()
+    try:
+        engine = get_engine(body.engine)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    subject = body.subject.strip()
+    if len(subject) < 4:
+        raise HTTPException(status_code=422, detail="หัวข้อสั้นเกินไป")
+    if not settings.pii_detector_enabled:
+        raise HTTPException(status_code=503, detail="PII detector ถูกปิด — ปฏิเสธการรัน (GOV-01)")
+    pii = PIIDetector(load_allowlist()).check(subject)
+    if pii.blocked:
+        raise HTTPException(
+            status_code=422, detail="พบ PII ในหัวข้อ (GOV-01): " + "; ".join(pii.block_reasons)
+        )
+    if ElectionPolicy(classify_scenario(subject)).active:
+        require_election(principal)
+
+    if body.sources and body.engine != "debate":
+        raise HTTPException(status_code=422, detail="sources ใช้ได้กับ engine debate เท่านั้น")
+    n = min(body.agents, engine.max_agents)
+    rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
+    run_id = new_run_id(body.engine)
+    factory = _load_pack_factory(body.pack_id)
+
+    try:
+        rstore = RunStore(settings.postgres_url)
+        rstore.setup()
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+    config = {
+        "pack_id": body.pack_id,
+        "red_team": body.red_team,
+        "requested_agents": body.agents,
+    }
+    rstore.create(
+        run_id=run_id,
+        engine=body.engine,
+        subject=subject,
+        domain=body.domain,
+        agents=n,
+        rounds=rounds,
+        seed=settings.default_seed,
+        config=config,
+    )
+    gov.append_audit(
+        actor=principal.user_id,
+        action="run_started",
+        run_id=run_id,
+        config_hash="-",
+        detail=f"engine={body.engine} agents={n} subject={subject[:60]}",
+    )
+    try:
+        if body.engine == "fabric":
+            payload = _run_dashboard(subject, "aggregate", n, factory=factory).to_dict()
+        else:
+            from simulation.debate import make_debate_adapter, run_debate
+            from simulation.persona import PersonaFactory
+            from simulation.redteam_population import inject_red_team
+            from simulation.sources import retrieve_context
+
+            personas = (factory or PersonaFactory()).sample(
+                n, seed=settings.default_seed, max_agents=n
+            )
+            if body.red_team:
+                personas = inject_red_team(personas)
+            source_status: list[dict] = []
+            if body.sources:
+                from simulation.sources import ingest_sources
+
+                source_status = ingest_sources(settings.postgres_url, run_id, body.sources)
+            context = retrieve_context(settings.postgres_url, run_id, subject, k=6)
+            result = run_debate(
+                personas,
+                subject=subject,
+                rounds=rounds,
+                seed=settings.default_seed,
+                adapter=make_debate_adapter(n, rounds),
+                context_chunks=context,
+            )
+            rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
+            payload = {
+                "synthesis": result.synthesis,
+                "metrics": result.metrics,
+                "cost_usd": result.cost_usd,
+                "red_team": body.red_team,
+                "sources": source_status,
+                "context_used": len(context),
+            }
+        rstore.finish(run_id, payload)
+        _register_run_prediction(gov, run_id, subject, body.domain, payload)
+        gov.finalize_run(run_id)  # ไม่มี prediction = raise (กฎเหล็กข้อ 3)
+        gov.append_audit(
+            actor=principal.user_id, action="run_completed", run_id=run_id, config_hash="-"
+        )
+    except HTTPException:
+        raise
+    except ElectionModeError as e:
+        rstore.fail(run_id, str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except Exception as e:
+        rstore.fail(run_id, str(e))
+        raise HTTPException(status_code=502, detail=f"รันไม่สำเร็จ: {e}") from e
+    return {"run_id": run_id, "engine": body.engine, "agents": n}
+
+
+@app.get("/simruns.json")
+def simruns_json(
+    search: str = Query(""),
+    engine: str = Query(""),
+    status: str = Query(""),
+    principal: Principal = Depends(get_principal),
+) -> dict:
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        return {"runs": store.list_runs(search=search, engine=engine, status=status)}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+@app.get("/runs/{run_id}.json")
+def run_detail_json(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        return store.get(run_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+@app.delete("/runs/{run_id}")
+def run_delete(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """ลบ run ที่เก็บไว้ (operational) — audit การลบ; prediction/audit เดิมคงอยู่ (append-only)"""
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        store.delete(run_id)
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id, action="run_deleted", run_id=run_id, config_hash="-"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True}
+
+
 # ---- Public Gallery (P5-M8, ADR-0004) ----
 
 gallery_rate_limiter = RateLimiter(max_calls=60, window_s=60.0)

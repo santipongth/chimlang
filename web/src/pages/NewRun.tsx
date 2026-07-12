@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n";
 import { PageHeader, SelectCard } from "../ui";
-import { PersonaPack, fetchPacks } from "../api";
+import {
+  EngineInfo,
+  PersonaPack,
+  SourceInput,
+  createRun,
+  fetchEngines,
+  fetchPacks,
+  fetchSettings,
+} from "../api";
 import PersonaPackModal from "../PersonaPackModal";
 import type { RunRequest } from "../App";
 
-// Template gallery แบบ studio: คลิกเดียวเซ็ตทั้งคำถาม + โดเมน
+// Wizard (P6-M1/M3): คำถาม → เครื่องยนต์ → [แหล่งข้อมูล ถ้า debate] → agents → ยืนยัน
+// ทุก run ถูกเก็บถาวร (P6-M2) → เปิดหน้า Run detail; fabric + Red Team A/B → หน้า Compare เดิม
+
 const TEMPLATES = [
   { label: "ค่าธรรมเนียมรถติด", q: "มาตรการค่าธรรมเนียมรถติด กทม.", domain: "นโยบายสาธารณะ" },
   { label: "ขึ้นราคา 15%", q: "แคมเปญขึ้นราคาสินค้า 15% พร้อมข้อความสื่อสารใหม่", domain: "ธุรกิจ/การตลาด" },
@@ -41,31 +51,111 @@ function Steps({ step, labels, onJump }: { step: number; labels: string[]; onJum
   );
 }
 
-export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
-  const { t } = useLang();
+export default function NewRun({
+  onCompare,
+  onCreated,
+}: {
+  onCompare: (r: RunRequest) => void; // fabric + Red Team A/B → หน้า Compare เดิม
+  onCreated: (runId: string) => void; // run ถาวร → หน้า Run detail
+}) {
+  const { lang, t } = useLang();
   const [step, setStep] = useState(0);
   const [subject, setSubject] = useState("");
   const [domain, setDomain] = useState(DOMAINS[0]);
   const [agents, setAgents] = useState(100);
+  const [rounds, setRounds] = useState(3);
+  const [engine, setEngine] = useState<"fabric" | "debate">("fabric");
+  const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [redTeam, setRedTeam] = useState(false);
   const [packs, setPacks] = useState<PersonaPack[]>([]);
   const [packId, setPackId] = useState<number | null>(null);
   const [packModalOpen, setPackModalOpen] = useState(false);
+  const [sources, setSources] = useState<SourceInput[]>([]);
+  const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const loadPacks = () => fetchPacks().then(setPacks).catch(() => {});
   useEffect(() => {
     loadPacks();
+    fetchEngines().then(setEngines).catch(() => {});
+    fetchSettings()
+      .then((s) => {
+        setEngine(s.default_engine);
+        setAgents(s.default_agents);
+        setRounds(s.default_rounds);
+        if (DOMAINS.includes(s.default_domain)) setDomain(s.default_domain);
+      })
+      .catch(() => {});
   }, []);
 
-  const labels = [t("wiz_step1"), t("wiz_step2"), t("wiz_step3")];
+  const isDebate = engine === "debate";
+  const cap = engines.find((e) => e.key === engine)?.max_agents ?? (isDebate ? 40 : 1000);
+  const agentChoices = isDebate ? [10, 20, 40] : [100, 500, 1000];
+  const labels = [
+    t("wiz_step1"),
+    t("wiz_step_engine"),
+    ...(isDebate ? [t("wiz_step_sources")] : []),
+    t("wiz_step2"),
+    t("wiz_step3"),
+  ];
+  const stepKey = (isDebate
+    ? ["question", "engine", "sources", "agents", "review"]
+    : ["question", "engine", "agents", "review"])[step];
+  const lastStep = labels.length - 1;
   const card = "bg-card border border-border rounded-2xl p-6";
+
+  function addSource() {
+    if (sources.length >= 10) return;
+    const v = srcDraft.value.trim();
+    if (!v) return;
+    if (srcDraft.kind !== "text" && !/^https?:\/\//.test(v)) {
+      setError(t("wiz_src_need_url"));
+      return;
+    }
+    setError("");
+    setSources((s) => [
+      ...s,
+      srcDraft.kind === "text"
+        ? { kind: "text", label: srcDraft.label.trim() || `${t("wiz_src_text")} ${s.length + 1}`, text: v }
+        : { kind: srcDraft.kind, label: srcDraft.label.trim() || v.slice(0, 60), url: v },
+    ]);
+    setSrcDraft({ ...srcDraft, label: "", value: "" });
+  }
+
+  async function submit() {
+    if (redTeam && engine === "fabric") {
+      onCompare({ subject: subject.trim(), agents, redTeam: true, packId });
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const runId = await createRun({
+        engine,
+        subject: subject.trim(),
+        domain,
+        agents: Math.min(agents, cap),
+        rounds,
+        pack_id: packId,
+        red_team: redTeam,
+        sources: isDebate ? sources : [],
+      });
+      onCreated(runId);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader eyebrow={t("wiz_eyebrow")} title={t("wiz_title")} />
       <Steps step={step} labels={labels} onJump={setStep} />
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm">{error}</div>}
 
-      {step === 0 && (
+      {stepKey === "question" && (
         <div className={card + " space-y-5"}>
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t("wiz_q_label")}</div>
@@ -81,19 +171,10 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
             <p className="text-xs text-muted-foreground mt-1 mb-2">{t("wiz_templates_hint")}</p>
             <div className="grid sm:grid-cols-2 gap-2">
               {TEMPLATES.map((tpl) => (
-                <SelectCard
-                  key={tpl.label}
-                  active={subject === tpl.q}
-                  onClick={() => {
-                    setSubject(tpl.q);
-                    setDomain(tpl.domain);
-                  }}
-                >
+                <SelectCard key={tpl.label} active={subject === tpl.q} onClick={() => { setSubject(tpl.q); setDomain(tpl.domain); }}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">{tpl.label}</span>
-                    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
-                      {tpl.domain}
-                    </span>
+                    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{tpl.domain}</span>
                   </div>
                   <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{tpl.q}</div>
                 </SelectCard>
@@ -114,24 +195,112 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
         </div>
       )}
 
-      {step === 1 && (
+      {stepKey === "engine" && (
         <div className={card + " space-y-4"}>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_agents")}</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">⚙ {t("wiz_engine_title")}</div>
+          <p className="text-xs text-muted-foreground">{t("wiz_engine_desc")}</p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {engines.map((e) => (
+              <SelectCard
+                key={e.key}
+                active={engine === e.key}
+                onClick={() => {
+                  setEngine(e.key);
+                  setAgents(e.key === "debate" ? 20 : 100);
+                  setStep(1);
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{e.key === "debate" ? "🗣 " : "⚙ "}{lang === "th" ? e.label_th : e.label_en}</span>
+                  {e.uses_llm && <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] text-amber-700">LLM·$</span>}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{lang === "th" ? e.desc_th : e.desc_en}</div>
+              </SelectCard>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">🔮 {t("wiz_engine_future")}</p>
+        </div>
+      )}
+
+      {stepKey === "sources" && (
+        <div className={card + " space-y-4"}>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">📎 {t("wiz_src_title")}</div>
+          <p className="text-xs text-muted-foreground">{t("wiz_src_desc")}</p>
+          <div className="flex flex-wrap gap-2">
+            {(["url", "rss", "text"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setSrcDraft({ ...srcDraft, kind: k })}
+                className={`rounded-full border px-3 py-1 text-xs ${srcDraft.kind === k ? "border-primary bg-primary/5 text-primary-strong font-medium" : "border-border text-muted-foreground"}`}
+              >
+                {k === "url" ? "🔗 URL" : k === "rss" ? "📰 RSS" : `📄 ${t("wiz_src_text")}`}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <input
+              value={srcDraft.label}
+              onChange={(e) => setSrcDraft({ ...srcDraft, label: e.target.value })}
+              placeholder={t("wiz_src_label_ph")}
+              className="w-full rounded-xl border border-border bg-background px-4 py-2 text-sm"
+            />
+            {srcDraft.kind === "text" ? (
+              <textarea
+                value={srcDraft.value}
+                onChange={(e) => setSrcDraft({ ...srcDraft, value: e.target.value })}
+                placeholder={t("wiz_src_text_ph")}
+                rows={4}
+                className="w-full rounded-xl border border-border bg-background px-4 py-2 text-sm"
+              />
+            ) : (
+              <input
+                value={srcDraft.value}
+                onChange={(e) => setSrcDraft({ ...srcDraft, value: e.target.value })}
+                placeholder="https://…"
+                className="w-full rounded-xl border border-border bg-background px-4 py-2 text-sm"
+              />
+            )}
+            <button onClick={addSource} className="rounded-xl border border-border px-4 py-2 text-sm text-primary-strong hover:bg-primary/5">
+              + {t("wiz_src_add")}
+            </button>
+          </div>
+          {sources.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {sources.map((s, i) => (
+                <li key={i} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                  <span className="truncate">{s.kind === "url" ? "🔗" : s.kind === "rss" ? "📰" : "📄"} {s.label}</span>
+                  <button onClick={() => setSources(sources.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-600">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-muted-foreground">🛡️ {t("wiz_src_pii_note")}</p>
+        </div>
+      )}
+
+      {stepKey === "agents" && (
+        <div className={card + " space-y-4"}>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_agents")} (cap {cap})</div>
           <div className="grid sm:grid-cols-3 gap-2">
-            {[100, 500, 1000].map((n) => (
+            {agentChoices.map((n) => (
               <SelectCard key={n} active={agents === n} onClick={() => setAgents(n)}>
                 <span className="text-sm font-medium">{n.toLocaleString()} agents</span>
               </SelectCard>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">{t("wiz_agents_note")}</p>
-          <p className="text-xs text-muted-foreground">🌌 {t("wiz_universes")}</p>
+          {isDebate && (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("wiz_rounds")}: <span className="text-foreground">{rounds}</span>
+              </div>
+              <input type="range" min={1} max={6} value={rounds} onChange={(e) => setRounds(parseInt(e.target.value))} className="mt-2 w-full accent-primary" />
+            </div>
+          )}
+          {!isDebate && <p className="text-xs text-muted-foreground">🌌 {t("wiz_universes")}</p>}
 
-          {/* Persona preset (P5-M7): สำมะโน default หรือ pack ที่ผู้ใช้นิยาม/AI สร้าง */}
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_persona_title")}</div>
-            <p className="text-xs text-muted-foreground mt-1 mb-2">{t("wiz_persona_desc")}</p>
-            <div className="grid sm:grid-cols-2 gap-2">
+            <div className="mt-2 grid sm:grid-cols-2 gap-2">
               <SelectCard active={packId === null} onClick={() => setPackId(null)}>
                 <div className="text-sm font-medium">{t("wiz_persona_default")}</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{t("wiz_persona_default_desc")}</div>
@@ -139,94 +308,69 @@ export default function NewRun({ onRun }: { onRun: (r: RunRequest) => void }) {
               {packs.map((p) => (
                 <SelectCard key={p.id} active={packId === p.id} onClick={() => setPackId(p.id)}>
                   <div className="text-sm font-medium">★ {p.label}</div>
-                  <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                    {p.segments.length} segments — {p.segments.map((s) => s.name).join(", ")}
-                  </div>
+                  <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{p.segments.map((s) => s.name).join(", ")}</div>
                 </SelectCard>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setPackModalOpen(true)}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5"
-            >
+            <button type="button" onClick={() => setPackModalOpen(true)} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">
               ✨ {t("wiz_persona_create")}
             </button>
           </div>
 
-          {/* Red Team A/B — toggle card โทน destructive แบบ studio */}
           <button
             type="button"
             onClick={() => setRedTeam(!redTeam)}
-            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
-              redTeam ? "border-red-300 bg-red-50" : "border-border bg-card hover:bg-muted"
-            }`}
+            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${redTeam ? "border-red-300 bg-red-50" : "border-border bg-card hover:bg-muted"}`}
           >
             <span className="mt-0.5 text-lg">🛡️</span>
             <span className="flex-1">
               <span className="flex items-center gap-2 text-sm font-medium">
-                {t("wiz_redteam_title")}
-                {redTeam && (
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-700">
-                    ON
-                  </span>
-                )}
+                {isDebate ? t("wiz_redteam_debate_title") : t("wiz_redteam_title")}
+                {redTeam && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-700">ON</span>}
               </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">{t("wiz_redteam_desc")}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {isDebate ? t("wiz_redteam_debate_desc") : t("wiz_redteam_desc")}
+              </span>
             </span>
           </button>
         </div>
       )}
 
-      {step === 2 && (
+      {stepKey === "review" && (
         <div className={card + " space-y-3 text-sm"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_review")}</div>
-          <div className="grid grid-cols-[120px_1fr] gap-y-2">
-            <span className="text-muted-foreground">{t("wiz_step1")}</span>
-            <span className="font-medium">{subject || "—"}</span>
-            <span className="text-muted-foreground">{t("wiz_domain")}</span>
-            <span>{domain}</span>
-            <span className="text-muted-foreground">{t("wiz_agents")}</span>
-            <span>{agents.toLocaleString()} × 5 universes</span>
-            <span className="text-muted-foreground">Personas</span>
-            <span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
-            <span className="text-muted-foreground">Red Team A/B</span>
-            <span>{redTeam ? `🛡️ ${t("wiz_redteam_on")}` : "—"}</span>
+          <div className="grid grid-cols-[130px_1fr] gap-y-2">
+            <span className="text-muted-foreground">{t("wiz_step1")}</span><span className="font-medium">{subject || "—"}</span>
+            <span className="text-muted-foreground">Engine</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : " · 5 universes"}</span>
+            <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{Math.min(agents, cap).toLocaleString()}</span>
+            <span className="text-muted-foreground">Personas</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
+            {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
+            <span className="text-muted-foreground">Red Team</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ON`) : "—"}</span>
           </div>
+          {isDebate && <p className="text-xs text-amber-700">💰 {t("wiz_cost_note")}</p>}
+          <p className="text-xs text-muted-foreground">🔒 {t("wiz_persist_note")}</p>
         </div>
       )}
 
       <div className="flex justify-between">
-        <button
-          className="px-5 py-2.5 rounded-xl text-sm border border-border text-muted-foreground disabled:opacity-40"
-          disabled={step === 0}
-          onClick={() => setStep(step - 1)}
-        >
+        <button className="px-5 py-2.5 rounded-xl text-sm border border-border text-muted-foreground disabled:opacity-40" disabled={step === 0} onClick={() => setStep(step - 1)}>
           {t("back")}
         </button>
-        {step < 2 ? (
+        {step < lastStep ? (
           <button
             className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40"
-            disabled={step === 0 && !subject.trim()}
+            disabled={step === 0 && subject.trim().length < 4}
             onClick={() => setStep(step + 1)}
           >
             {t("next")}
           </button>
         ) : (
-          <button
-            className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium"
-            onClick={() => onRun({ subject: subject.trim(), agents, redTeam, packId })}
-          >
-            {t("run_now")}
+          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy} onClick={submit}>
+            {busy ? `⏳ ${t("running")}` : t("run_now")}
           </button>
         )}
       </div>
-      <PersonaPackModal
-        open={packModalOpen}
-        onClose={() => setPackModalOpen(false)}
-        onSaved={loadPacks}
-        subject={subject}
-      />
+      <PersonaPackModal open={packModalOpen} onClose={() => setPackModalOpen(false)} onSaved={loadPacks} subject={subject} />
     </div>
   );
 }

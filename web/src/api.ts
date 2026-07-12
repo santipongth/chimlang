@@ -42,6 +42,129 @@ export async function fetchDashboard(
   return r.json();
 }
 
+// ---- Engines + persistent runs (P6-M1/M2) ----
+
+export interface EngineInfo {
+  key: "fabric" | "debate";
+  label_th: string;
+  label_en: string;
+  desc_th: string;
+  desc_en: string;
+  uses_llm: boolean;
+  max_agents: number;
+}
+
+export async function fetchEngines(): Promise<EngineInfo[]> {
+  const r = await fetch("/engines.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).engines;
+}
+
+export interface SourceInput {
+  kind: "text" | "url" | "rss";
+  label: string;
+  url?: string;
+  text?: string;
+}
+
+export interface CreateRunBody {
+  engine: "fabric" | "debate";
+  subject: string;
+  domain: string;
+  agents: number;
+  rounds?: number;
+  pack_id?: number | null;
+  red_team?: boolean;
+  sources?: SourceInput[];
+}
+
+export async function createRun(body: CreateRunBody): Promise<string> {
+  const r = await fetch("/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).run_id;
+}
+
+export interface SimRunSummary {
+  run_id: string;
+  created_at: string;
+  engine: string;
+  subject: string;
+  domain: string;
+  agents: number;
+  rounds: number;
+  status: "running" | "complete" | "error";
+}
+
+export async function fetchSimRuns(search = "", engine = ""): Promise<SimRunSummary[]> {
+  const q = new URLSearchParams();
+  if (search) q.set("search", search);
+  if (engine) q.set("engine", engine);
+  const r = await fetch(`/simruns.json?${q}`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return (await r.json()).runs;
+}
+
+export interface DebatePostItem {
+  round_no: number;
+  agent_idx: number;
+  segment: string;
+  content: string;
+  stance: number;
+  sentiment: number;
+  failed: boolean;
+}
+
+export interface SimRunDetail extends SimRunSummary {
+  seed: number;
+  config: Record<string, any>;
+  payload: Record<string, any> | null;
+  error: string | null;
+  posts: DebatePostItem[];
+}
+
+export async function fetchRunDetail(runId: string): Promise<SimRunDetail> {
+  const r = await fetch(`/runs/${runId}.json`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function deleteRun(runId: string): Promise<void> {
+  const r = await fetch(`/runs/${runId}`, { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+// ---- App settings (P6-M4) ----
+
+export interface AppSettings {
+  default_engine: "fabric" | "debate";
+  default_agents: number;
+  default_rounds: number;
+  default_domain: string;
+  default_tab: string;
+  webhook_configured: boolean;
+  auth_enabled: boolean;
+  caps: { fabric: number; debate: number };
+}
+
+export async function fetchSettings(): Promise<AppSettings> {
+  const r = await fetch("/settings.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function saveSettings(patch: Partial<AppSettings>): Promise<void> {
+  const r = await fetch("/settings.json", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
 // ---- Persona packs (P5-M7) ----
 
 export interface PackSegment {

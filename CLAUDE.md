@@ -5,7 +5,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - คู่มือ agent ทุกโมเดล + protocol ส่งมอบงานข้ามโมเดล: @AGENTS.md | สถานะล่าสุด: @docs/STATE.md (**อัปเดตก่อนจบทุก session**)
 - Spec ฉบับเต็ม: @docs/PRD-SANAM.md (PRD v1.1 — ชื่อชั่วคราวเดิม "SANAM" = ชิมลาง)
 - การตัดสินใจทางเทคนิค: @docs/TECH-DECISIONS.md (อ่านก่อนเลือก library/framework ใดๆ)
-- Scope ปัจจุบัน: **Phase 5 (SwarmSight Integration — UI ยึด studio + ปิด gap)** — ดู @docs/PHASE5-BRIEF.md (Phase 0-4 ปิดครบแล้ว: ดู brief แต่ละเฟสใน docs/) ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
+- Scope ปัจจุบัน: **Phase 6 (Studio Parity — engine เลือกได้/run persistence/sources/settings)** — ดู @docs/PHASE6-BRIEF.md (Phase 0-5 ปิดครบแล้ว: ดู brief แต่ละเฟสใน docs/) ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
 
 ## โครงสร้าง repo (เป้าหมาย)
 

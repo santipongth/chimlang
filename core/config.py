@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # cap ต่อ run: ผู้ใช้สั่งขยาย scale 6 ก.ค. 2026 (เดิม 10 ช่วง Phase 0-2) → 1,000 (standard)
     # ระดับ deep (5,000) ยังต้องขออนุมัติผู้ใช้ก่อน — BudgetGuard เป็นด่านต้นทุนจริงเสมอ
     max_agents_per_run: int = 1000
+    # cap เฉพาะ debate engine (P6-M1): ทุก agent = LLM call ต่อ round — คุม latency+cost
+    max_agents_per_debate: int = 40
 
     # --- Datastores ---
     postgres_url: str = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
