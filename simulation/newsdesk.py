@@ -126,12 +126,8 @@ def gather(
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
 
     raw: list[tuple[str, str, str, str, str]] = []  # (provider, query, url, title, content)
-    for feed in feeds[:10]:
-        try:
-            for title, content in _fetch_rss_items(feed)[:10]:
-                raw.append(("rss", feed, feed, title, content))
-        except Exception:
-            continue  # feed เสีย = ข้าม (ข่าวจากแหล่งอื่นยังใช้ได้)
+    # ผลค้น (ตรงหัวข้อ) เข้าคิวก่อน RSS (ข่าวแวดล้อม) — กัน RSS ท่วมจนชน cap แล้วผลค้นตกขบวน
+    # (บั๊กที่ smoke จริงจับได้ 12 ก.ค.: 3 feeds × 10 = 30 ชน MAX_ITEMS ก่อนถึงคิว search)
     if queries and settings.tavily_api_key.strip():
         for q in queries:
             try:
@@ -139,6 +135,12 @@ def gather(
                     raw.append(("search", q, url, title, content))
             except Exception:
                 continue
+    for feed in feeds[:10]:
+        try:
+            for title, content in _fetch_rss_items(feed)[:10]:
+                raw.append(("rss", feed, feed, title, content))
+        except Exception:
+            continue  # feed เสีย = ข้าม (ข่าวจากแหล่งอื่นยังใช้ได้)
 
     items: list[NewsItem] = []
     seen: set[str] = set()
