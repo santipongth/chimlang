@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     alert_webhook_url: str = ""
     consensus_shift_threshold: float = 0.10  # |Δ mean_delta| ระหว่างรอบ ≥ ค่านี้ = consensus_shift
 
+    # --- กุญแจหลักเข้ารหัส secret ใน DB (P6-M5, ADR-0007) ---
+    # จำเป็นเมื่อผู้ใช้ตั้ง LLM API key จากหน้าเว็บ — อยู่ .env จุดเดียว, ห้ามเก็บใน DB
+    secret_key: str = ""
+    # งบรวมต่อเดือน (USD) — LLM spend สะสมทั้งเดือนเกินค่านี้ = block ก่อนรัน (P6-M5)
+    monthly_budget_usd_cap: float = 50.0
+
 
 def get_settings(**overrides) -> Settings:
     return Settings(**overrides)

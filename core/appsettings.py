@@ -21,14 +21,21 @@ DEFAULTS: dict = {
     "default_rounds": 3,
     "default_domain": "นโยบายสาธารณะ",
     "default_tab": "overview",
-    # LLM ปรับเองได้ (ADR-0006) — ค่าว่าง = ใช้ .env; **API key ไม่อยู่ที่นี่เด็ดขาด**
+    # LLM ปรับเองได้ (ADR-0006/0007) — ค่าว่าง = ใช้ .env
     "llm_provider": "",
     "llm_base_url": "",
     "llm_model_crowd": "",
     "llm_model_analyst": "",
-    "llm_prices": {},  # model -> {input_usd_per_m, output_usd_per_m} สำหรับ model ที่เพิ่มเอง
+    "llm_prices": {},  # model -> {input_usd_per_m, output_usd_per_m} (แก้ราคามาตรฐาน/เพิ่มใหม่ได้)
+    # API key เก็บ **ciphertext** (ADR-0007) — เขียนผ่าน set_llm_api_key() เท่านั้น ห้าม PUT ตรง
+    "llm_api_key_enc": "",
+    # งบ (P6-M5) — 0 = ใช้ค่า .env; > 0 = ทับ
+    "run_budget_usd_cap": 0.0,
+    "monthly_budget_usd_cap": 0.0,
 }
 _ALLOWED_KEYS = set(DEFAULTS)
+# key ที่ห้ามแก้ผ่าน PUT /settings.json ปกติ (มี endpoint แยกที่จัดการเข้ารหัส/มาสก์)
+_PROTECTED_KEYS = {"llm_api_key_enc"}
 
 
 def get_app_settings(dsn: str) -> dict:
@@ -42,6 +49,12 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
     unknown = set(patch) - _ALLOWED_KEYS
     if unknown:
         raise ValueError(f"key ที่ไม่รู้จัก: {', '.join(sorted(unknown))}")
+    protected = set(patch) & _PROTECTED_KEYS
+    if protected:
+        raise ValueError(f"ต้องตั้งผ่าน endpoint เฉพาะ: {', '.join(sorted(protected))}")
+    for k in ("run_budget_usd_cap", "monthly_budget_usd_cap"):
+        if k in patch and not (0 <= float(patch[k]) <= 100000):
+            raise ValueError(f"{k} ต้องอยู่ใน 0-100000 (0 = ใช้ค่า .env)")
     if "default_engine" in patch and patch["default_engine"] not in ("fabric", "debate"):
         raise ValueError("default_engine ต้องเป็น fabric หรือ debate")
     if "default_agents" in patch and not (10 <= int(patch["default_agents"]) <= 1000):
@@ -80,3 +93,25 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
             (json.dumps(merged, ensure_ascii=False),),
         )
     return merged
+
+
+def set_llm_api_key(dsn: str, plaintext: str) -> None:
+    """เก็บ LLM API key แบบเข้ารหัส (ADR-0007) — plaintext ว่าง = ลบ key ที่เก็บไว้ (กลับไปใช้ .env)"""
+    from core.secretbox import encrypt
+
+    enc = encrypt(plaintext) if plaintext.strip() else ""
+    current = get_app_settings(dsn)
+    current["llm_api_key_enc"] = enc
+    with psycopg.connect(dsn) as conn:
+        conn.execute(
+            "UPDATE app_settings SET data = %s WHERE id = 1",
+            (json.dumps(current, ensure_ascii=False),),
+        )
+
+
+def get_llm_api_key(dsn: str) -> str:
+    """ถอดรหัส key ที่เก็บไว้ — ไม่มี = '' (ผู้เรียก fallback .env เอง)"""
+    from core.secretbox import decrypt
+
+    enc = get_app_settings(dsn).get("llm_api_key_enc", "")
+    return decrypt(enc) if enc else ""

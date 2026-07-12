@@ -31,7 +31,7 @@
 
 - Setup: `uv sync` | Dev stack: `docker compose up -d` | Test: `uv run pytest -q` | Lint: `uv run ruff check . && uv run ruff format --check .`
 - **test ต้องเขียวทั้งหมดก่อน commit ทุกครั้ง** — เขียน unit test คู่ทุก module ใหม่
-- ไฟล์ชั่วคราว/ผลรัน → `.tmp/` (disposable) | secrets → `.env` เท่านั้น ห้าม log/commit
+- ไฟล์ชั่วคราว/ผลรัน → `.tmp/` (disposable) | secrets bootstrap (DB/master key/auth) → `.env` เท่านั้น ห้าม log/commit; LLM API key ตั้งจาก UI ได้แต่ต้องเข้ารหัส (ADR-0007)
 - milestone gate (เช่น M1) : รายงานผลแล้ว**หยุดรอผู้ใช้ตัดสิน** ไม่เดินต่อเอง
 
 ## Protocol ส่งมอบงาน (บังคับทุก session ทุกโมเดล)

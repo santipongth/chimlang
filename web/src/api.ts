@@ -166,15 +166,37 @@ export interface AppSettings {
   llm_model_crowd: string;
   llm_model_analyst: string;
   llm_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
+  run_budget_usd_cap: number;
+  monthly_budget_usd_cap: number;
   llm: {
     providers: LlmProvider[];
     key_present: boolean;
+    key_masked: string;
+    key_source: "db" | "env" | "none";
+    master_key_present: boolean;
     active_base_url: string;
     active_model_crowd: string;
     active_model_analyst: string;
     env_model_crowd: string;
     env_model_analyst: string;
+    yaml_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
   };
+  budget: {
+    run_cap_effective: number;
+    monthly_cap_effective: number;
+    spent_this_month: number;
+    env_run_cap: number;
+    env_monthly_cap: number;
+  };
+}
+
+export async function saveLlmKey(apiKey: string): Promise<void> {
+  const r = await fetch("/settings/llm-key", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
 export async function fetchSettings(): Promise<AppSettings> {

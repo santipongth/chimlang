@@ -27,6 +27,8 @@ TARGETS: list[tuple[str, str]] = [
     ("alerts", "watchlist_id IS NULL"),  # ที่เหลือถูกลบตาม cascade ของ watchlists
     ("gallery_shares", "subject LIKE '%ทดสอบ%' OR subject LIKE 'หัวข้อ%' OR created_by = 'test'"),
     ("persona_packs", "label LIKE '%ทดสอบ%' OR prompt LIKE '%ทดสอบ%' OR created_by = 'test'"),
+    ("sim_runs", "subject LIKE '%ทดสอบ%'"),  # debate_posts ลบตาม cascade
+    ("llm_spend", "run_id LIKE '%test%' OR run_id = '' OR run_id LIKE '%ทดสอบ%'"),
 ]
 
 

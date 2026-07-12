@@ -448,28 +448,57 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
         data = get_app_settings(settings.postgres_url)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    from core.llm.userconfig import LLM_PROVIDERS, effective_llm_settings
+    from core.llm.budget import spent_this_month
+    from core.llm.pricing import PricingRegistry
+    from core.llm.userconfig import (
+        LLM_PROVIDERS,
+        effective_llm_settings,
+        effective_monthly_cap,
+    )
+    from core.secretbox import mask, master_key_present
 
     eff = effective_llm_settings()
+    # key ที่ active จริง (DB > .env) — แสดงแบบมาสก์เท่านั้น ไม่เคยส่งเต็ม
+    key_from_db = bool(data.get("llm_api_key_enc"))
+    active_key = eff.llm_api_key.strip()
+    yaml_prices = {
+        m: {"input_usd_per_m": p.input_usd_per_m, "output_usd_per_m": p.output_usd_per_m}
+        for m, p in PricingRegistry.from_yaml()._table.items()
+    }
+    try:
+        spent = round(spent_this_month(settings.postgres_url), 4)
+    except Exception:
+        spent = 0.0
+    # อย่าคืน ciphertext ของ key ออกไป
+    safe = {k: v for k, v in data.items() if k != "llm_api_key_enc"}
     return {
-        **data,
+        **safe,
         "webhook_configured": bool(settings.alert_webhook_url.strip()),
         "auth_enabled": settings.auth_enabled,
         "caps": {
             "fabric": settings.max_agents_per_run,
             "debate": settings.max_agents_per_debate,
         },
-        # LLM ปรับเองได้ (ADR-0006) — key ไม่เคยออกไปกับ response
+        # LLM ปรับเองได้ (ADR-0006/0007) — key ไม่เคยออกเต็ม (มาสก์เท่านั้น)
         "llm": {
-            "providers": [
-                {"key": k, **{kk: vv for kk, vv in v.items()}} for k, v in LLM_PROVIDERS.items()
-            ],
-            "key_present": bool(settings.llm_api_key.strip()),
+            "providers": [{"key": k, **v} for k, v in LLM_PROVIDERS.items()],
+            "key_present": bool(active_key),
+            "key_masked": mask(active_key) if active_key else "",
+            "key_source": "db" if key_from_db else ("env" if active_key else "none"),
+            "master_key_present": master_key_present(),
             "active_base_url": eff.llm_base_url,
             "active_model_crowd": eff.llm_model_crowd,
             "active_model_analyst": eff.llm_model_analyst,
             "env_model_crowd": settings.llm_model_crowd,
             "env_model_analyst": settings.llm_model_analyst,
+            "yaml_prices": yaml_prices,
+        },
+        "budget": {
+            "run_cap_effective": eff.run_budget_usd_cap,
+            "monthly_cap_effective": effective_monthly_cap(),
+            "spent_this_month": spent,
+            "env_run_cap": settings.run_budget_usd_cap,
+            "env_monthly_cap": settings.monthly_budget_usd_cap,
         },
     }
 
@@ -486,6 +515,30 @@ def settings_put(patch: dict, principal: Principal = Depends(get_principal)) -> 
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+class LlmKeyBody(BaseModel):
+    api_key: str  # ว่าง = ลบ key ที่เก็บ (กลับไปใช้ .env)
+
+
+@app.put("/settings/llm-key")
+def settings_llm_key(body: LlmKeyBody, principal: Principal = Depends(get_principal)) -> dict:
+    """ตั้ง/ลบ LLM API key แบบเข้ารหัส (ADR-0007) — endpoint แยกเพื่อไม่ให้ key ปน PUT ปกติ
+
+    ต้องสิทธิ์ ADMIN (จัดการ secret) + ต้องมี master key (CHIMLANG_SECRET_KEY) ก่อน
+    """
+    require(principal, Permission.ADMIN)
+    from core.appsettings import set_llm_api_key
+    from core.secretbox import MasterKeyMissingError
+
+    settings = get_settings()
+    try:
+        set_llm_api_key(settings.postgres_url, body.api_key)
+    except MasterKeyMissingError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True, "set": bool(body.api_key.strip())}
 
 
 # ---- Persistent runs (P6-M1/M2): เลือก engine → รัน → เก็บถาวร → History/Replay ----
@@ -657,6 +710,10 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                 context_chunks=context,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
+            # งบรวมเดือน (P6-M5): บันทึกยอดจ่ายจริงเพื่อคุมสะสมทั้งเดือน
+            from core.llm.budget import record_spend
+
+            record_spend(settings.postgres_url, result.cost_usd, run_id=run_id)
             payload = {
                 "synthesis": result.synthesis,
                 "metrics": result.metrics,

@@ -66,23 +66,29 @@ class DebateResult:
 
 
 def make_debate_adapter(agents: int, rounds: int) -> LLMAdapter:
-    """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap = ไม่เริ่ม
+    """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap (ต่อรัน/รวมเดือน) = ไม่เริ่ม
 
-    ใช้ค่าจากหน้าตั้งค่า (provider/model/ราคา) ถ้าผู้ใช้ตั้งไว้ — key ยังมาจาก .env (ADR-0006)
+    ใช้ค่าจากหน้าตั้งค่า (provider/model/ราคา/key/งบ) ถ้าผู้ใช้ตั้งไว้ (ADR-0006/0007)
     """
-    from core.llm.userconfig import effective_llm_settings, effective_pricing
+    from core.llm.budget import check_monthly_budget
+    from core.llm.userconfig import (
+        effective_llm_settings,
+        effective_monthly_cap,
+        effective_pricing,
+    )
 
     settings = effective_llm_settings()
     pricing = effective_pricing()
-    guard = BudgetGuard(cap_usd=settings.run_budget_usd_cap)
-    guard.check_estimate(
-        CostEstimator(pricing).estimate(
-            [
-                TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
-                TierLoad(settings.llm_model_analyst, 1, 1500, 800),
-            ]
-        )
+    estimate = CostEstimator(pricing).estimate(
+        [
+            TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
+            TierLoad(settings.llm_model_analyst, 1, 1500, 800),
+        ]
     )
+    # งบรวมเดือน (P6-M5) ก่อน — ยอดสะสม + estimate เกิน = block
+    check_monthly_budget(settings.postgres_url, estimate.total_usd, effective_monthly_cap())
+    guard = BudgetGuard(cap_usd=settings.run_budget_usd_cap)
+    guard.check_estimate(estimate)  # งบต่อรัน
     return LLMAdapter(settings, pricing, guard)
 
 

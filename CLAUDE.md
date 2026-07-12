@@ -48,7 +48,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - **Cost guard**: ทุก run คำนวณ cost estimate ก่อนเริ่ม และเคารพ `RUN_BUDGET_USD_CAP` จาก env — เกิน cap ให้ abort พร้อมรายงาน
 - **Cap ต่อ run (อัปเดต 6 ก.ค. 2026 — ผู้ใช้สั่งขยาย scale)**: จาก 10 → **ไม่เกิน 1,000 agents/run** (ระดับ standard); ระดับ deep 5,000 ยังต้องขออนุมัติผู้ใช้ก่อน — BudgetGuard + `RUN_BUDGET_USD_CAP` เป็นด่านต้นทุนจริงทุก run เสมอ
 - ภาษาไทยเป็น first-class: agent reasoning และ test fixtures ใช้ข้อความไทยจริง ระวัง tokenizer/encoding ทุกจุดที่ประมวลผลข้อความ
-- Secrets อยู่ใน `.env` เท่านั้น (ดู `.env.example`) — ห้าม commit, ห้าม log, ห้ามใส่ในไฟล์นี้
+- Secrets ที่ bootstrap (รหัส DB/Neo4j/Redis, `CHIMLANG_SECRET_KEY` master key, `API_KEYS` ของ auth) อยู่ `.env` เท่านั้น — ห้าม commit/log/ใส่ในไฟล์นี้; **ข้อยกเว้น (ADR-0007): LLM API key ตั้งจากหน้า Settings ได้ แต่ต้องเข้ารหัสด้วย master key จาก `.env` ก่อนเก็บ DB และห้ามโชว์/ส่งกลับเต็ม (มาสก์เท่านั้น)**
 
 ## Workflow
 

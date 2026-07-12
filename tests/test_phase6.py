@@ -380,3 +380,113 @@ def test_llm_custom_price_merges_and_fail_closed(client):
     with pytest.raises(UnknownModelPricingError):
         pricing.cost_usd("no/price-model", 1000, 0)
     client.put("/settings.json", json={"llm_prices": {}})
+
+
+# ---- P6-M5: LLM key เข้ารหัส + ราคา + งบเดือน ----
+
+
+def test_secretbox_roundtrip_and_mask(monkeypatch):
+    from cryptography.fernet import Fernet
+
+    import core.secretbox as sb
+    from core.config import Settings
+
+    key = Fernet.generate_key().decode()
+    monkeypatch.setattr(sb, "get_settings", lambda **kw: Settings(secret_key=key, _env_file=None))
+    ct = sb.encrypt("sk-or-secret-12345")
+    assert ct != "sk-or-secret-12345"  # เข้ารหัสจริง
+    assert sb.decrypt(ct) == "sk-or-secret-12345"
+    assert sb.mask("sk-or-secret-12345").startswith("sk-or-") and "secret" not in sb.mask(
+        "sk-or-secret-12345"
+    )
+
+
+def test_secretbox_fails_without_master_key(monkeypatch):
+    import core.secretbox as sb
+    from core.config import Settings
+
+    monkeypatch.setattr(sb, "get_settings", lambda **kw: Settings(secret_key="", _env_file=None))
+    with pytest.raises(sb.MasterKeyMissingError):
+        sb.encrypt("x")
+    assert sb.master_key_present() is False
+
+
+def test_secretbox_wrong_master_key_rejected(monkeypatch):
+    from cryptography.fernet import Fernet
+
+    import core.secretbox as sb
+    from core.config import Settings
+
+    k1, k2 = Fernet.generate_key().decode(), Fernet.generate_key().decode()
+    monkeypatch.setattr(sb, "get_settings", lambda **kw: Settings(secret_key=k1, _env_file=None))
+    ct = sb.encrypt("secret")
+    monkeypatch.setattr(sb, "get_settings", lambda **kw: Settings(secret_key=k2, _env_file=None))
+    with pytest.raises(ValueError):  # master key ผิด = ถอดไม่ได้ ไม่คืนมั่ว
+        sb.decrypt(ct)
+
+
+@needs_pg
+def test_llm_key_stored_encrypted_and_masked_via_api(client, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    import api.auth as auth_mod
+    from core.config import Settings
+
+    key = Fernet.generate_key().decode()
+    monkeypatch.setattr(
+        auth_mod, "get_settings", lambda **kw: Settings(secret_key=key, _env_file=None)
+    )
+    import core.secretbox as sb
+
+    monkeypatch.setattr(sb, "get_settings", lambda **kw: Settings(secret_key=key, _env_file=None))
+    # ตั้ง key ผ่าน endpoint แยก
+    r = client.put("/settings/llm-key", json={"api_key": "sk-test-abcdef123456"})
+    assert r.status_code == 200
+    # GET settings: key ถูกมาสก์ ไม่ส่งเต็ม/ไม่ส่ง ciphertext
+    data = client.get("/settings.json").json()
+    assert data["llm"]["key_present"] and data["llm"]["key_source"] == "db"
+    assert "sk-test-abcdef123456" not in json.dumps(data)
+    assert "llm_api_key_enc" not in data
+    assert "abcdef" not in data["llm"]["key_masked"]  # ส่วนกลางไม่โผล่
+    # ลบ key = กลับไป .env
+    client.put("/settings/llm-key", json={"api_key": ""})
+    assert client.get("/settings.json").json()["llm"]["key_source"] in ("env", "none")
+
+
+@needs_pg
+def test_protected_key_cannot_be_set_via_plain_put(client):
+    assert client.put("/settings.json", json={"llm_api_key_enc": "hack"}).status_code == 422
+
+
+@needs_pg
+def test_monthly_budget_blocks_when_exceeded():
+    from core.llm.budget import (
+        MonthlyBudgetExceededError,
+        check_monthly_budget,
+        record_spend,
+        spent_this_month,
+    )
+
+    before = spent_this_month(DSN)
+    record_spend(DSN, 3.0, run_id="test-budget")
+    assert spent_this_month(DSN) == pytest.approx(before + 3.0)
+    # cap ต่ำกว่ายอดสะสม → block
+    with pytest.raises(MonthlyBudgetExceededError):
+        check_monthly_budget(DSN, 0.0, cap=before + 1.0)
+    # cap 0 = ปิด (ไม่ block)
+    check_monthly_budget(DSN, 999.0, cap=0.0)
+
+
+@needs_pg
+def test_budget_override_from_settings(client):
+    client.put("/settings.json", json={"run_budget_usd_cap": 2.5, "monthly_budget_usd_cap": 20.0})
+    from core.llm.userconfig import effective_llm_settings, effective_monthly_cap
+
+    assert effective_llm_settings().run_budget_usd_cap == 2.5
+    assert effective_monthly_cap() == 20.0
+    data = client.get("/settings.json").json()
+    assert (
+        data["budget"]["run_cap_effective"] == 2.5
+        and data["budget"]["monthly_cap_effective"] == 20.0
+    )
+    client.put("/settings.json", json={"run_budget_usd_cap": 0.0, "monthly_budget_usd_cap": 0.0})

@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { AppSettings, PersonaPack, deletePack, fetchPacks, fetchSettings, saveSettings } from "../api";
+import {
+  AppSettings,
+  PersonaPack,
+  deletePack,
+  fetchPacks,
+  fetchSettings,
+  saveLlmKey,
+  saveSettings,
+} from "../api";
 import { useLang } from "../i18n";
 import { PageHeader, SelectCard } from "../ui";
 
@@ -11,12 +19,38 @@ export default function Settings() {
   const [packs, setPacks] = useState<PersonaPack[]>([]);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [prices, setPrices] = useState<Record<string, { input_usd_per_m: number; output_usd_per_m: number }>>({});
+  const [newModel, setNewModel] = useState("");
 
   const load = () => {
-    fetchSettings().then(setData).catch((e) => setError(String(e.message ?? e)));
+    fetchSettings()
+      .then((d) => {
+        setData(d);
+        // ราคาที่แสดง = yaml (มาตรฐาน) ทับด้วยที่ผู้ใช้แก้ไว้
+        setPrices({ ...(d.llm?.yaml_prices ?? {}), ...(d.llm_prices ?? {}) });
+      })
+      .catch((e) => setError(String(e.message ?? e)));
     fetchPacks().then(setPacks).catch(() => {});
   };
   useEffect(load, []);
+
+  async function saveKey() {
+    setKeyBusy(true);
+    setError("");
+    try {
+      await saveLlmKey(keyDraft.trim());
+      setKeyDraft("");
+      await load();
+      setMsg(t("set_saved"));
+      setTimeout(() => setMsg(""), 1500);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    } finally {
+      setKeyBusy(false);
+    }
+  }
 
   const card = "bg-card border border-border rounded-2xl p-6";
 
@@ -165,16 +199,54 @@ export default function Settings() {
                 />
               </label>
             </div>
-            <div className="rounded-xl border border-border bg-background p-3 text-xs space-y-1.5">
-              <div>
-                {data.llm.key_present ? "✅" : "⚠️"} {t("set_llm_key")}:{" "}
-                {data.llm.key_present ? t("set_llm_key_on") : t("set_llm_key_off")}
+            {/* API key — เก็บเข้ารหัสใน DB (ADR-0007), แสดงแค่มาสก์ */}
+            <div className="rounded-xl border border-border bg-background p-3 space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                🔑 {t("set_llm_key")}
               </div>
-              <div className="text-muted-foreground">💰 {t("set_llm_price_note")}</div>
-              <div className="text-muted-foreground">
-                {t("set_llm_active")}: crowd = <code>{data.llm.active_model_crowd || "—"}</code> ·
-                analyst = <code>{data.llm.active_model_analyst || "—"}</code>
+              <div className="text-xs">
+                {data.llm.key_source === "db"
+                  ? `✅ ${t("set_key_db")} (${data.llm.key_masked})`
+                  : data.llm.key_source === "env"
+                    ? `✅ ${t("set_key_env")} (${data.llm.key_masked})`
+                    : `⚠️ ${t("set_key_none")}`}
               </div>
+              {!data.llm.master_key_present && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+                  ⚠️ {t("set_key_no_master")}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={keyDraft}
+                  onChange={(e) => setKeyDraft(e.target.value)}
+                  placeholder={t("set_key_ph")}
+                  disabled={!data.llm.master_key_present}
+                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs disabled:opacity-50"
+                />
+                <button
+                  onClick={saveKey}
+                  disabled={keyBusy || !keyDraft.trim() || !data.llm.master_key_present}
+                  className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white disabled:opacity-40"
+                >
+                  {keyBusy ? "⏳" : t("set_key_save")}
+                </button>
+                {data.llm.key_source === "db" && (
+                  <button
+                    onClick={() => saveLlmKey("").then(load)}
+                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
+                  >
+                    🗑 {t("set_key_clear")}
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">🔒 {t("set_key_note")}</p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
+              {t("set_llm_active")}: crowd = <code>{data.llm.active_model_crowd || "—"}</code> ·
+              analyst = <code>{data.llm.active_model_analyst || "—"}</code>
             </div>
             <button
               onClick={() =>
@@ -189,6 +261,122 @@ export default function Settings() {
             >
               ↺ {t("set_llm_reset")}
             </button>
+          </section>
+          )}
+
+          {/* ราคาโมเดล — แก้ราคามาตรฐาน/เพิ่มใหม่ (P6-M5) */}
+          {data.llm && (
+          <section className={card + " space-y-3"}>
+            <h2 className="font-semibold">💵 {t("set_prices_title")}</h2>
+            <p className="text-xs text-muted-foreground">{t("set_prices_desc")}</p>
+            <div className="space-y-1.5">
+              <div className="grid grid-cols-[1fr_90px_90px_28px] gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span>{t("set_price_model")}</span>
+                <span>input /1M</span>
+                <span>output /1M</span>
+                <span></span>
+              </div>
+              {Object.entries(prices).map(([model, pr]) => (
+                <div key={model} className="grid grid-cols-[1fr_90px_90px_28px] gap-2 items-center">
+                  <code className="truncate text-xs">{model}</code>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={pr.input_usd_per_m}
+                    onChange={(e) => setPrices({ ...prices, [model]: { ...pr, input_usd_per_m: parseFloat(e.target.value) || 0 } })}
+                    onBlur={() => patch({ llm_prices: { ...data.llm_prices, [model]: prices[model] } } as any)}
+                    className="rounded border border-border bg-background px-2 py-1 text-xs"
+                  />
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={pr.output_usd_per_m}
+                    onChange={(e) => setPrices({ ...prices, [model]: { ...pr, output_usd_per_m: parseFloat(e.target.value) || 0 } })}
+                    onBlur={() => patch({ llm_prices: { ...data.llm_prices, [model]: prices[model] } } as any)}
+                    className="rounded border border-border bg-background px-2 py-1 text-xs"
+                  />
+                  <span className="text-center text-[10px] text-muted-foreground" title={data.llm_prices[model] ? t("set_price_custom") : t("set_price_std")}>
+                    {data.llm_prices[model] ? "✎" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={newModel}
+                onChange={(e) => setNewModel(e.target.value)}
+                placeholder={t("set_price_add_ph")}
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs"
+              />
+              <button
+                onClick={() => {
+                  const m = newModel.trim();
+                  if (!m || prices[m]) return;
+                  const next = { ...prices, [m]: { input_usd_per_m: 0, output_usd_per_m: 0 } };
+                  setPrices(next);
+                  patch({ llm_prices: { ...data.llm_prices, [m]: next[m] } } as any);
+                  setNewModel("");
+                }}
+                className="rounded-lg border border-border px-4 py-2 text-xs text-primary-strong hover:bg-primary/5"
+              >
+                + {t("set_price_add")}
+              </button>
+            </div>
+          </section>
+          )}
+
+          {/* งบประมาณ (P6-M5) */}
+          {data.budget && (
+          <section className={card + " space-y-3"}>
+            <h2 className="font-semibold">💰 {t("set_budget_title")}</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_budget_run")}
+                </span>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={data.run_budget_usd_cap}
+                  onChange={(e) => setData({ ...data, run_budget_usd_cap: parseFloat(e.target.value) || 0 })}
+                  onBlur={() => patch({ run_budget_usd_cap: data.run_budget_usd_cap })}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2"
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  {t("set_budget_active")}: ${data.budget.run_cap_effective} {data.run_budget_usd_cap === 0 ? `(${t("set_budget_from_env")})` : ""}
+                </span>
+              </label>
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_budget_month")}
+                </span>
+                <input
+                  type="number"
+                  step="5"
+                  value={data.monthly_budget_usd_cap}
+                  onChange={(e) => setData({ ...data, monthly_budget_usd_cap: parseFloat(e.target.value) || 0 })}
+                  onBlur={() => patch({ monthly_budget_usd_cap: data.monthly_budget_usd_cap })}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2"
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  {t("set_budget_active")}: ${data.budget.monthly_cap_effective}
+                </span>
+              </label>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{t("set_budget_spent")}</span>
+                <span className="tabular-nums font-medium">
+                  ${data.budget.spent_this_month} / ${data.budget.monthly_cap_effective}
+                </span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className={`h-full ${data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective) > 0.9 ? "bg-red-400" : "bg-primary"}`}
+                  style={{ width: `${Math.min(100, (data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective)) * 100)}%` }}
+                />
+              </div>
+            </div>
           </section>
           )}
 
