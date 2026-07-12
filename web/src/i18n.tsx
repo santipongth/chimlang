@@ -9,14 +9,15 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "AI simulation — not a real poll | ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง และไม่ใช่คำสัญญาของหน่วยงานใด",
     en: "AI simulation — not a real poll. All figures are simulation estimates, not real polling or promises.",
   },
-  nav_home: { th: "หน้าแรก", en: "Home" },
-  nav_new_run: { th: "รันใหม่", en: "New run" },
-  nav_history: { th: "ประวัติรัน", en: "History" },
+  // เมนูตาม studio ต้นทาง (มติผู้ใช้ 12 ก.ค.: ชื่อ/ไอคอน/ลำดับเหมือน swarm-visionary-forge)
+  nav_new_run: { th: "คำทำนายใหม่", en: "New prediction" },
+  nav_history: { th: "ประวัติ", en: "History" },
   nav_settings: { th: "ตั้งค่า", en: "Settings" },
+  lang_label: { th: "ภาษา", en: "Language" },
   nav_calibration: { th: "Calibration", en: "Calibration" },
   nav_insights: { th: "Insights", en: "Insights" },
   nav_watchlist: { th: "Watchlist", en: "Watchlist" },
-  nav_gallery: { th: "Gallery สาธารณะ", en: "Public Gallery" },
+  nav_gallery: { th: "แกลเลอรีสาธารณะ", en: "Public Gallery" },
   nav_citizen: { th: "โหมดประชาชน", en: "Citizen Mode" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
   // Landing
@@ -46,7 +47,7 @@ const DICT: Record<string, { th: string; en: string }> = {
   wiz_eyebrow: { th: "รันใหม่", en: "NEW RUN" },
   wiz_title: { th: "ออกแบบรันของคุณ", en: "Design your run" },
   wiz_step1: { th: "คำถาม", en: "Question" },
-  wiz_step2: { th: "เครื่องยนต์", en: "Engine" },
+  wiz_step_agents: { th: "Agents", en: "Agents" },  // เดิม wiz_step2="เครื่องยนต์" ทำ stepper ซ้ำกับขั้น engine ใหม่ (บั๊ก 12 ก.ค.)
   wiz_step3: { th: "ยืนยัน & รัน", en: "Review & Run" },
   wiz_q_label: { th: "คำถาม / หัวข้อ SCENARIO", en: "QUESTION / SCENARIO" },
   wiz_q_ph: { th: "จะเกิดอะไรถ้า...", en: "What if..." },

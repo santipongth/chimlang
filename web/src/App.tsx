@@ -1,4 +1,16 @@
 import { useEffect, useState } from "react";
+import {
+  BarChart3,
+  Bell,
+  Fish,
+  Globe,
+  History,
+  Languages,
+  Plus,
+  Settings as SettingsIcon,
+  Target,
+  Users,
+} from "lucide-react";
 import { LangProvider, useLang } from "./i18n";
 import Landing from "./pages/Landing";
 import NewRun from "./pages/NewRun";
@@ -16,7 +28,7 @@ import { fetchWatchlists } from "./api";
 export type Page =
   | "home"
   | "new"
-  | "run" // run detail (P6-M2)
+  | "run"
   | "compare"
   | "history"
   | "insights"
@@ -33,36 +45,35 @@ export interface RunRequest {
   packId?: number | null;
 }
 
-function WatermarkBanner() {
-  const { t } = useLang();
-  return (
-    <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs px-4 py-1.5 text-center">
-      ⚠️ {t("watermark")}
-    </div>
-  );
-}
-
-// Sidebar ตาม layout studio: nav หลัก + Settings ล่างสุด (แบบเดียวกับต้นแบบ)
-function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page) => void; badges?: Partial<Record<Page, number>> }) {
+// Sidebar ตาม studio ต้นทาง (route.tsx ของ swarm-visionary-forge): lucide icons +
+// ลำดับเมนูเดียวกัน + Settings อยู่ท้าย nav | เพิ่มของเรา: Citizen Mode (persona P4 ของ PRD)
+function Sidebar({
+  page,
+  setPage,
+  badges = {},
+}: {
+  page: Page;
+  setPage: (p: Page) => void;
+  badges?: Partial<Record<Page, number>>;
+}) {
   const { lang, setLang, t } = useLang();
-  const items: { id: Page; icon: string; label: string }[] = [
-    { id: "home", icon: "🏠", label: t("nav_home") },
-    { id: "new", icon: "＋", label: t("nav_new_run") },
-    { id: "history", icon: "🕘", label: t("nav_history") },
-    { id: "insights", icon: "📈", label: t("nav_insights") },
-    { id: "calibration", icon: "🎯", label: t("nav_calibration") },
-    { id: "watchlist", icon: "🔔", label: t("nav_watchlist") },
-    { id: "gallery", icon: "🌐", label: t("nav_gallery") },
-    { id: "citizen", icon: "👥", label: t("nav_citizen") },
+  const items: { id: Page; icon: React.ElementType; label: string }[] = [
+    { id: "new", icon: Plus, label: t("nav_new_run") },
+    { id: "history", icon: History, label: t("nav_history") },
+    { id: "insights", icon: BarChart3, label: t("nav_insights") },
+    { id: "calibration", icon: Target, label: t("nav_calibration") },
+    { id: "gallery", icon: Globe, label: t("nav_gallery") },
+    { id: "watchlist", icon: Bell, label: t("nav_watchlist") },
+    { id: "citizen", icon: Users, label: t("nav_citizen") },
+    { id: "settings", icon: SettingsIcon, label: t("nav_settings") },
   ];
   return (
-    <aside className="w-60 shrink-0 bg-sidebar border-r border-border flex flex-col min-h-screen p-4">
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex min-h-screen">
       <button onClick={() => setPage("home")} className="mb-6 flex items-center gap-2 px-2 text-left">
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">🐟</div>
-        <div>
-          <div className="font-display text-lg font-semibold leading-tight">ชิมลาง</div>
-          <div className="text-[11px] text-muted-foreground leading-tight">CHIMLANG</div>
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+          <Fish className="h-5 w-5" />
         </div>
+        <span className="font-display text-lg font-semibold">ชิมลาง</span>
       </button>
       <nav className="flex flex-1 flex-col gap-1 text-sm">
         {items.map((it) => (
@@ -70,33 +81,34 @@ function Sidebar({ page, setPage, badges = {} }: { page: Page; setPage: (p: Page
             key={it.id}
             onClick={() => setPage(it.id)}
             className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
-              page === it.id ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60"
+              page === it.id
+                ? "bg-sidebar-accent font-medium text-foreground"
+                : "text-muted-foreground hover:bg-sidebar-accent/60"
             }`}
           >
-            <span className="w-4 text-center text-[13px]">{it.icon}</span>
+            <it.icon className="h-4 w-4 shrink-0" />
             {it.label}
             {(badges[it.id] ?? 0) > 0 && (
-              <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">{badges[it.id]}</span>
+              <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">
+                {badges[it.id]}
+              </span>
             )}
           </button>
         ))}
       </nav>
-      <button
-        onClick={() => setPage("settings")}
-        className={`mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
-          page === "settings" ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60"
-        }`}
-      >
-        <span className="w-4 text-center text-[13px]">⚙️</span>
-        {t("nav_settings")}
-      </button>
-      <div className="border-t border-border pt-3">
-        <div className="flex rounded-full border border-border overflow-hidden text-xs">
+      {/* ตัวสลับภาษา — mini segmented control มุมล่าง (redesign 12 ก.ค.) */}
+      <div className="mt-4 flex items-center justify-between border-t border-border px-1 pt-3">
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Languages className="h-3.5 w-3.5" /> {t("lang_label")}
+        </span>
+        <div className="flex overflow-hidden rounded-lg border border-border text-[11px]">
           {(["th", "en"] as const).map((l) => (
             <button
               key={l}
               onClick={() => setLang(l)}
-              className={`flex-1 py-1.5 ${lang === l ? "bg-primary text-white font-medium" : "text-muted-foreground"}`}
+              className={`px-2.5 py-1 transition ${
+                lang === l ? "bg-primary font-medium text-white" : "text-muted-foreground hover:bg-muted"
+              }`}
             >
               {l === "th" ? "ไทย" : "EN"}
             </button>
@@ -126,44 +138,41 @@ function Shell() {
   const wide = !["new", "home", "citizen"].includes(page);
 
   return (
-    <div className="min-h-screen">
-      <WatermarkBanner />
-      <div className="flex">
-        <Sidebar page={page} setPage={setPage} badges={{ watchlist: unread }} />
-        <main className="min-w-0 flex-1 px-8 py-10">
-          <div className={`mx-auto ${wide ? "max-w-4xl" : "max-w-3xl"}`}>
-            {page === "home" && <Landing onStart={() => setPage("new")} />}
-            {page === "new" && (
-              <NewRun
-                onCompare={(req) => {
-                  setRequest(req);
-                  setPage("compare");
-                }}
-                onCreated={(id) => {
-                  setRunId(id);
-                  setPage("run");
-                }}
-              />
-            )}
-            {page === "run" && runId && <RunDetail runId={runId} onBack={() => setPage("history")} />}
-            {page === "compare" && <Compare request={request} />}
-            {page === "history" && (
-              <Runs
-                onOpen={(id) => {
-                  setRunId(id);
-                  setPage("run");
-                }}
-              />
-            )}
-            {page === "insights" && <Insights />}
-            {page === "calibration" && <Calibration />}
-            {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
-            {page === "gallery" && <Gallery />}
-            {page === "citizen" && <Citizen />}
-            {page === "settings" && <Settings />}
-          </div>
-        </main>
-      </div>
+    <div className="flex min-h-screen bg-background">
+      <Sidebar page={page} setPage={setPage} badges={{ watchlist: unread }} />
+      <main className="min-w-0 flex-1 px-8 py-10">
+        <div className={`mx-auto ${wide ? "max-w-4xl" : "max-w-3xl"}`}>
+          {page === "home" && <Landing onStart={() => setPage("new")} />}
+          {page === "new" && (
+            <NewRun
+              onCompare={(req) => {
+                setRequest(req);
+                setPage("compare");
+              }}
+              onCreated={(id) => {
+                setRunId(id);
+                setPage("run");
+              }}
+            />
+          )}
+          {page === "run" && runId && <RunDetail runId={runId} onBack={() => setPage("history")} />}
+          {page === "compare" && <Compare request={request} />}
+          {page === "history" && (
+            <Runs
+              onOpen={(id) => {
+                setRunId(id);
+                setPage("run");
+              }}
+            />
+          )}
+          {page === "insights" && <Insights />}
+          {page === "calibration" && <Calibration />}
+          {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
+          {page === "gallery" && <Gallery />}
+          {page === "citizen" && <Citizen />}
+          {page === "settings" && <Settings />}
+        </div>
+      </main>
     </div>
   );
 }

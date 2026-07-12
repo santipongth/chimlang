@@ -41,6 +41,12 @@ export default function Citizen() {
     <div className="space-y-6">
       <PageHeader eyebrow="CITIZEN" title={t("cit_title")} desc={t("cit_sub")} />
 
+      {/* CIT-04: ทุกหน้า Citizen Mode ต้องมี disclaimer ถาวร — ห้ามเอาออก
+          (แถบ global ถูกถอดตามมติผู้ใช้ 12 ก.ค. — ย้ายมาฝังเฉพาะหน้าที่ PRD บังคับ) */}
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+        ⚠️ {t("watermark")}
+      </div>
+
       <section className={card}>
         <form onSubmit={submit} className="grid sm:grid-cols-2 gap-4">
           {(Object.keys(CHOICES) as (keyof typeof CHOICES)[]).map((k) => (

@@ -99,7 +99,7 @@ export default function NewRun({
     t("wiz_step1"),
     t("wiz_step_engine"),
     ...(isDebate ? [t("wiz_step_sources")] : []),
-    t("wiz_step2"),
+    t("wiz_step_agents"),
     t("wiz_step3"),
   ];
   const stepKey = (isDebate
@@ -323,16 +323,17 @@ export default function NewRun({
             </button>
           </div>
 
+          {/* เลือก ON = โทนเขียว primary (มติผู้ใช้ 12 ก.ค. — สถานะ "เปิดใช้" ควรสื่อเชิงบวก) */}
           <button
             type="button"
             onClick={() => setRedTeam(!redTeam)}
-            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${redTeam ? "border-red-300 bg-red-50" : "border-border bg-card hover:bg-muted"}`}
+            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${redTeam ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"}`}
           >
             <span className="mt-0.5 text-lg">🛡️</span>
             <span className="flex-1">
               <span className="flex items-center gap-2 text-sm font-medium">
                 {isDebate ? t("wiz_redteam_debate_title") : t("wiz_redteam_title")}
-                {redTeam && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-700">ON</span>}
+                {redTeam && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-strong">ON</span>}
               </span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {isDebate ? t("wiz_redteam_debate_desc") : t("wiz_redteam_desc")}
