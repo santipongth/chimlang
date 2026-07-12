@@ -69,9 +69,15 @@
 - [x] UI: หน้า Gallery (disclaimer ถาวร + crowd vs swarm + โหวต) + ปุ่มเผยแพร่ใน dashboard tab รายงาน
 - [x] tests +10 | ADR-0004 บันทึกทุกการตัดสินใจ governance
 
+### P5-M9 — MCP surface ✅ (12 ก.ค. 2026 — ADR-0005, ผู้ใช้ veto ได้)
+- [x] `api/mcp_server.py`: stdio server (official `mcp` SDK — dependency ใหม่ตัวเดียว) **ห่อ REST เดิมเท่านั้น ไม่มีทางลัด** — ทุก call วิ่ง HTTP ผ่าน auth/RBAC/election/cap ครบ
+- [x] auth = `CHIMLANG_API_KEY` env → X-API-Key (role ของ key = สิทธิ์ของ agent ภายนอก)
+- [x] tools 7 ตัว read-mostly: run_dashboard, compare_red_team, get_calibration, resolve_prediction (เขียน append-only ตัวเดียว), list_runs, list_gallery, get_insights
+- [x] วิธีต่อ: `claude mcp add chimlang --env CHIMLANG_API_KEY=<key> -- uv run python -m api.mcp_server`
+- [x] tests +5 (MockTransport — ไม่ต้องมี server จริง)
+
 ## Backlog (ยังไม่เริ่ม — ต้องมติผู้ใช้/GOV review)
 
-- MCP tools surface (create-run/get-run) — ต้องผ่าน auth/RBAC
 
 ## สถานะ
 
@@ -85,6 +91,7 @@
 | M6 Graph viz + Insights | ✅ 12 ก.ค. |
 | M7 Persona packs + AI | ✅ 12 ก.ค. |
 | M8 Public gallery + votes | ✅ 12 ก.ค. |
+| M9 MCP surface | ✅ 12 ก.ค. |
 
 ## สรุปปิด Phase 5 (12 ก.ค. 2026) — ครบทุก milestone M1..M6 ในวันเดียว
 

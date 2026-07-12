@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.139.0",
     "fpdf2>=2.8.7",
     "httpx>=0.28.1",
+    "mcp>=1.28.1",
     "neo4j>=6.2.0",
     "openai>=1.60",
     "psycopg[binary]>=3.3.4",
