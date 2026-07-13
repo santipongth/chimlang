@@ -1,5 +1,6 @@
 // Shared UI primitives ตาม design spec studio (docs/reports/swarmsight-research-v2.md §5)
 // กฎเหล็ก UI: metric ทุกตัวต้องมี InfoTip อธิบายสูตร inline (TRUST-09/NFR-08)
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 export function PageHeader({
@@ -89,6 +90,81 @@ export function SelectCard({
     >
       {children}
     </button>
+  );
+}
+
+// Confirm dialog ของเราเอง — แทน window.confirm ทุกจุด (มติผู้ใช้ 13 ก.ค.: ห้าม popup ระบบ)
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  danger = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 backdrop-blur-[2px]"
+      onClick={onCancel}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg ${
+              danger ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary-strong"
+            }`}
+          >
+            {danger ? "🗑" : "⚠️"}
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-display text-base font-semibold leading-snug">{title}</h4>
+            <p className="mt-1 text-sm text-muted-foreground">{message}</p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            autoFocus
+            onClick={onConfirm}
+            className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${
+              danger ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:bg-primary-strong"
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

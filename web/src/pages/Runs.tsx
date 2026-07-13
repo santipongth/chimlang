@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { RunsData, SimRunSummary, deleteRun, fetchRuns, fetchSimRuns } from "../api";
 import { useLang } from "../i18n";
-import { PageHeader } from "../ui";
+import { ConfirmDialog, PageHeader } from "../ui";
 
 // History (P6-M2) — รายการ run ถาวร (ค้นหา/กรอง engine) + คิว prediction รอ resolve (เดิม)
 
@@ -12,6 +12,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
   const [search, setSearch] = useState("");
   const [engine, setEngine] = useState("");
   const [error, setError] = useState("");
+  const [runToDelete, setRunToDelete] = useState<string | null>(null);
 
   const load = () =>
     fetchSimRuns(search, engine)
@@ -30,8 +31,11 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
 
   const card = "bg-card border border-border rounded-2xl p-6";
 
-  async function remove(runId: string) {
-    if (!confirm(t("hist_delete_confirm"))) return;
+  // ลบ run — ยืนยันด้วย ConfirmDialog ของเราเอง (ห้าม popup ระบบ — มติผู้ใช้ 13 ก.ค.)
+  async function removeConfirmed() {
+    const runId = runToDelete;
+    setRunToDelete(null);
+    if (!runId) return;
     try {
       await deleteRun(runId);
       await load();
@@ -86,7 +90,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
                 </div>
                 <div className="mt-0.5 truncate font-medium">{r.subject}</div>
               </button>
-              <button onClick={() => remove(r.run_id)} className="shrink-0 text-xs text-muted-foreground hover:text-red-600" title={t("hist_delete")}>
+              <button onClick={() => setRunToDelete(r.run_id)} className="shrink-0 text-xs text-muted-foreground hover:text-red-600" title={t("hist_delete")}>
                 🗑
               </button>
             </div>
@@ -110,6 +114,17 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
           <p className="mt-3 text-xs text-muted-foreground">→ {t("hist_due_note")}</p>
         </section>
       )}
+
+      <ConfirmDialog
+        open={runToDelete != null}
+        title={t("hist_delete_title")}
+        message={t("hist_delete_confirm")}
+        confirmLabel={t("hist_delete_ok")}
+        cancelLabel={t("confirm_cancel")}
+        danger
+        onCancel={() => setRunToDelete(null)}
+        onConfirm={removeConfirmed}
+      />
     </div>
   );
 }

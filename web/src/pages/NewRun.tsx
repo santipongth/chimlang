@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n";
-import { PageHeader, SelectCard } from "../ui";
+import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 import {
   EngineInfo,
   PersonaPack,
   PoolSegment,
   SourceInput,
   createRun,
+  deletePack,
   fetchEngines,
   fetchPacks,
   fetchPool,
   fetchSettings,
   pct,
 } from "../api";
-import PersonaPackModal from "../PersonaPackModal";
+import PersonaPackModal, { StackedBar, type PackModalIntent } from "../PersonaPackModal";
 import type { RunRequest } from "../App";
 
 // Wizard (P6-M1/M3): คำถาม → เครื่องยนต์ → [แหล่งข้อมูล ถ้า debate] → agents → ยืนยัน
@@ -86,7 +87,8 @@ export default function NewRun({
   const [redTeam, setRedTeam] = useState(false);
   const [packs, setPacks] = useState<PersonaPack[]>([]);
   const [packId, setPackId] = useState<number | null>(null);
-  const [packModalOpen, setPackModalOpen] = useState(false);
+  const [packIntent, setPackIntent] = useState<PackModalIntent | null>(null);
+  const [packToDelete, setPackToDelete] = useState<PersonaPack | null>(null);
   const [sources, setSources] = useState<SourceInput[]>([]);
   const [pool, setPool] = useState<PoolSegment[]>([]);
   const [poolOpen, setPoolOpen] = useState(false);
@@ -356,21 +358,92 @@ export default function NewRun({
 
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_persona_title")}</div>
+            {/* จัดการ pack ตรงนี้เลย (redesign 13 ก.ค. — มติผู้ใช้): แก้ไข/ลบ inline ไม่ต้องเข้า modal ก่อน */}
             <div className="mt-2 grid sm:grid-cols-2 gap-2">
-              <SelectCard active={packId === null} onClick={() => setPackId(null)}>
-                <div className="text-sm font-medium">{t("wiz_persona_default")}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{t("wiz_persona_default_desc")}</div>
-              </SelectCard>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setPackId(null)}
+                onKeyDown={(e) => e.key === "Enter" && setPackId(null)}
+                className={`cursor-pointer rounded-xl border p-3 text-left transition ${
+                  packId === null ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">⭐ {t("wiz_persona_default")}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">{t("wiz_persona_default_desc")}</div>
+                  </div>
+                  <button
+                    type="button"
+                    title={t("pk_duplicate")}
+                    onClick={(e) => { e.stopPropagation(); setPackIntent({ kind: "census" }); }}
+                    className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary-strong"
+                  >
+                    📋
+                  </button>
+                </div>
+                <div className="mt-1.5 text-[10px] text-muted-foreground">🔒 {t("pk_census_readonly")}</div>
+              </div>
               {packs.map((p) => (
-                <SelectCard key={p.id} active={packId === p.id} onClick={() => setPackId(p.id)}>
-                  <div className="text-sm font-medium">★ {p.label}</div>
-                  <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{p.segments.map((s) => s.name).join(", ")}</div>
-                </SelectCard>
+                <div
+                  key={p.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setPackId(p.id)}
+                  onKeyDown={(e) => e.key === "Enter" && setPackId(p.id)}
+                  className={`cursor-pointer rounded-xl border p-3 text-left transition ${
+                    packId === p.id ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">★ {p.label}</div>
+                      <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                        {p.segments.length} {t("wiz_pool_unit")} · {p.segments.map((s) => s.name).join(", ")}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-0.5">
+                      <button
+                        type="button"
+                        title={t("pk_edit_btn")}
+                        onClick={(e) => { e.stopPropagation(); setPackIntent({ kind: "edit", pack: p }); }}
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary-strong"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        title={t("pk_delete_ok")}
+                        onClick={(e) => { e.stopPropagation(); setPackToDelete(p); }}
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <StackedBar parts={p.segments.map((s) => ({ label: s.name, value: s.share }))} />
+                  </div>
+                </div>
               ))}
             </div>
-            <button type="button" onClick={() => setPackModalOpen(true)} className="mt-2 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">
-              ✨ {t("wiz_persona_manage")}
-            </button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPackIntent({ kind: "blank" })}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5"
+              >
+                + {t("pk_new_blank")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPackIntent({ kind: "ai" })}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5"
+              >
+                ✨ {t("pk_new_ai")}
+              </button>
+            </div>
 
             {/* พูลของ persona — เห็นองค์ประกอบก่อนรัน (P6-M6) */}
             {pool.length > 0 && (
@@ -486,17 +559,40 @@ export default function NewRun({
         )}
       </div>
       <PersonaPackModal
-        open={packModalOpen}
-        onClose={() => setPackModalOpen(false)}
-        packs={packs}
-        selectedPackId={packId}
-        onPick={(id) => { setPackId(id); setPackModalOpen(false); }}
+        intent={packIntent}
+        onClose={() => setPackIntent(null)}
         onSaved={(id) => {
           loadPacks();
-          // ถ้าแก้ pack ที่กำลังเลือกอยู่ effect [packId] ไม่ยิงเอง — refetch pool ตรงๆ
-          if (id != null && id === packId) fetchPool(packId).then((d) => setPool(d.segments)).catch(() => {});
+          if (id == null) return;
+          if (id === packId) {
+            // แก้ pack ที่เลือกอยู่ — effect [packId] ไม่ยิงเอง ต้อง refetch pool ตรงๆ
+            fetchPool(packId).then((d) => setPool(d.segments)).catch(() => {});
+          } else {
+            setPackId(id); // pack ใหม่/pack อื่นที่เพิ่งบันทึก → เลือกใช้ให้เลย
+          }
         }}
         subject={subject}
+      />
+      <ConfirmDialog
+        open={packToDelete != null}
+        title={t("pk_delete_title")}
+        message={packToDelete ? `"${packToDelete.label}" — ${t("pk_delete_confirm")}` : ""}
+        confirmLabel={t("pk_delete_ok")}
+        cancelLabel={t("confirm_cancel")}
+        danger
+        onCancel={() => setPackToDelete(null)}
+        onConfirm={async () => {
+          const p = packToDelete;
+          setPackToDelete(null);
+          if (!p) return;
+          try {
+            await deletePack(p.id);
+            if (p.id === packId) setPackId(null); // pack ที่เลือกอยู่ถูกลบ → กลับสำมะโน
+            loadPacks();
+          } catch (e: any) {
+            setError(String(e.message ?? e));
+          }
+        }}
       />
     </div>
   );
