@@ -21,7 +21,8 @@ from governance.pii import PIIDetector, load_allowlist
 
 VALID_CHANNELS = ("line_closed_group", "public_feed", "algo_feed", "offline_wom")
 PRIOR_KEYS = ("kreng_jai", "say_do_gap", "sarcasm_meme")
-MIN_SEGMENTS, MAX_SEGMENTS = 2, 8
+# ขอบเขตจำนวนกลุ่ม: เหตุผลเชิงสถิติ (n≥30/กลุ่ม ที่ cap 1,000 agents) + practice segmentation — ดู ADR-0009
+MIN_SEGMENTS, MAX_SEGMENTS = 2, 12
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS persona_packs (

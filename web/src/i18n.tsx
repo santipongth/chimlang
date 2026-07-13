@@ -433,8 +433,8 @@ const DICT: Record<string, { th: string; en: string }> = {
   },
   wiz_persona_default: { th: "โครงสร้างสำมะโน (ค่าเริ่มต้น)", en: "Census structure (default)" },
   wiz_persona_default_desc: {
-    th: "6 segments กทม.-ปริมณฑล พร้อม provenance card",
-    en: "6 Bangkok-metro segments with provenance cards",
+    th: "7 segments กทม.-ปริมณฑล พร้อม provenance card",
+    en: "7 Bangkok-metro segments with provenance cards",
   },
   wiz_pool_title: { th: "พูลของ persona", en: "Persona pool" },
   wiz_pool_unit: { th: "กลุ่ม", en: "groups" },
@@ -528,6 +528,14 @@ const DICT: Record<string, { th: string; en: string }> = {
   pk_trait_add_ph: { th: "พิมพ์แล้วกด Enter เพื่อเพิ่ม...", en: "Type and press Enter to add..." },
   pk_add_segment: { th: "เพิ่มกลุ่ม", en: "Add group" },
   pk_remove_segment: { th: "ลบกลุ่มนี้", en: "Remove group" },
+  pk_low_n_warning: {
+    th: "กลุ่มนี้จะมี agent น้อยเกินไป (~{n} จาก {total} ตัว) — ผลรายกลุ่มไม่น่าเชื่อถือ (ควร ≥ 30)",
+    en: "This group would get too few agents (~{n} of {total}) — per-group results unreliable (need ≥ 30)",
+  },
+  pk_low_n_note: {
+    th: "บางกลุ่มจะมี agent ต่ำกว่า 30 ตัวที่จำนวนนี้ — เพิ่มจำนวน agents หรือรวมกลุ่มเล็กเข้าด้วยกัน",
+    en: "Some groups get fewer than 30 agents at this size — increase agents or merge small groups",
+  },
   pk_ai_to_edit_note: {
     th: "ผลที่ AI ร่างจะเปิดในแท็บแก้ไข — ตรวจและปรับได้ก่อนบันทึกเสมอ",
     en: "AI drafts open in the Edit tab — always review and adjust before saving",

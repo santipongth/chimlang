@@ -1196,8 +1196,12 @@ def personas_pool_json(
     else:
         segments = PersonaFactory().segments
         source = "census"
+    from simulation.persona_packs import MAX_SEGMENTS, MIN_SEGMENTS
+
     return {
         "source": source,
+        # single source of truth ของขอบเขตจำนวนกลุ่ม — UI อ่านจากที่นี่ ไม่ hardcode (ADR-0009)
+        "limits": {"min_segments": MIN_SEGMENTS, "max_segments": MAX_SEGMENTS},
         "segments": [
             {
                 "id": s.get("id", ""),

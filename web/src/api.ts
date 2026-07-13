@@ -87,7 +87,17 @@ export interface PoolSegment {
   traits: string[];
 }
 
-export async function fetchPool(packId?: number | null): Promise<{ source: string; segments: PoolSegment[] }> {
+export interface PackLimits {
+  min_segments: number;
+  max_segments: number;
+}
+
+// fallback เมื่อ backend รุ่นเก่ายังไม่ส่ง limits — ค่าต้องตรง MIN/MAX_SEGMENTS ฝั่ง Python (ADR-0009)
+export const FALLBACK_PACK_LIMITS: PackLimits = { min_segments: 2, max_segments: 12 };
+
+export async function fetchPool(
+  packId?: number | null,
+): Promise<{ source: string; segments: PoolSegment[]; limits?: PackLimits }> {
   const q = packId != null ? `?pack_id=${packId}` : "";
   const r = await fetch(`/personas/pool.json${q}`);
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);

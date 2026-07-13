@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+  FALLBACK_PACK_LIMITS,
+  PackLimits,
   PackSegment,
   PersonaPack,
   fetchPool,
@@ -83,11 +85,15 @@ export default function PersonaPackModal({
   onClose,
   onSaved,
   subject,
+  limits = FALLBACK_PACK_LIMITS,
+  agents,
 }: {
   intent: PackModalIntent | null;
   onClose: () => void;
   onSaved: (savedId?: number) => void;
   subject: string;
+  limits?: PackLimits;
+  agents?: number; // จำนวน agent ของรันปัจจุบัน — ใช้เตือนกลุ่มที่ n ต่ำเกิน (< 30)
 }) {
   const { t } = useLang();
   const open = intent != null;
@@ -413,6 +419,13 @@ export default function PersonaPackModal({
                         display={pct(s.share)}
                         onChange={(v) => patchSegment(i, { share: v })}
                       />
+                      {agents != null && Math.round(s.share * agents) < 30 && (
+                        <p className="text-[11px] text-amber-700">
+                          ⚠️ {t("pk_low_n_warning")
+                            .replace("{n}", String(Math.round(s.share * agents)))
+                            .replace("{total}", String(agents))}
+                        </p>
+                      )}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Slider
                           label={t("pk_voice")}
@@ -524,7 +537,7 @@ export default function PersonaPackModal({
                             setDraft({ ...draft, segments: draft.segments.filter((_, x) => x !== i) });
                             setOpenIdx(-1);
                           }}
-                          disabled={draft.segments.length <= 2}
+                          disabled={draft.segments.length <= limits.min_segments}
                           className="text-xs text-muted-foreground hover:text-red-600 disabled:opacity-30"
                         >
                           🗑 {t("pk_remove_segment")}
@@ -548,10 +561,10 @@ export default function PersonaPackModal({
                   });
                   setOpenIdx(draft.segments.length);
                 }}
-                disabled={draft.segments.length >= 8}
+                disabled={draft.segments.length >= limits.max_segments}
                 className="w-full rounded-xl border border-dashed border-border px-4 py-2.5 text-sm text-primary-strong hover:bg-primary/5 disabled:opacity-40"
               >
-                + {t("pk_add_segment")} ({draft.segments.length}/8)
+                + {t("pk_add_segment")} ({draft.segments.length}/{limits.max_segments})
               </button>
             </div>
           )}

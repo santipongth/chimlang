@@ -98,6 +98,10 @@ def test_detector_disabled_fails_closed(monkeypatch):
 def test_segment_count_bounds():
     with pytest.raises(PackValidationError):
         validate_pack("x", _segments(1))
+    # ขอบบน 12 (ADR-0009): 12 ผ่าน / 13 ปฏิเสธ
+    validate_pack("x", _segments(12))
+    with pytest.raises(PackValidationError):
+        validate_pack("x", _segments(13))
 
 
 # ---- store + factory ----
@@ -308,3 +312,9 @@ def test_pool_json_has_voice_activity(client, store):
     assert r.status_code == 200
     segments = r.json()["segments"]
     assert segments and all("voice_activity" in s for s in segments)
+
+
+def test_pool_json_exposes_segment_limits(client, store):
+    # single source of truth ของขอบเขตจำนวนกลุ่ม — UI อ่านจากที่นี่ ไม่ hardcode (ADR-0009)
+    data = client.get("/personas/pool.json").json()
+    assert data["limits"] == {"min_segments": 2, "max_segments": 12}

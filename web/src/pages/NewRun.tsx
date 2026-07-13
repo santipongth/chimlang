@@ -3,6 +3,8 @@ import { useLang } from "../i18n";
 import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 import {
   EngineInfo,
+  FALLBACK_PACK_LIMITS,
+  PackLimits,
   PersonaPack,
   PoolSegment,
   SourceInput,
@@ -92,6 +94,7 @@ export default function NewRun({
   const [sources, setSources] = useState<SourceInput[]>([]);
   const [pool, setPool] = useState<PoolSegment[]>([]);
   const [poolOpen, setPoolOpen] = useState(false);
+  const [packLimits, setPackLimits] = useState<PackLimits>(FALLBACK_PACK_LIMITS);
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [liveNews, setLiveNews] = useState(false);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
@@ -101,7 +104,12 @@ export default function NewRun({
   const loadPacks = () => fetchPacks().then(setPacks).catch(() => {});
   // โหลดพูลของ persona ทุกครั้งที่เปลี่ยน pack (P6-M6)
   useEffect(() => {
-    fetchPool(packId).then((d) => setPool(d.segments)).catch(() => setPool([]));
+    fetchPool(packId)
+      .then((d) => {
+        setPool(d.segments);
+        if (d.limits) setPackLimits(d.limits); // ขอบเขตจำนวนกลุ่มจาก backend — ไม่ hardcode (ADR-0009)
+      })
+      .catch(() => setPool([]));
   }, [packId]);
   useEffect(() => {
     loadPacks();
@@ -454,15 +462,22 @@ export default function NewRun({
                 </button>
                 {poolOpen && (
                   <div className="mt-2 space-y-1.5">
-                    {pool.map((s) => (
-                      <div key={s.id} className="flex items-center gap-2 text-xs">
-                        <span className="w-40 shrink-0 truncate">{s.name}</span>
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-                          <div className="h-full bg-primary" style={{ width: `${s.share * 100}%` }} />
+                    {pool.map((s) => {
+                      const est = Math.round(s.share * Math.min(agents, cap));
+                      return (
+                        <div key={s.id} className="flex items-center gap-2 text-xs">
+                          <span className="w-40 shrink-0 truncate">{s.name}</span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                            <div className="h-full bg-primary" style={{ width: `${s.share * 100}%` }} />
+                          </div>
+                          <span className="w-9 shrink-0 text-right tabular-nums text-muted-foreground">{pct(s.share)}</span>
+                          {est < 30 && <span title={t("pk_low_n_warning").replace("{n}", String(est)).replace("{total}", String(Math.min(agents, cap)))}>⚠️</span>}
                         </div>
-                        <span className="w-9 shrink-0 text-right tabular-nums text-muted-foreground">{pct(s.share)}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
+                    {pool.some((s) => Math.round(s.share * Math.min(agents, cap)) < 30) && (
+                      <p className="pt-1 text-[11px] text-amber-700">⚠️ {t("pk_low_n_note")}</p>
+                    )}
                     <p className="pt-1 text-[11px] text-muted-foreground">{t("wiz_pool_note")}</p>
                   </div>
                 )}
@@ -560,6 +575,8 @@ export default function NewRun({
       </div>
       <PersonaPackModal
         intent={packIntent}
+        limits={packLimits}
+        agents={Math.min(agents, cap)}
         onClose={() => setPackIntent(null)}
         onSaved={(id) => {
           loadPacks();
