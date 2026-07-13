@@ -169,6 +169,17 @@ def test_watchlist_run_unknown_id_404(client, store):
     assert client.post("/watchlists/99999999/run").status_code == 404
 
 
+def test_watchlist_delete_cascades_alerts(client, store):
+    # ลบ watchlist ได้ (operational table) — alerts ของมันหายตาม cascade, ตัวอื่นไม่กระทบ
+    wid = store.create(label="ลบทดสอบ", subject="หัวข้อทดสอบลบ watchlist", agents=20, cadence="daily")
+    store.insert_alert(wid, "tipping_point", {"subject": "ทดสอบ"})
+    assert client.delete(f"/watchlists/{wid}").status_code == 200
+    assert all(w["id"] != wid for w in client.get("/watchlists.json").json()["items"])
+    assert all(a["watchlist_id"] != wid for a in store.list_alerts(limit=200))
+    # id ไม่มีจริง → 404 ไม่ใช่ 200 เงียบ
+    assert client.delete(f"/watchlists/{wid}").status_code == 404
+
+
 def test_celery_task_function_runs_eagerly(store, monkeypatch):
     # เรียกฟังก์ชัน task ตรงๆ (eager) — best-effort ราย watchlist ต้องไม่ throw
     import governance.watchlist as wl_mod

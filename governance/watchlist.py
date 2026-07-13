@@ -110,6 +110,16 @@ class WatchlistStore:
         with self._conn() as conn:
             conn.execute("UPDATE watchlists SET active = %s WHERE id = %s", (active, watchlist_id))
 
+    def delete(self, watchlist_id: int) -> None:
+        """ลบ watchlist (alerts ตามไปด้วยผ่าน ON DELETE CASCADE) — ตาราง operational
+        ไม่ใช่ governance record (ดู docstring หัวไฟล์); run ที่เคยเกิดยังอยู่ใน audit ตามปกติ"""
+        with self._conn() as conn:
+            row = conn.execute(
+                "DELETE FROM watchlists WHERE id = %s RETURNING id", (watchlist_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"ไม่พบ watchlist id {watchlist_id}")
+
     def touch_run(self, watchlist_id: int, delta: float) -> None:
         with self._conn() as conn:
             conn.execute(

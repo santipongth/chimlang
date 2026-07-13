@@ -304,7 +304,12 @@ const DICT: Record<string, { th: string; en: string }> = {
   },
   set_key_ph: { th: "วางกุญแจ (API key) ที่นี่...", en: "Paste API key here..." },
   set_key_save: { th: "บันทึก", en: "Save" },
-  set_key_clear: { th: "ลบ", en: "Clear" },
+  set_key_clear: { th: "ลบ key", en: "Clear key" },
+  set_key_clear_title: { th: "ลบ key ที่บันทึกไว้?", en: "Clear the saved key?" },
+  set_key_clear_confirm: {
+    th: "key ที่เข้ารหัสไว้ในระบบจะถูกลบ — ระบบจะกลับไปใช้ key จากไฟล์ .env (ถ้าตั้งไว้)",
+    en: "The encrypted key stored in the system will be removed — the system falls back to the .env key (if set)",
+  },
   set_key_note: {
     th: "กุญแจถูกเข้ารหัสด้วยกุญแจหลักใน .env ก่อนเก็บลงฐานข้อมูล — ระบบไม่เคยแสดงกุญแจเต็ม (โชว์แค่บางส่วน) และไม่ส่งกลับหน้าเว็บ",
     en: "The key is encrypted with the master key in .env before storage — never shown in full or returned to the browser",
@@ -549,6 +554,12 @@ const DICT: Record<string, { th: string; en: string }> = {
   wl_paused: { th: "พักไว้", en: "Paused" },
   wl_last_run: { th: "รันล่าสุด", en: "last run" },
   wl_never_run: { th: "ยังไม่เคยรัน (จะรันในรอบถัดไป)", en: "never run (will run next cycle)" },
+  wl_delete_title: { th: "ลบรายการติดตามนี้?", en: "Delete this watchlist?" },
+  wl_delete_confirm: {
+    th: "การแจ้งเตือนของรายการนี้จะถูกลบไปด้วย — รันที่เคยเกิดยังอยู่ในประวัติตามปกติ",
+    en: "Its alerts are removed too — past runs remain in history as usual",
+  },
+  wl_delete_ok: { th: "ลบรายการติดตาม", en: "Delete watchlist" },
   wl_alerts: { th: "การแจ้งเตือน", en: "Alerts" },
   wl_unread: { th: "ยังไม่อ่าน", en: "unread" },
   wl_mark_all: { th: "อ่านทั้งหมดแล้ว", en: "Mark all read" },

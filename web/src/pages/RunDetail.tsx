@@ -396,8 +396,8 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
 
       {/* Share dialog (แบบ studio): toggle เปิด/ปิด + copy link — governance ADR-0004 อยู่ฝั่ง API */}
       {shareOpen && data && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={() => setShareOpen(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-[2px]" onClick={() => setShareOpen(false)}>
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-2xl font-semibold">🌐 {t("share_title")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">{t("share_desc")}</p>
             <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-background p-3 text-sm">

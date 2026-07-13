@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import {
   WatchlistData,
   createWatchlist,
+  deleteWatchlist,
   fetchWatchlists,
   markAlertsRead,
   runWatchlistNow,
   toggleWatchlist,
 } from "../api";
 import { useLang } from "../i18n";
-import { InfoTip, PageHeader } from "../ui";
+import { ConfirmDialog, InfoTip, PageHeader } from "../ui";
 
 // หน้า Watchlist (P5-M5) — subscribe หัวข้อ → re-run ตาม cadence → alert เมื่อกระแสพลิก
 
@@ -17,6 +18,7 @@ export default function Watchlist({ onChanged }: { onChanged?: () => void }) {
   const [data, setData] = useState<WatchlistData | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
+  const [toDelete, setToDelete] = useState<{ id: number; label: string } | null>(null);
   const [form, setForm] = useState<{
     label: string;
     subject: string;
@@ -158,6 +160,13 @@ export default function Watchlist({ onChanged }: { onChanged?: () => void }) {
                       >
                         {w.active ? t("wl_active") : t("wl_paused")}
                       </button>
+                      <button
+                        onClick={() => setToDelete({ id: w.id, label: w.label })}
+                        title={t("wl_delete_ok")}
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                      >
+                        🗑
+                      </button>
                     </div>
                   </div>
                 </li>
@@ -210,6 +219,27 @@ export default function Watchlist({ onChanged }: { onChanged?: () => void }) {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={toDelete != null}
+        title={t("wl_delete_title")}
+        message={toDelete ? `"${toDelete.label}" — ${t("wl_delete_confirm")}` : ""}
+        confirmLabel={t("wl_delete_ok")}
+        cancelLabel={t("confirm_cancel")}
+        danger
+        onCancel={() => setToDelete(null)}
+        onConfirm={async () => {
+          const item = toDelete;
+          setToDelete(null);
+          if (!item) return;
+          try {
+            await deleteWatchlist(item.id);
+            await load();
+          } catch (e: any) {
+            setError(String(e.message ?? e));
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1376,6 +1376,24 @@ def watchlist_create(body: WatchlistBody, principal: Principal = Depends(get_pri
     return {"id": wid}
 
 
+@app.delete("/watchlists/{watchlist_id}")
+def watchlist_delete(watchlist_id: int, principal: Principal = Depends(get_principal)) -> dict:
+    """ลบ watchlist + alerts ของมัน (cascade) — operational table ไม่ติด append-only"""
+    require(principal, Permission.RUN)
+    from governance.watchlist import WatchlistStore
+
+    settings = get_settings()
+    try:
+        store = WatchlistStore(settings.postgres_url)
+        store.setup()
+        store.delete(watchlist_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+    return {"ok": True}
+
+
 @app.post("/watchlists/{watchlist_id}/toggle")
 def watchlist_toggle(
     watchlist_id: int, active: bool = Query(...), principal: Principal = Depends(get_principal)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppSettings, fetchSettings, saveLlmKey, saveSettings, saveTavilyKey } from "../api";
 import { useLang } from "../i18n";
-import { PageHeader, SelectCard } from "../ui";
+import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 
 // Settings (P6-M4) — ค่า default + จัดการ persona packs + สถานะระบบ (secrets อยู่ .env เท่านั้น)
 
@@ -16,6 +16,8 @@ export default function Settings() {
   const [newModel, setNewModel] = useState("");
   const [tavilyDraft, setTavilyDraft] = useState("");
   const [tavilyBusy, setTavilyBusy] = useState(false);
+  // ล้าง key ที่เก็บใน DB — ยืนยันผ่าน dialog ของเราเองก่อนเสมอ (มติผู้ใช้ 13 ก.ค.)
+  const [keyToClear, setKeyToClear] = useState<"llm" | "tavily" | null>(null);
 
   const load = () => {
     fetchSettings()
@@ -201,8 +203,8 @@ export default function Settings() {
                 </button>
                 {data.llm.key_source === "db" && (
                   <button
-                    onClick={() => saveLlmKey("").then(load)}
-                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
+                    onClick={() => setKeyToClear("llm")}
+                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-red-50 hover:text-red-600"
                   >
                     🗑 {t("set_key_clear")}
                   </button>
@@ -402,8 +404,8 @@ export default function Settings() {
                 </button>
                 {data.news.tavily_source === "db" && (
                   <button
-                    onClick={() => saveTavilyKey("").then(load)}
-                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
+                    onClick={() => setKeyToClear("tavily")}
+                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-red-50 hover:text-red-600"
                   >
                     🗑 {t("set_key_clear")}
                   </button>
@@ -428,6 +430,28 @@ export default function Settings() {
           </section>
         </>
       )}
+
+      <ConfirmDialog
+        open={keyToClear != null}
+        title={t("set_key_clear_title")}
+        message={t("set_key_clear_confirm")}
+        confirmLabel={t("set_key_clear")}
+        cancelLabel={t("confirm_cancel")}
+        danger
+        onCancel={() => setKeyToClear(null)}
+        onConfirm={async () => {
+          const which = keyToClear;
+          setKeyToClear(null);
+          if (!which) return;
+          try {
+            if (which === "llm") await saveLlmKey("");
+            else await saveTavilyKey("");
+            await load();
+          } catch (e: any) {
+            setError(String(e.message ?? e));
+          }
+        }}
+      />
     </div>
   );
 }

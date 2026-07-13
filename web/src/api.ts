@@ -473,6 +473,11 @@ export async function toggleWatchlist(id: number, active: boolean): Promise<void
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
+export async function deleteWatchlist(id: number): Promise<void> {
+  const r = await fetch(`/watchlists/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
 export async function runWatchlistNow(id: number): Promise<{ alerts_created: any[] }> {
   const r = await fetch(`/watchlists/${id}/run`, { method: "POST" });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
