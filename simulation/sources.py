@@ -9,6 +9,7 @@
 - จำกัด ≤ 10 sources/run, เนื้อหา ≤ 2MB/ชิ้น (กัน DoS ตัวเอง)
 """
 
+import hashlib
 import ipaddress
 import re
 from urllib.parse import urlparse
@@ -23,6 +24,7 @@ MAX_SOURCES = 10
 MAX_TEXT_CHARS = 2_000_000
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
+CACHE_TTL_HOURS = 6
 BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain"}
 
 _SCHEMA = """
@@ -43,7 +45,19 @@ CREATE TABLE IF NOT EXISTS run_chunks (
     content TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS run_chunks_run ON run_chunks (run_id);
+CREATE TABLE IF NOT EXISTS external_fetch_cache (
+    url_hash TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    content TEXT NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
+
+
+def setup_sources(dsn: str) -> None:
+    with psycopg.connect(dsn) as conn:
+        conn.execute(_SCHEMA)
 
 
 def _strip_html(html: str) -> str:
@@ -111,6 +125,29 @@ def _fetch_text(kind: str, label: str, url: str | None, text: str | None) -> str
     return _parse_rss(raw) if kind == "rss" else _strip_html(raw)
 
 
+def _fetch_text_cached(conn, kind: str, label: str, url: str | None, text: str | None) -> str:
+    if kind == "text":
+        return _fetch_text(kind, label, url, text)
+    safe_url = validate_external_url(url or "")
+    url_hash = hashlib.sha256(f"{kind}:{safe_url}".encode()).hexdigest()
+    row = conn.execute(
+        "SELECT content FROM external_fetch_cache "
+        "WHERE url_hash = %s AND fetched_at > now() - (%s || ' hours')::interval",
+        (url_hash, CACHE_TTL_HOURS),
+    ).fetchone()
+    if row:
+        return row[0]
+    content = _fetch_text(kind, label, safe_url, text)
+    conn.execute(
+        "INSERT INTO external_fetch_cache (url_hash, url, kind, content, fetched_at) "
+        "VALUES (%s, %s, %s, %s, now()) "
+        "ON CONFLICT (url_hash) DO UPDATE SET content = EXCLUDED.content, "
+        "fetched_at = now(), url = EXCLUDED.url, kind = EXCLUDED.kind",
+        (url_hash, safe_url, kind, content),
+    )
+    return content
+
+
 def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
     """นำเข้าเอกสารทั้งชุดของ run — คืนสถานะราย source (ready/blocked/error/empty)
 
@@ -130,7 +167,7 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
             label = str(src.get("label", ""))[:200] or kind
             status, error, n_chunks = "ready", "", 0
             try:
-                text = _fetch_text(kind, label, src.get("url"), src.get("text"))
+                text = _fetch_text_cached(conn, kind, label, src.get("url"), src.get("text"))
                 report = detector.check(text)
                 if report.blocked:
                     status, error = (
@@ -166,18 +203,35 @@ def _trigrams(s: str) -> set[str]:
     return {s[i : i + 3] for i in range(len(s) - 2)} if len(s) >= 3 else {s}
 
 
+def _terms(s: str) -> set[str]:
+    return {w.lower() for w in re.findall(r"[\w\u0E00-\u0E7F]{3,}", s)}
+
+
 def retrieve_context(dsn: str, run_id: str, query: str, *, k: int = 6) -> tuple[str, ...]:
-    """top-k chunks ของ run ตาม 3-gram overlap กับ query — ไม่มีเอกสาร = tuple ว่าง"""
+    """top-k chunks ของ run แบบ hybrid deterministic: 3-gram overlap + term overlap."""
     try:
         with psycopg.connect(dsn) as conn:
             conn.execute(_SCHEMA)
             rows = conn.execute(
-                "SELECT content FROM run_chunks WHERE run_id = %s LIMIT 500", (run_id,)
+                "SELECT source_label, content FROM run_chunks WHERE run_id = %s LIMIT 500",
+                (run_id,),
             ).fetchall()
     except Exception:
         return ()
     if not rows:
         return ()
     q = _trigrams(query)
-    scored = sorted(((len(q & _trigrams(r[0])), r[0]) for r in rows), key=lambda x: -x[0])
+    qt = _terms(query)
+    scored = sorted(
+        (
+            (
+                len(q & _trigrams(content))
+                + 2 * len(qt & _terms(content))
+                + len(qt & _terms(label)),
+                content,
+            )
+            for label, content in rows
+        ),
+        key=lambda x: -x[0],
+    )
     return tuple(content for score, content in scored[:k] if score > 0)

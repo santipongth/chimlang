@@ -34,14 +34,18 @@ def whatif_dashboard_task(subject: str, granularity: str, agents: int) -> dict:
 
 
 @celery_app.task(name="chimlang.persistent_run")
-def persistent_run_task(body: dict, actor: str, election_verified: bool = False) -> dict:
+def persistent_run_task(
+    body: dict, actor: str, election_verified: bool = False, run_id: str | None = None
+) -> dict:
     """สร้าง persistent run ใน worker — ใช้ code path เดียวกับ POST /runs เพื่อไม่ข้าม governance."""
-    from api.app import RunBody, run_create
+    from api.app import RunBody, _run_create_impl
     from governance.rbac import Principal, Role
 
     role = Role.ADMIN if election_verified else Role.ANALYST
     principal = Principal(user_id=actor, role=role, election_verified=election_verified)
-    return run_create(RunBody(**body), principal=principal)
+    return _run_create_impl(
+        RunBody(**body), principal=principal, run_id=run_id, precreated=bool(run_id)
+    )
 
 
 @celery_app.task(name="chimlang.check_watchlists")

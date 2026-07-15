@@ -271,6 +271,14 @@ export default function PersonaPackModal({
   }
 
   const shareTotal = draft?.segments.reduce((a, s) => a + s.share, 0) ?? 0;
+  const avgVoice = draft?.segments.reduce((a, s) => a + s.share * s.voice_activity, 0) ?? 0;
+  const dominantChannel = draft
+    ? CHANNELS.map((ch) => ({
+        ch,
+        value: draft.segments.reduce((a, s) => a + s.share * (s.channel_mix[ch] ?? 0), 0),
+      })).sort((a, b) => b.value - a.value)[0]
+    : null;
+  const lowSampleGroups = draft?.segments.filter((s) => agents != null && Math.round(s.share * agents) < 30).length ?? 0;
   const card = "rounded-xl border border-border bg-background";
 
   return (
@@ -379,6 +387,19 @@ export default function PersonaPackModal({
                     parts={draft.segments.map((s) => ({ label: s.name || "?", value: s.share }))}
                   />
                 </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                {[
+                  [t("pk_voice"), pct(avgVoice)],
+                  ["Dominant channel", dominantChannel ? t(`pk_ch_${dominantChannel.ch}`) : "—"],
+                  ["Low sample groups", String(lowSampleGroups)],
+                ].map(([label, value]) => (
+                  <div key={label} className={`${card} p-3`}>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                    <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+                  </div>
+                ))}
               </div>
 
               {/* ลองถาม — คำถามเดียวใช้ทุกกลุ่ม */}

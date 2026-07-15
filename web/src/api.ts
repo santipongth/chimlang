@@ -122,7 +122,10 @@ export interface RunJobResult {
 
 export interface RunJobStatus {
   job_id: string;
+  run_id?: string;
   status: string;
+  progress?: number;
+  progress_message?: string;
   result?: RunJobResult;
   error?: string;
 }
@@ -151,13 +154,20 @@ export interface SimRunSummary {
   domain: string;
   agents: number;
   rounds: number;
-  status: "running" | "complete" | "error";
+  status: "queued" | "running" | "complete" | "error" | "canceled";
+  job_id?: string;
+  queued_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  progress?: number;
+  progress_message?: string;
 }
 
-export async function fetchSimRuns(search = "", engine = ""): Promise<SimRunSummary[]> {
+export async function fetchSimRuns(search = "", engine = "", status = ""): Promise<SimRunSummary[]> {
   const q = new URLSearchParams();
   if (search) q.set("search", search);
   if (engine) q.set("engine", engine);
+  if (status) q.set("status", status);
   const r = await fetch(`/simruns.json?${q}`);
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return (await r.json()).runs;
@@ -191,6 +201,33 @@ export async function fetchRunDetail(runId: string): Promise<SimRunDetail> {
 export async function deleteRun(runId: string): Promise<void> {
   const r = await fetch(`/runs/${runId}`, { method: "DELETE" });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+export async function cancelRun(runId: string): Promise<void> {
+  const r = await fetch(`/runs/${runId}/cancel`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+export async function retryRun(runId: string): Promise<RunJobStatus> {
+  const r = await fetch(`/runs/${runId}/retry`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export interface RunMetrics {
+  by_status: Record<string, { count: number; avg_runtime_s: number }>;
+  avg_queue_wait_s: number;
+  avg_runtime_s: number;
+  errors_24h: number;
+  sources_by_status: Record<string, number>;
+  news_by_status: Record<string, number>;
+  spent_this_month: number;
+}
+
+export async function fetchRunMetrics(): Promise<RunMetrics> {
+  const r = await fetch("/run-metrics.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
 }
 
 // ---- App settings (P6-M4) ----

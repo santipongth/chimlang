@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { AppSettings, DeepHealth, fetchDeepHealth, fetchSettings, saveLlmKey, saveSettings, saveTavilyKey } from "../api";
+import {
+  AppSettings,
+  DeepHealth,
+  RunMetrics,
+  fetchDeepHealth,
+  fetchRunMetrics,
+  fetchSettings,
+  saveLlmKey,
+  saveSettings,
+  saveTavilyKey,
+} from "../api";
 import { useLang } from "../i18n";
 import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 
@@ -11,6 +21,7 @@ export default function Settings() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [health, setHealth] = useState<DeepHealth | null>(null);
+  const [metrics, setMetrics] = useState<RunMetrics | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [prices, setPrices] = useState<Record<string, { input_usd_per_m: number; output_usd_per_m: number }>>({});
@@ -29,6 +40,7 @@ export default function Settings() {
       })
       .catch((e) => setError(String(e.message ?? e)));
     fetchDeepHealth().then(setHealth).catch(() => setHealth(null));
+    fetchRunMetrics().then(setMetrics).catch(() => setMetrics(null));
   };
   useEffect(load, []);
 
@@ -436,6 +448,25 @@ export default function Settings() {
                       {status === "ok" ? "✅" : "⚠️"} {name}: {status}
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+            {metrics && (
+              <div className="rounded-xl border border-border bg-background p-3">
+                <div className="text-xs font-medium">Operational metrics</div>
+                <div className="mt-2 grid gap-1 sm:grid-cols-4">
+                  <span className="rounded-lg border border-border px-2 py-1 text-xs">
+                    queue: {Math.round(metrics.avg_queue_wait_s)}s
+                  </span>
+                  <span className="rounded-lg border border-border px-2 py-1 text-xs">
+                    runtime: {Math.round(metrics.avg_runtime_s)}s
+                  </span>
+                  <span className="rounded-lg border border-border px-2 py-1 text-xs">
+                    errors 24h: {metrics.errors_24h}
+                  </span>
+                  <span className="rounded-lg border border-border px-2 py-1 text-xs">
+                    spend: ${metrics.spent_this_month.toFixed(2)}
+                  </span>
                 </div>
               </div>
             )}

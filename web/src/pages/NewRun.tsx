@@ -196,7 +196,13 @@ export default function NewRun({
         if (status.status === "FAILURE") {
           throw new Error(status.error || "run failed");
         }
-        setProgress(status.status === "STARTED" ? t("run_running") : t("run_queued"));
+        setProgress(
+          status.progress_message
+            ? `${status.progress ?? 0}% · ${status.progress_message}`
+            : status.status === "STARTED"
+              ? t("run_running")
+              : t("run_queued"),
+        );
       }
       throw new Error(t("run_timeout"));
     } catch (e: any) {

@@ -656,6 +656,16 @@ def _register_run_prediction(
 
 @app.post("/runs")
 def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+    return _run_create_impl(body, principal=principal)
+
+
+def _run_create_impl(
+    body: RunBody,
+    principal: Principal,
+    *,
+    run_id: str | None = None,
+    precreated: bool = False,
+) -> dict:
     """สร้าง run ถาวร (P6-M2) — governance ครบ: PII gate, election, audit, prediction, cap"""
     require(principal, Permission.RUN)
     from core.runstore import RunStore, new_run_id
@@ -685,7 +695,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
         raise HTTPException(status_code=422, detail="sources ใช้ได้กับ engine debate เท่านั้น")
     n = min(body.agents, engine.max_agents)
     rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
-    run_id = new_run_id(body.engine)
+    run_id = run_id or new_run_id(body.engine)
     factory = _load_pack_factory(body.pack_id)
 
     try:
@@ -705,16 +715,21 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
         "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
         "live_news": body.live_news,  # provenance: run นี้ใช้ข่าวสดหรือไม่ (P7)
     }
-    rstore.create(
-        run_id=run_id,
-        engine=body.engine,
-        subject=subject,
-        domain=body.domain,
-        agents=n,
-        rounds=rounds,
-        seed=settings.default_seed,
-        config=config,
-    )
+    if precreated:
+        rstore.mark_running(run_id, "เริ่มรันใน worker")
+    else:
+        rstore.create(
+            run_id=run_id,
+            engine=body.engine,
+            subject=subject,
+            domain=body.domain,
+            agents=n,
+            rounds=rounds,
+            seed=settings.default_seed,
+            config=config,
+            status="running",
+            progress_message="เริ่มรัน",
+        )
     gov.append_audit(
         actor=principal.user_id,
         action="run_started",
@@ -724,6 +739,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
     )
     try:
         if body.engine == "fabric":
+            rstore.update_progress(run_id, 35, "กำลังรัน fabric multiverse")
             payload = _run_dashboard(subject, "aggregate", n, factory=factory).to_dict()
         else:
             from simulation.debate import make_debate_adapter, run_debate
@@ -740,7 +756,10 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
             if body.sources:
                 from simulation.sources import ingest_sources
 
+                rstore.update_progress(run_id, 20, "กำลัง ingest หลักฐาน")
                 source_status = ingest_sources(settings.postgres_url, run_id, body.sources)
+            else:
+                rstore.update_progress(run_id, 20, "ไม่มีหลักฐานแนบ")
             context = retrieve_context(settings.postgres_url, run_id, subject, k=6)
             # News Desk (P7, SIM-11): โต๊ะข่าวกลางดึงข่าวสด → media diet รายกลุ่ม
             segment_news: dict[str, tuple[str, ...]] = {}
@@ -764,6 +783,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                         for seg, mix in seg_mixes.items()
                     }
 
+                rstore.update_progress(run_id, 35, "กำลังดึงข่าวสด")
                 gather(settings.postgres_url, ctx, queries=[subject])
                 all_items = load_items(settings.postgres_url, run_id)
                 segment_news = _diet(all_items)
@@ -781,12 +801,14 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                             "title": it.title,
                             "url": it.url,
                             "fetched_at": it.fetched_at,
+                            "channel_tags": it.channel_tags,
                             "status": it.status,
                             "error": it.error,
                         }
                         for it in all_items
                     ],
                 }
+            rstore.update_progress(run_id, 55, "กำลังรัน debate agents")
             result = run_debate(
                 personas,
                 subject=subject,
@@ -812,6 +834,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                         "title": it.title,
                         "url": it.url,
                         "fetched_at": it.fetched_at,
+                        "channel_tags": it.channel_tags,
                         "status": it.status,
                         "error": it.error,
                     }
@@ -826,6 +849,7 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
                 "context_used": len(context),
                 "news": news_status,
             }
+        rstore.update_progress(run_id, 90, "กำลังบันทึกผลและลงทะเบียน prediction")
         rstore.finish(run_id, payload)
         _register_run_prediction(
             gov,
@@ -856,36 +880,181 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
 def run_create_async(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
     """ส่ง persistent run เข้า queue — ใช้ code path เดียวกับ /runs ใน worker แล้ว poll ด้วย job id"""
     require(principal, Permission.RUN)
+    from core.runstore import RunStore, new_run_id
+    from governance.pii import PIIDetector, load_allowlist
+    from simulation.engines import get_engine
+
+    settings = get_settings()
+    try:
+        engine = get_engine(body.engine)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    subject = body.subject.strip()
+    if len(subject) < 4:
+        raise HTTPException(status_code=422, detail="หัวข้อสั้นเกินไป")
+    if not settings.pii_detector_enabled:
+        raise HTTPException(status_code=503, detail="PII detector ถูกปิด — ปฏิเสธการรัน (GOV-01)")
+    pii = PIIDetector(load_allowlist()).check(subject)
+    if pii.blocked:
+        raise HTTPException(
+            status_code=422, detail="พบ PII ในหัวข้อ (GOV-01): " + "; ".join(pii.block_reasons)
+        )
     if ElectionPolicy(classify_scenario(body.subject)).active:
         require_election(principal)
+    if body.sources and body.engine != "debate":
+        raise HTTPException(status_code=422, detail="sources ใช้ได้กับ engine debate เท่านั้น")
     from core.tasks import celery_app, persistent_run_task
 
+    n = min(body.agents, engine.max_agents)
+    rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
+    valid_views = {"overview", "debate", "canvas", "evidence"}
+    views = [v for v in body.views if v in valid_views] or list(valid_views)
+    run_id = new_run_id(body.engine)
+    rstore = RunStore(settings.postgres_url)
+    try:
+        rstore.setup()
+        rstore.create(
+            run_id=run_id,
+            engine=body.engine,
+            subject=subject,
+            domain=body.domain,
+            agents=n,
+            rounds=rounds,
+            seed=settings.default_seed,
+            config={
+                "pack_id": body.pack_id,
+                "red_team": body.red_team,
+                "requested_agents": body.agents,
+                "views": views,
+                "live_news": body.live_news,
+            },
+            status="queued",
+            progress_message="รอ worker",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
     payload = body.model_dump()
     if celery_app.conf.task_always_eager:
         res = persistent_run_task.apply(
-            args=(payload, principal.user_id, principal.election_verified), throw=True
+            args=(payload, principal.user_id, principal.election_verified, run_id), throw=True
         )
-        return {"job_id": res.id, "status": "SUCCESS", "result": res.get()}
+        rstore.attach_job(run_id, res.id)
+        return {"job_id": res.id, "run_id": run_id, "status": "SUCCESS", "result": res.get()}
     try:
-        res = persistent_run_task.delay(payload, principal.user_id, principal.election_verified)
+        res = persistent_run_task.delay(
+            payload, principal.user_id, principal.election_verified, run_id
+        )
+        rstore.attach_job(run_id, res.id)
     except Exception as e:
+        rstore.fail(run_id, f"queue ไม่พร้อม (redis?): {e}")
         raise HTTPException(status_code=503, detail=f"queue ไม่พร้อม (redis?): {e}") from e
-    return {"job_id": res.id, "status": res.status}
+    return {"job_id": res.id, "run_id": run_id, "status": res.status}
 
 
 @app.get("/run-jobs/{job_id}")
 def run_job_status(job_id: str, principal: Principal = Depends(get_principal)) -> dict:
     """สถานะ queue สำหรับ persistent run — result สำเร็จมี run_id ให้ UI เปิด RunDetail"""
     require(principal, Permission.RUN)
+    from core.runstore import RunStore
     from core.tasks import celery_app
 
     res = celery_app.AsyncResult(job_id)
     body: dict = {"job_id": job_id, "status": res.status}
+    try:
+        store = RunStore(get_settings().postgres_url)
+        store.setup()
+        run = store.find_by_job(job_id)
+        if run:
+            body.update(run)
+            if run["status"] == "complete":
+                body["result"] = {"run_id": run["run_id"]}
+            elif run["status"] == "error":
+                body["error"] = run.get("error") or "run failed"
+    except Exception:
+        pass
     if res.successful():
         body["result"] = res.result
     elif res.failed():
         body["error"] = str(res.result)
     return body
+
+
+@app.post("/runs/{run_id}/cancel")
+def run_cancel(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+    from governance.store import GovernanceStore
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        detail = store.get(run_id)
+        store.cancel(run_id, "ยกเลิกโดยผู้ใช้")
+        if detail.get("job_id"):
+            try:
+                from core.tasks import celery_app
+
+                celery_app.control.revoke(detail["job_id"], terminate=True)
+            except Exception:
+                pass
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id, action="run_canceled", run_id=run_id, config_hash="-"
+        )
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+@app.post("/runs/{run_id}/retry")
+def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        old = store.get(run_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    body = RunBody(
+        engine=old["engine"],
+        subject=old["subject"],
+        domain=old["domain"],
+        agents=int(old["config"].get("requested_agents") or old["agents"]),
+        rounds=old["rounds"],
+        pack_id=old["config"].get("pack_id"),
+        red_team=bool(old["config"].get("red_team")),
+        views=old["config"].get("views") or [],
+        live_news=bool(old["config"].get("live_news")),
+    )
+    return run_create_async(body, principal=principal)
+
+
+@app.get("/run-metrics.json")
+def run_metrics(principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        data = store.metrics()
+        try:
+            from core.llm.budget import spent_this_month
+
+            data["spent_this_month"] = spent_this_month(settings.postgres_url)
+        except Exception:
+            data["spent_this_month"] = 0
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
 
 
 @app.get("/simruns.json")

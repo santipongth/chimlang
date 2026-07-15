@@ -103,3 +103,63 @@ def test_run_job_status_reports_failure(client, monkeypatch):
     r = client.get("/run-jobs/job-1")
     assert r.status_code == 200
     assert r.json() == {"job_id": "job-1", "status": "FAILURE", "error": "worker failed"}
+
+
+@needs_pg
+def test_async_run_precreates_queued_row(client, monkeypatch):
+    from core.runstore import RunStore
+    from core.tasks import persistent_run_task
+
+    class _QueuedResult:
+        id = "queued-job-1"
+        status = "PENDING"
+
+    old_eager = celery_app.conf.task_always_eager
+    celery_app.conf.task_always_eager = False
+    monkeypatch.setattr(persistent_run_task, "delay", lambda *args: _QueuedResult())
+    try:
+        r = client.post(
+            "/runs/async",
+            json={"engine": "fabric", "subject": "ทดสอบ queued row", "agents": 20},
+        )
+    finally:
+        celery_app.conf.task_always_eager = old_eager
+    assert r.status_code == 200
+    body = r.json()
+    assert body["job_id"] == "queued-job-1"
+    assert body["run_id"]
+
+    store = RunStore(DSN)
+    store.setup()
+    detail = store.get(body["run_id"])
+    assert detail["status"] == "queued"
+    assert detail["job_id"] == "queued-job-1"
+    assert detail["progress"] == 0
+    client.delete(f"/runs/{body['run_id']}")
+
+
+@needs_pg
+def test_cancel_queued_run_updates_status(client, monkeypatch):
+    from core.runstore import RunStore
+    from core.tasks import persistent_run_task
+
+    class _QueuedResult:
+        id = "cancel-job-1"
+        status = "PENDING"
+
+    old_eager = celery_app.conf.task_always_eager
+    celery_app.conf.task_always_eager = False
+    monkeypatch.setattr(persistent_run_task, "delay", lambda *args: _QueuedResult())
+    try:
+        r = client.post(
+            "/runs/async",
+            json={"engine": "fabric", "subject": "ทดสอบ cancel queued", "agents": 20},
+        )
+    finally:
+        celery_app.conf.task_always_eager = old_eager
+    rid = r.json()["run_id"]
+    assert client.post(f"/runs/{rid}/cancel").status_code == 200
+    store = RunStore(DSN)
+    store.setup()
+    assert store.get(rid)["status"] == "canceled"
+    client.delete(f"/runs/{rid}")

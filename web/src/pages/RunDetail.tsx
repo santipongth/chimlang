@@ -1,4 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleSlash,
+  FileSearch,
+  Info,
+  Radio,
+  ShieldAlert,
+  SkipForward,
+  X,
+} from "lucide-react";
 import { SimRunDetail, fetchRunDetail, pct, shareRun, unshareRun } from "../api";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader, Tabs } from "../ui";
@@ -22,10 +33,119 @@ function StanceBar({ v }: { v: number }) {
 }
 
 function StatusIcon({ status }: { status: string }) {
-  if (status === "ready") return <>✅</>;
-  if (status === "blocked") return <>⛔</>;
-  if (status === "skipped") return <>⏭</>;
-  return <>⚠️</>;
+  if (status === "ready") return <CheckCircle2 className="inline h-3.5 w-3.5 text-primary" />;
+  if (status === "blocked") return <ShieldAlert className="inline h-3.5 w-3.5 text-red-600" />;
+  if (status === "skipped") return <SkipForward className="inline h-3.5 w-3.5 text-amber-600" />;
+  if (status === "empty") return <CircleSlash className="inline h-3.5 w-3.5 text-muted-foreground" />;
+  return <AlertTriangle className="inline h-3.5 w-3.5 text-amber-600" />;
+}
+
+function ExecutiveReadout({ data, p, isDebate, t }: { data: SimRunDetail; p: any; isDebate: boolean; t: (k: string) => string }) {
+  const summary = isDebate
+    ? p.synthesis?.summary
+    : p.brief?.lines?.[0]?.text || data.subject;
+  const confidence = isDebate
+    ? `${Math.round((p.synthesis?.confidence ?? 0) * 100)}%`
+    : p.brief?.confidence_label || "range";
+  const range = !isDebate && p.brief?.headline_range
+    ? `${p.brief.headline_range[0]} to ${p.brief.headline_range[1]}`
+    : isDebate
+      ? `${p.metrics?.per_round_avg_stance?.at?.(-1)?.toFixed?.(2) ?? "0.00"} stance`
+      : "n/a";
+  const risks = isDebate ? (p.synthesis?.risks ?? []) : (p.brief?.lines ?? []).filter((x: any) => x.kind === "risk").map((x: any) => x.text);
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <FileSearch className="h-4 w-4" /> Executive Readout
+          </div>
+          <h2 className="text-xl font-semibold leading-snug">{summary}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("rd_prediction_note")}</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+          {[
+            ["Confidence", confidence],
+            ["Headline", range],
+            ["Evidence", `${(p.sources ?? []).length + (p.news?.items ?? []).length} items`],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-xl border border-border bg-background px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{k}</div>
+              <div className="mt-1 font-semibold">{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {risks.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {risks.slice(0, 3).map((r: string, i: number) => (
+            <span key={i} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800">
+              <AlertTriangle className="h-3.5 w-3.5" /> {r}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SocialSignalMap({ newsItems }: { newsItems: any[] }) {
+  const channels = [
+    ["line_closed_group", "LINE closed group"],
+    ["public_feed", "Public feed"],
+    ["algo_feed", "Algorithmic feed"],
+    ["offline_wom", "Offline word-of-mouth"],
+  ];
+  const ready = newsItems.filter((x) => x.status === "ready");
+  return (
+    <div className="rounded-2xl border border-border bg-background p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Radio className="h-4 w-4 text-primary" /> Thai Social Signal Map
+      </div>
+      <div className="grid gap-2 md:grid-cols-4">
+        {channels.map(([id, label]) => {
+          const count = ready.filter((x) => (x.channel_tags?.[id] ?? 0) > 0.12 || x.provider).length;
+          return (
+            <div key={id} className="rounded-xl border border-border bg-card p-3">
+              <div className="text-xs font-medium">{label}</div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full bg-primary" style={{ width: `${Math.min(100, count * 22)}%` }} />
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{count} signals</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceDrawer({ item, onClose }: { item: any | null; onClose: () => void }) {
+  if (!item) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-[2px]" onClick={onClose}>
+      <aside className="h-full w-full max-w-lg overflow-auto border-l border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Info className="h-4 w-4 text-primary" /> Evidence
+          </div>
+          <button onClick={onClose} className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <h3 className="mt-4 text-lg font-semibold">{item.title || item.label || item.url || "Evidence item"}</h3>
+        <div className="mt-3 grid grid-cols-[110px_1fr] gap-y-2 text-sm">
+          <span className="text-muted-foreground">status</span><span><StatusIcon status={item.status} /> {item.status}</span>
+          <span className="text-muted-foreground">type</span><span>{item.provider || item.kind || "source"}</span>
+          {item.url && <><span className="text-muted-foreground">url</span><a href={item.url} target="_blank" rel="noreferrer" className="truncate text-primary-strong hover:underline">{item.url}</a></>}
+          {item.chunks != null && <><span className="text-muted-foreground">chunks</span><span>{item.chunks}</span></>}
+          {item.fetched_at && <><span className="text-muted-foreground">fetched</span><span>{String(item.fetched_at).slice(0, 16).replace("T", " ")}</span></>}
+        </div>
+        {item.error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{item.error}</div>}
+        {item.content && <p className="mt-4 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>}
+      </aside>
+    </div>
+  );
 }
 
 // แผนภาพสวอร์มของ debate — จุดยืน agent รอบสุดท้าย (x = จุดยืน −1..1, สี = ทิศ)
@@ -65,6 +185,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState("");
   const [copied, setCopied] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
 
   useEffect(() => {
     fetchRunDetail(runId)
@@ -120,6 +241,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
 
       {data && data.status === "complete" && (
         <>
+          <ExecutiveReadout data={data} p={p} isDebate={isDebate} t={t} />
           <Tabs<Tab>
             tabs={[
               { id: "overview" as Tab, label: t("rd_tab_overview") },
@@ -277,9 +399,10 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
 
           {/* แผนภาพสวอร์ม — จุดยืน/ความเชื่อรายกลุ่ม (P6-M6) */}
           {tab === "canvas" && (
-            <section className={card}>
+            <section className={card + " space-y-4"}>
               <h2 className="font-semibold mb-1">🫧 {t("rd_tab_canvas")}</h2>
               <p className="text-xs text-muted-foreground mb-4">{t("rd_canvas_note")}</p>
+              {isDebate && newsItems.length > 0 && <SocialSignalMap newsItems={newsItems} />}
               {isDebate ? (
                 // debate: scatter จุดยืนต่อ agent รอบสุดท้าย (x=จุดยืน, y=กระจายกัน)
                 <DebateScatter posts={data.posts} rounds={data.rounds} t={t} />
@@ -318,6 +441,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   <ul className="space-y-1.5 text-sm">
                     {(p.news.items ?? []).map((n: any, i: number) => (
                       <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
+                        <div role="button" tabIndex={0} onClick={() => setSelectedEvidence(n)} onKeyDown={(e) => e.key === "Enter" && setSelectedEvidence(n)} className="w-full text-left">
                         <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate font-medium">
                             <StatusIcon status={n.status} /> {n.title || n.url}
@@ -330,6 +454,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                           <a href={n.url} target="_blank" rel="noreferrer" className="text-xs text-primary-strong hover:underline">{n.url}</a>
                         )}
                         {n.error && <div className="mt-1 text-xs text-red-700">{n.error}</div>}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -349,11 +474,13 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                     <ul className="space-y-1.5 text-sm">
                       {p.sources.map((s: any, i: number) => (
                         <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
+                          <div role="button" tabIndex={0} onClick={() => setSelectedEvidence(s)} onKeyDown={(e) => e.key === "Enter" && setSelectedEvidence(s)} className="w-full text-left">
                           <div className="flex items-center justify-between">
                             <span className="font-medium"><StatusIcon status={s.status} /> {s.label}</span>
                             <span className="text-xs text-muted-foreground">{s.chunks} {t("rd_evidence_chunks")}</span>
                           </div>
                           {s.error && <div className="mt-1 text-xs text-red-700">{s.error}</div>}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -429,6 +556,8 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
           )}
         </>
       )}
+
+      <EvidenceDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
 
       {/* Share dialog (แบบ studio): toggle เปิด/ปิด + copy link — governance ADR-0004 อยู่ฝั่ง API */}
       {shareOpen && data && (
