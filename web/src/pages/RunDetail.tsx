@@ -51,6 +51,50 @@ function StatusIcon({ status }: { status: string }) {
   return <AlertTriangle className="inline h-3.5 w-3.5 text-amber-600" />;
 }
 
+function StanceTrend({ values, t }: { values: number[]; t: (k: string) => string }) {
+  if (!values.length) {
+    return <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">{t("rd_stance_no_data")}</div>;
+  }
+  const columns = { gridTemplateColumns: `repeat(${values.length}, minmax(36px, 1fr))` };
+  return (
+    <div className="overflow-x-auto pb-1">
+      <div className="min-w-[240px]">
+        <div className="relative h-28 pl-8">
+          <span className="absolute left-0 top-0 text-[10px] tabular-nums text-muted-foreground">+1</span>
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground">0</span>
+          <span className="absolute bottom-0 left-0 text-[10px] tabular-nums text-muted-foreground">-1</span>
+          <div className="absolute inset-y-0 left-8 right-0 border-y border-border/60">
+            <div className="absolute inset-x-0 top-1/2 border-t border-border" />
+            <div className="absolute inset-0 grid gap-2 px-2" style={columns}>
+              {values.map((raw, i) => {
+                const stance = Math.max(-1, Math.min(1, Number(raw) || 0));
+                const positive = stance >= 0;
+                return (
+                  <div key={i} className="relative h-full">
+                    <div
+                      className={`absolute left-1/2 w-3/5 -translate-x-1/2 ${positive ? "bottom-1/2 rounded-t bg-primary/75" : "top-1/2 rounded-b bg-red-400/80"}`}
+                      style={{ height: `${Math.max(2, Math.abs(stance) * 50)}%` }}
+                      title={`${t("rd_round_word")} ${i + 1}: ${stance.toFixed(2)}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="ml-8 grid gap-2 px-2 pt-1" style={columns}>
+          {values.map((stance, i) => (
+            <div key={i} className="text-center text-[10px] tabular-nums text-muted-foreground">
+              <div>r{i + 1}</div>
+              <div className="font-medium text-foreground">{Number(stance).toFixed(2)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RedactionSummary({ counts, t }: { counts?: Record<string, number>; t: (k: string) => string }) {
   const entries = Object.entries(counts ?? {}).filter(([, count]) => count > 0);
   if (!entries.length) return null;
@@ -227,52 +271,57 @@ function DebateScatter({ posts, rounds, t }: { posts: any[]; rounds: number; t: 
   );
 }
 
-function DebateProtocolPanel({ protocol }: { protocol: any }) {
+function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) => string }) {
   if (!protocol) return null;
   const rounds = protocol.per_round_disagreement ?? [];
   const nodes = protocol.contention_graph?.nodes ?? [];
   const edges = protocol.contention_graph?.edges ?? [];
   const failures = Object.entries(protocol.failure_taxonomy ?? {});
   return (
-    <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
-      <div className="rounded-2xl border border-border bg-background p-4">
-        <div className="text-sm font-semibold">Disagreement by round</div>
-        <div className="mt-3 space-y-2">
-          {rounds.map((r: any) => (
-            <div key={r.round} className="grid grid-cols-[42px_1fr_52px] items-center gap-2 text-xs">
-              <span className="text-muted-foreground">r{r.round + 1}</span>
-              <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
-                <span className="bg-red-400" style={{ width: `${Math.min(100, r.oppose * 12)}%` }} />
-                <span className="bg-muted-foreground/40" style={{ width: `${Math.min(100, r.neutral * 12)}%` }} />
-                <span className="bg-primary" style={{ width: `${Math.min(100, r.support * 12)}%` }} />
+    <div>
+      <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+        <div className="rounded-2xl border border-border bg-background p-4">
+          <div className="text-sm font-semibold">{t("rd_disagreement_round")}</div>
+          <div className="mt-3 space-y-2">
+            {rounds.map((r: any) => (
+              <div key={r.round} className="grid grid-cols-[42px_1fr_52px] items-center gap-2 text-xs">
+                <span className="text-muted-foreground">r{r.round + 1}</span>
+                <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
+                  <span className="bg-red-400" style={{ width: `${Math.min(100, r.oppose * 12)}%` }} />
+                  <span className="bg-muted-foreground/40" style={{ width: `${Math.min(100, r.neutral * 12)}%` }} />
+                  <span className="bg-primary" style={{ width: `${Math.min(100, r.support * 12)}%` }} />
+                </div>
+                <span className="text-right tabular-nums">{Number(r.dispersion ?? 0).toFixed(2)}</span>
               </div>
-              <span className="text-right tabular-nums">{Number(r.dispersion ?? 0).toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="rounded-2xl border border-border bg-background p-4">
-        <div className="text-sm font-semibold">Contention graph</div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {nodes.map((n: any) => (
-            <span key={n.segment} className="rounded-full border border-border px-2 py-1 text-[11px]">
-              {n.segment}: {Number(n.avg_stance ?? 0).toFixed(2)}
-            </span>
-          ))}
-        </div>
-        {edges.length > 0 && (
-          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-            {edges.slice(0, 5).map((e: any, i: number) => (
-              <div key={i}>{e.from} - {e.to}: tension {Number(e.tension ?? 0).toFixed(2)}</div>
             ))}
           </div>
-        )}
-        {failures.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1 text-[11px] text-red-700">
-            {failures.map(([k, v]) => <span key={k} className="rounded-full bg-red-50 px-2 py-0.5">{k}: {String(v)}</span>)}
+        </div>
+        <div className="rounded-2xl border border-border bg-background p-4">
+          <div className="text-sm font-semibold">{t("rd_contention_graph")}</div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {nodes.map((n: any) => (
+              <span key={n.segment} className="rounded-full border border-border px-2 py-1 text-[11px]">
+                {n.segment}: {Number(n.avg_stance ?? 0).toFixed(2)}
+              </span>
+            ))}
           </div>
-        )}
+          {edges.length > 0 && (
+            <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+              {edges.slice(0, 5).map((e: any, i: number) => (
+                <div key={i}>{e.from} - {e.to}: {t("rd_tension")} {Number(e.tension ?? 0).toFixed(2)}</div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+      {failures.length > 0 && (
+        <div className="mt-3 border-l-2 border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <span className="font-medium">{t("rd_agent_response_failures")}:</span>{" "}
+          {failures.map(([k, v], i) => (
+            <span key={k}>{i > 0 ? ", " : ""}{t(`failure_${k}`) === `failure_${k}` ? k : t(`failure_${k}`)} {String(v)}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -455,25 +504,18 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <h2 className="font-semibold mb-2">
                   {t("rd_stance_trend")} <InfoTip text={t("tip_stance_series")} />
                 </h2>
-                <div className="flex items-end gap-2 h-24">
-                  {(p.metrics?.per_round_avg_stance ?? []).map((s: number, i: number) => (
-                    <div key={i} className="flex-1 text-center">
-                      <div className="mx-auto w-3/4 rounded-t bg-primary/70" style={{ height: `${((s + 1) / 2) * 90 + 5}%` }} title={`${t("rd_round_word")} ${i}: ${s.toFixed(2)}`} />
-                      <div className="mt-1 text-[10px] text-muted-foreground">r{i}</div>
-                    </div>
-                  ))}
-                </div>
+                <StanceTrend values={p.metrics?.per_round_avg_stance ?? []} t={t} />
                 {(p.metrics?.tipping_points ?? []).length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {p.metrics.tipping_points.map((tp: any, i: number) => (
                       <span key={i} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700">
-                        ⚡ r{tp.round}: {(tp.delta * 100).toFixed(0)}%
+                        ⚡ r{tp.round + 1}: {(tp.delta * 100).toFixed(0)}%
                       </span>
                     ))}
                   </div>
                 )}
               </section>
-              <DebateProtocolPanel protocol={p.protocol} />
+              <DebateProtocolPanel protocol={p.protocol} t={t} />
             </>
           )}
 

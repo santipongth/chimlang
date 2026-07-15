@@ -270,6 +270,12 @@ const DICT: Record<string, { th: string; en: string }> = {
   rd_drivers: { th: "ปัจจัยขับเคลื่อน", en: "KEY DRIVERS" },
   rd_risks: { th: "ความเสี่ยง", en: "RISKS" },
   rd_stance_trend: { th: "จุดยืนเฉลี่ยรายรอบ", en: "Average stance per round" },
+  rd_stance_no_data: { th: "ไม่มีข้อมูลจุดยืนที่ใช้ได้", en: "No usable stance data" },
+  rd_disagreement_round: { th: "ความเห็นต่างรายรอบ", en: "Disagreement by round" },
+  rd_contention_graph: { th: "กราฟความขัดแย้งระหว่างกลุ่ม", en: "Contention graph" },
+  rd_tension: { th: "ความตึงเครียด", en: "tension" },
+  rd_agent_response_failures: { th: "คำตอบ agent ที่ใช้ไม่ได้", en: "Unusable agent responses" },
+  failure_json_parse_error: { th: "รูปแบบ JSON ไม่ถูกต้อง", en: "invalid JSON" },
   tip_stance_series: {
     th: "แท่ง = จุดยืนเฉลี่ยของ agent ที่ตอบสำเร็จในแต่ละรอบ (−1 คัดค้าน … +1 เห็นด้วย)\n⚡ = tipping point: จุดยืนเฉลี่ยกระโดด ≥ 0.30 ใน 1 รอบ",
     en: "Bars = average stance of successful agents per round (−1 oppose … +1 support)\n⚡ = tipping point: average stance jumps ≥ 0.30 in one round",

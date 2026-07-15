@@ -122,3 +122,13 @@
 - [x] Schema/UI: เพิ่ม `pii_redactions`, status `redacted`, Evidence UI แสดงชนิด+จำนวนที่ลบ
 - [x] Legacy scrub: migration purge unsafe cache และลบ raw PII จาก error metadata เก่า
 - [x] Final verification: 357 tests, ruff check/format, web build และ live worker reload ผ่าน
+
+## Post-phase hardening addendum #7 (15 ก.ค. 2026) ✅
+
+- [x] Debug run ล่าสุด: payload มี stance ครบ 3 รอบและ posts ใช้ได้ 119/120; ข้อมูลไม่ได้หาย
+- [x] แก้ stance chart ที่ percentage-height ยุบเป็นศูนย์ ให้ใช้พื้นที่คงที่รอบแกน -1..+1
+- [x] UI แสดงเลขรอบ 1-based และค่าจุดยืนจริงใต้แท่ง; empty state ชัดเจนเมื่อไม่มีข้อมูลจริง
+- [x] แยก failure taxonomy ออกจาก Contention graph; `json_parse_error` แสดงเป็นคุณภาพคำตอบ agent
+- [x] Parser รับ valid JSON object ที่ถูกห่อด้วย prose/Markdown; JSON ที่เสียจริงยัง fail-closed
+- [x] ไม่แก้ประวัติ run เพื่อซ่อน failure: historical `json_parse_error:1` คงไว้ตาม provenance
+- [x] Verification: `uv run pytest -q` ผ่าน 360 tests, ruff check/format, web build และ worker reload ผ่าน

@@ -14,6 +14,7 @@ from simulation.debate import (
     DebateUnavailableError,
     _compute_metrics,
     _failure_reason,
+    _parse_post,
     run_debate,
 )
 from simulation.engines import ENGINES, get_engine
@@ -136,6 +137,23 @@ def test_debate_failed_posts_flagged_and_excluded():
     assert all(p.content == "" for p in r.posts if p.failed)
     assert r.protocol["failure_taxonomy"]["json_parse_error"] == 2
     assert r.synthesis["confidence"] == pytest.approx(0.8 * (1 - 2 / 6), abs=0.01)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        'คำตอบตามรูปแบบ:\n{"content":"ทดสอบ","stance":-0.25,"sentiment":0.1}',
+        '```json\n{"content":"ทดสอบ","stance":-0.25,"sentiment":0.1}\n```',
+    ],
+)
+def test_debate_parser_accepts_valid_json_wrapped_by_provider(response):
+    content, stance, sentiment, want = _parse_post(response)
+    assert (content, stance, sentiment, want) == ("ทดสอบ", -0.25, 0.1, "")
+
+
+def test_debate_parser_still_rejects_malformed_json():
+    with pytest.raises(json.JSONDecodeError):
+        _parse_post('{"content":"ทดสอบ","stance":0.2,}')
 
 
 def test_debate_fails_closed_when_every_agent_call_fails():

@@ -125,9 +125,7 @@ def _persona_system(p: Persona) -> str:
 
 
 def _parse_post(text: str) -> tuple[str, float, float, str]:
-    clean = sanitize_llm_text(text)
-    clean = re.sub(r"^```(?:json)?|```$", "", clean.strip(), flags=re.MULTILINE).strip()
-    data = json.loads(clean)
+    data = _load_json_object(text)
     content = str(data["content"]).strip()[:MAX_POST_CHARS]
     if not content:
         raise ValueError("content ว่าง")
@@ -135,6 +133,32 @@ def _parse_post(text: str) -> tuple[str, float, float, str]:
     sentiment = max(-1.0, min(1.0, float(data.get("sentiment", 0))))
     want = str(data.get("want_to_know", "")).strip()[:120]
     return content, stance, sentiment, want
+
+
+def _load_json_object(text: str) -> dict:
+    """Parse one JSON object while tolerating prose or Markdown around it.
+
+    Providers occasionally wrap an otherwise valid response despite a JSON-only prompt.
+    We only accept an object decoded by the standard parser; malformed JSON still fails closed.
+    """
+    clean = sanitize_llm_text(text).strip()
+    try:
+        value = json.loads(clean)
+    except json.JSONDecodeError as original_error:
+        decoder = json.JSONDecoder()
+        for start, char in enumerate(clean):
+            if char != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(clean[start:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                return value
+        raise original_error
+    if not isinstance(value, dict):
+        raise TypeError("LLM response must be a JSON object")
+    return value
 
 
 def _failure_reason(exc: Exception) -> str:
@@ -434,10 +458,7 @@ def run_debate(
             temperature=0,
             seed=seed,
         )
-        clean = re.sub(
-            r"^```(?:json)?|```$", "", sanitize_llm_text(result.text).strip(), flags=re.MULTILINE
-        )
-        synthesis = json.loads(clean.strip())
+        synthesis = _load_json_object(result.text)
         synthesis["confidence"] = max(0.0, min(1.0, float(synthesis.get("confidence", 0.5))))
         synthesis["fallback"] = False
     except Exception:
