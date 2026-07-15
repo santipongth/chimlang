@@ -31,6 +31,7 @@ class LLMResult:
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    structured_mode: str = "none"
 
 
 class LLMAdapter:
@@ -53,6 +54,7 @@ class LLMAdapter:
             )
         self._pricing = pricing
         self._guard = guard
+        self._base_url = settings.llm_base_url or ""
         self._client = client or OpenAI(
             base_url=settings.llm_base_url or None,
             api_key=settings.llm_api_key,
@@ -61,6 +63,11 @@ class LLMAdapter:
 
     def model_for(self, tier: ModelTier) -> str:
         return self._models[tier]
+
+    def supports_structured_outputs(self) -> bool:
+        """Capability gate before adding JSON Schema parameters to a provider request."""
+        base = self._base_url.lower()
+        return "openrouter" in base or "api.openai.com" in base
 
     def chat(
         self,
@@ -71,6 +78,9 @@ class LLMAdapter:
         temperature: float | None = None,
         seed: int | None = None,
         reasoning: bool | None = None,
+        response_schema: dict | None = None,
+        schema_name: str = "chimlang_response",
+        allow_parser_fallback: bool = True,
     ) -> LLMResult:
         """reasoning=False ปิด hidden thinking ของ model (ผ่าน unified param ของ OpenRouter)
 
@@ -85,10 +95,44 @@ class LLMAdapter:
             kwargs["temperature"] = temperature
         if seed is not None:
             kwargs["seed"] = seed  # reproducibility (NFR-07) — provider ที่รองรับจะ pin ได้
+        extra_body: dict = {}
         if reasoning is not None:
-            kwargs["extra_body"] = {"reasoning": {"enabled": reasoning}}
+            extra_body["reasoning"] = {"enabled": reasoning}
+        structured_mode = "none"
+        if response_schema is not None:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name[:64],
+                    "strict": True,
+                    "schema": response_schema,
+                },
+            }
+            structured_mode = "json_schema"
+            # OpenRouter routes only to providers that support the requested parameter.
+            if "openrouter" in self._base_url.lower():
+                extra_body["provider"] = {"require_parameters": True}
+        if extra_body:
+            kwargs["extra_body"] = extra_body
 
-        response = self._client.chat.completions.create(**kwargs)
+        try:
+            response = self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            if not (
+                response_schema is not None
+                and allow_parser_fallback
+                and self._structured_output_unsupported(exc)
+            ):
+                raise
+            kwargs.pop("response_format", None)
+            if extra_body.get("provider"):
+                extra_body.pop("provider")
+            if extra_body:
+                kwargs["extra_body"] = extra_body
+            else:
+                kwargs.pop("extra_body", None)
+            response = self._client.chat.completions.create(**kwargs)
+            structured_mode = "parser_fallback_unsupported"
 
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
@@ -102,4 +146,22 @@ class LLMAdapter:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_usd=cost_usd,
+            structured_mode=structured_mode,
+        )
+
+    @staticmethod
+    def _structured_output_unsupported(exc: Exception) -> bool:
+        """Fallback only for an unsupported capability, never for an invalid schema."""
+        text = str(exc).lower()
+        if "schema" in text and "invalid" in text:
+            return False
+        return any(
+            marker in text
+            for marker in (
+                "response_format",
+                "structured output",
+                "unsupported parameter",
+                "does not support",
+                "no endpoints found that support",
+            )
         )

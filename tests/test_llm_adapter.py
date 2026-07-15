@@ -55,6 +55,50 @@ def test_reasoning_flag_forwarded_only_when_set(settings, pricing, fake_client, 
     assert fake_completions.calls[1]["extra_body"] == {"reasoning": {"enabled": False}}
 
 
+def test_json_schema_is_forwarded_and_provenance_is_flagged(
+    settings, pricing, fake_client, fake_completions
+):
+    adapter = make_adapter(settings, pricing, fake_client)
+    schema = {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": False,
+    }
+    result = adapter.chat(
+        ModelTier.CROWD,
+        [{"role": "user", "content": "ตอบ JSON"}],
+        response_schema=schema,
+        schema_name="answer",
+    )
+    response_format = fake_completions.calls[0]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    assert result.structured_mode == "json_schema"
+
+
+def test_structured_output_unsupported_uses_flagged_parser_fallback(settings, pricing):
+    from tests.conftest import FakeClient, FakeCompletions
+
+    class UnsupportedOnce(FakeCompletions):
+        def create(self, **kwargs):
+            if len(self.calls) == 0:
+                self.calls.append(kwargs)
+                raise RuntimeError("response_format is an unsupported parameter")
+            return super().create(**kwargs)
+
+    completions = UnsupportedOnce(content='{"answer":"ได้"}')
+    adapter = make_adapter(settings, pricing, FakeClient(completions))
+    result = adapter.chat(
+        ModelTier.CROWD,
+        [{"role": "user", "content": "ตอบ JSON"}],
+        response_schema={"type": "object"},
+    )
+    assert len(completions.calls) == 2
+    assert "response_format" not in completions.calls[1]
+    assert result.structured_mode == "parser_fallback_unsupported"
+
+
 def test_budget_abort_mid_run(settings, pricing, fake_client):
     # cap เล็กมาก: call แรกผ่าน call ที่สองต้อง abort ก่อนสะสมความเสียหาย
     adapter = make_adapter(settings, pricing, fake_client, cap_usd=0.0003)

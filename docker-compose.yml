@@ -1,6 +1,16 @@
 # dev stack ทั้งชุด (TECH-DECISIONS D9) — `make dev` / `docker compose up -d`
 # รหัสผ่านด้านล่างใช้เฉพาะ dev local เท่านั้น (production แยก config + secrets จริง)
 services:
+  migrate:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "-m", "scripts.db_migrations"]
+    environment:
+      POSTGRES_URL: postgresql://chimlang:chimlang@postgres:5432/chimlang
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: chimlang-postgres

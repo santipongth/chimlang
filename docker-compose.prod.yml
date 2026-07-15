@@ -7,6 +7,17 @@
 #
 # หมายเหตุ: ใช้คนละ volume กับ dev (pgdata_prod ฯลฯ) — ไม่ทับข้อมูล dev
 services:
+  migrate:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "-m", "scripts.db_migrations"]
+    env_file: .env.prod
+    environment:
+      POSTGRES_URL: postgresql://chimlang:${POSTGRES_PASSWORD:-chimlang}@postgres:5432/chimlang
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build: .
     container_name: chimlang-api
@@ -18,8 +29,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -32,13 +43,15 @@ services:
   worker:
     build: .
     container_name: chimlang-worker
-    command: ["uv", "run", "--no-sync", "celery", "-A", "core.tasks.celery_app", "worker", "-l", "info"]
+    command: ["uv", "run", "--no-sync", "celery", "-A", "core.tasks.celery_app", "worker", "-l", "info", "-Q", "fabric,debate,maintenance"]
     env_file: .env.prod
     environment:
       POSTGRES_URL: postgresql://chimlang:${POSTGRES_PASSWORD:-chimlang}@postgres:5432/chimlang
       NEO4J_URI: bolt://neo4j:7687
       REDIS_URL: redis://redis:6379/0
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     restart: unless-stopped

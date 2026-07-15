@@ -14,9 +14,8 @@ Governance:
 import json
 from dataclasses import dataclass
 
-import psycopg
-
 from core.config import get_settings
+from core.db import connection, require_schema
 from governance.pii import PIIDetector, load_allowlist
 
 VALID_CHANNELS = ("line_closed_group", "public_feed", "algo_feed", "offline_wom")
@@ -109,11 +108,10 @@ class PackStore:
         self._dsn = dsn
 
     def _conn(self):
-        return psycopg.connect(self._dsn)
+        return connection(self._dsn)
 
     def setup(self) -> None:
-        with self._conn() as conn:
-            conn.execute(_SCHEMA)
+        require_schema(self._dsn)
 
     def create(self, *, label: str, segments: list[dict], prompt: str, created_by: str) -> int:
         validate_pack(label, segments)  # ด่านเดียวกันทุกทางเข้า (manual + AI)

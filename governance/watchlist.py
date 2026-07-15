@@ -14,9 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-import psycopg
-
 from core.config import get_settings
+from core.db import connection, require_schema
 from governance.webhook import fire_webhook
 
 _SCHEMA = """
@@ -61,11 +60,10 @@ class WatchlistStore:
         self._dsn = dsn
 
     def _conn(self):
-        return psycopg.connect(self._dsn)
+        return connection(self._dsn)
 
     def setup(self) -> None:
-        with self._conn() as conn:
-            conn.execute(_SCHEMA)
+        require_schema(self._dsn)
 
     # --- watchlists ---
 

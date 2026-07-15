@@ -6,10 +6,12 @@ append-only บังคับที่ระดับ PostgreSQL trigger: UPDAT
 ทุก simulation run ต้องเขียน prediction record ≥ 1 รายการ — enforce ผ่าน finalize_run()
 """
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from datetime import date, datetime
+from urllib.parse import urlparse
 
-import psycopg
+from core.db import connection, require_schema
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -70,8 +72,7 @@ CREATE TRIGGER prediction_registry_append_only
 class RunWithoutPredictionError(RuntimeError):
     def __init__(self, run_id: str):
         super().__init__(
-            f"run {run_id} ไม่มี prediction record — ทุก simulation run ต้องเขียน ≥ 1 "
-            "(TRUST-01 / กฎเหล็กข้อ 3)"
+            f"run {run_id} ไม่มี SimulationFinding หรือ Prediction — ผลรันไม่ผ่าน trust contract"
         )
 
 
@@ -84,6 +85,18 @@ class Prediction:
     due_date: date
     model_version: str
     domain: str = "ทั่วไป"  # นโยบาย | ธุรกิจ/การตลาด | กระแสสังคม | ทั่วไป (TRUST-02 รายโดเมน)
+    source_kind: str = "legacy"
+    forecast_type: str = "binary"
+    provenance: dict = field(default_factory=dict)
+    created_by: str = ""
+
+
+@dataclass(frozen=True)
+class SimulationFinding:
+    summary: str
+    metrics: dict
+    provenance: dict
+    model_version: str
 
 
 @dataclass(frozen=True)
@@ -113,11 +126,10 @@ class GovernanceStore:
         self._dsn = dsn
 
     def _conn(self):
-        return psycopg.connect(self._dsn)
+        return connection(self._dsn)
 
     def setup(self) -> None:
-        with self._conn() as conn:
-            conn.execute(_SCHEMA)
+        require_schema(self._dsn)
 
     def append_audit(
         self, *, actor: str, action: str, run_id: str, config_hash: str, detail: str = ""
@@ -130,11 +142,17 @@ class GovernanceStore:
             )
 
     def register_prediction(self, run_id: str, p: Prediction) -> None:
+        if p.forecast_type != "binary":
+            raise ValueError("ระยะแรกรองรับ forecast_type=binary เท่านั้น")
+        if p.source_kind == "legacy":
+            # Compatibility for old call sites. New API predictions set an explicit source.
+            pass
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO prediction_registry "
                 "(run_id, claim, direction, confidence, measurement, due_date, "
-                " model_version, domain) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                "model_version, domain, source_kind, forecast_type, provenance, created_by) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     run_id,
                     p.claim,
@@ -144,18 +162,46 @@ class GovernanceStore:
                     p.due_date,
                     p.model_version,
                     p.domain,
+                    p.source_kind,
+                    p.forecast_type,
+                    json.dumps(p.provenance, ensure_ascii=False),
+                    p.created_by,
                 ),
             )
 
+    def register_finding(self, run_id: str, finding: SimulationFinding) -> int:
+        with self._conn() as conn:
+            row = conn.execute(
+                "INSERT INTO simulation_findings "
+                "(run_id, summary, metrics, provenance, model_version) "
+                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (
+                    run_id,
+                    finding.summary,
+                    json.dumps(finding.metrics, ensure_ascii=False),
+                    json.dumps(finding.provenance, ensure_ascii=False),
+                    finding.model_version,
+                ),
+            ).fetchone()
+        return int(row[0])
+
     # --- Calibration Engine (TRUST-02) ---
 
-    def due_unresolved(self, as_of: date, *, include_test: bool = True) -> list[DuePrediction]:
+    def due_unresolved(
+        self,
+        as_of: date,
+        *,
+        include_test: bool = True,
+        include_legacy: bool = False,
+    ) -> list[DuePrediction]:
         """prediction ที่ครบกำหนดแล้วแต่ยังไม่ resolve — คิวงานของ Calibration Engine
 
         include_test=False: กรอง domain 'ทดสอบ%' ออก (ขยะจาก test suite ใน dev DB —
         registry เป็น append-only ลบไม่ได้ จึงกรองที่ชั้นอ่านแทน; UI ใช้โหมดนี้)
         """
         cond = "" if include_test else " AND p.domain NOT LIKE 'ทดสอบ%%'"
+        if not include_legacy:
+            cond += " AND p.source_kind <> 'legacy'"
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT p.id, p.run_id, p.claim, p.confidence, p.domain, p.due_date "
@@ -177,30 +223,50 @@ class GovernanceStore:
         ]
 
     def resolve_prediction(
-        self, prediction_id: int, *, outcome: bool | float, resolver: str, note: str = ""
+        self,
+        prediction_id: int,
+        *,
+        outcome: bool,
+        resolver: str,
+        observed_at: datetime,
+        evidence_url: str,
+        evidence_name: str,
+        note: str = "",
     ) -> float:
-        """บันทึกผลจริง + คำนวณ Brier score = (confidence − outcome_value)² — append-only
-
-        outcome: bool (เดิม) หรือ float ∈ {0, 0.5, 1} — 0.5 = เกิดขึ้นบางส่วน (P5-M3)
-        resolve ซ้ำ prediction เดิม = ผิดกติกา (UNIQUE ที่ DB) — แก้ผลไม่ได้เช่นเดียวกับ registry
-        """
-        value = 1.0 if outcome is True else 0.0 if outcome is False else float(outcome)
-        if value not in (0.0, 0.5, 1.0):
-            raise ValueError("outcome ต้องเป็น true/false หรือ 0/0.5/1 (partial = 0.5)")
-        # คอลัมน์ bool เดิมคงไว้เพื่อแถวเก่า/เครื่องมือเก่า — partial ไม่มีค่า bool ที่ซื่อสัตย์ จึงเป็น NULL
-        flag = True if value == 1.0 else False if value == 0.0 else None
+        """Append a binary observation with evidence; legacy partial rows stay readable."""
+        if not isinstance(outcome, bool):
+            raise ValueError("prediction ใหม่ resolve ได้เฉพาะ outcome แบบ binary true/false")
+        parsed = urlparse(evidence_url.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("evidence_url ต้องเป็น URL แบบ http(s)")
+        if not evidence_name.strip():
+            raise ValueError("ต้องระบุชื่อหลักฐาน")
+        value = 1.0 if outcome else 0.0
         with self._conn() as conn:
             conf = conn.execute(
-                "SELECT confidence FROM prediction_registry WHERE id = %s", (prediction_id,)
+                "SELECT confidence, source_kind FROM prediction_registry WHERE id = %s",
+                (prediction_id,),
             ).fetchone()
             if conf is None:
                 raise ValueError(f"ไม่พบ prediction id {prediction_id}")
+            if conf[1] == "legacy":
+                raise ValueError("legacy prediction อ่านได้แต่สร้าง resolution ใหม่ไม่ได้")
             brier = (conf[0] - value) ** 2
             conn.execute(
                 "INSERT INTO prediction_resolution "
-                "(prediction_id, outcome, outcome_value, brier, resolver, note) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                (prediction_id, flag, value, brier, resolver, note),
+                "(prediction_id, outcome, outcome_value, brier, resolver, observed_at, "
+                "evidence_url, evidence_name, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    prediction_id,
+                    outcome,
+                    value,
+                    brier,
+                    resolver,
+                    observed_at,
+                    evidence_url.strip(),
+                    evidence_name.strip()[:200],
+                    note,
+                ),
             )
         return brier
 
@@ -211,13 +277,20 @@ class GovernanceStore:
                 "SELECT p.domain, count(*), avg(r.brier) "
                 "FROM prediction_resolution r "
                 "JOIN prediction_registry p ON p.id = r.prediction_id "
+                "WHERE p.source_kind <> 'legacy' "
                 "GROUP BY p.domain ORDER BY p.domain"
             ).fetchall()
         return [
             DomainCalibration(domain=r[0], resolved=int(r[1]), mean_brier=float(r[2])) for r in rows
         ]
 
-    def calibration_detail(self, as_of: date, *, include_test: bool = True) -> dict:
+    def calibration_detail(
+        self,
+        as_of: date,
+        *,
+        include_test: bool = True,
+        include_legacy: bool = False,
+    ) -> dict:
         """ข้อมูลครบสำหรับหน้า Calibration (P5-M3) — อ่านอย่างเดียว
 
         คืน: overall Brier, per-domain (นับ ✓/~/✗), weekly trend, รายการ resolved,
@@ -225,11 +298,14 @@ class GovernanceStore:
         include_test=False: กรอง domain 'ทดสอบ%' ออกทุกส่วน (UI ใช้โหมดนี้ — ดู due_unresolved)
         """
         cond = "" if include_test else " AND p.domain NOT LIKE 'ทดสอบ%%'"
+        if not include_legacy:
+            cond += " AND p.source_kind <> 'legacy'"
         with self._conn() as conn:
             resolved_rows = conn.execute(
                 "SELECT p.id, p.run_id, p.claim, p.domain, p.confidence, "
                 "COALESCE(r.outcome_value, CASE WHEN r.outcome THEN 1.0 ELSE 0.0 END) AS value, "
-                "r.brier, r.ts, r.note "
+                "r.brier, r.ts, r.note, p.source_kind, r.observed_at, r.evidence_url, "
+                "r.evidence_name "
                 "FROM prediction_resolution r JOIN prediction_registry p ON p.id = r.prediction_id "
                 f"WHERE true{cond} ORDER BY r.ts DESC"
             ).fetchall()
@@ -252,6 +328,10 @@ class GovernanceStore:
                 "brier": float(r[6]),
                 "resolved_at": r[7].isoformat(),
                 "note": r[8],
+                "source_kind": r[9],
+                "observed_at": r[10].isoformat() if r[10] else None,
+                "evidence_url": r[11],
+                "evidence_name": r[12],
             }
             for r in resolved_rows
         ]
@@ -296,6 +376,32 @@ class GovernanceStore:
             for bucket, v in sorted(trend_map.items())
         ]
 
+        reliability = []
+        histogram = []
+        for lower in (0.0, 0.2, 0.4, 0.6, 0.8):
+            upper = lower + 0.2
+            bucket = [
+                i
+                for i in items
+                if (
+                    lower <= i["confidence"] <= upper
+                    if upper == 1.0
+                    else lower <= i["confidence"] < upper
+                )
+            ]
+            n = len(bucket)
+            reliability.append(
+                {
+                    "lower": lower,
+                    "upper": upper,
+                    "n": n,
+                    "mean_confidence": (sum(i["confidence"] for i in bucket) / n if n else None),
+                    "observed_rate": (sum(i["outcome_value"] for i in bucket) / n if n else None),
+                    "standard_error": ((0.25 / n) ** 0.5 if n else None),
+                }
+            )
+            histogram.append({"lower": lower, "upper": upper, "n": n})
+
         due = [
             {
                 "prediction_id": p.prediction_id,
@@ -304,7 +410,9 @@ class GovernanceStore:
                 "confidence": p.confidence,
                 "due_date": p.due_date.isoformat(),
             }
-            for p in self.due_unresolved(as_of, include_test=include_test)
+            for p in self.due_unresolved(
+                as_of, include_test=include_test, include_legacy=include_legacy
+            )
         ]
         upcoming = [
             {
@@ -324,6 +432,11 @@ class GovernanceStore:
             "items": items,
             "due": due,
             "upcoming": upcoming,
+            "baseline_brier": 0.25,
+            "reliability": reliability,
+            "confidence_histogram": histogram,
+            "sample_size": len(items),
+            "include_legacy": include_legacy,
         }
 
     def recent_runs(self, limit: int = 30) -> list[dict]:
@@ -383,7 +496,69 @@ class GovernanceStore:
             ).fetchone()
             return int(row[0])
 
+    def results_for_run(self, run_id: str) -> dict:
+        with self._conn() as conn:
+            predictions = conn.execute(
+                "SELECT p.id, p.ts, p.claim, p.direction, p.confidence, p.measurement, "
+                "p.due_date, p.model_version, p.domain, p.source_kind, p.forecast_type, "
+                "p.provenance, r.outcome_value, r.observed_at, r.evidence_url, r.evidence_name, "
+                "r.note, r.brier FROM prediction_registry p LEFT JOIN prediction_resolution r "
+                "ON r.prediction_id = p.id WHERE p.run_id = %s ORDER BY p.id",
+                (run_id,),
+            ).fetchall()
+            findings = conn.execute(
+                "SELECT id, ts, summary, metrics, provenance, model_version "
+                "FROM simulation_findings WHERE run_id = %s ORDER BY id",
+                (run_id,),
+            ).fetchall()
+        return {
+            "predictions": [
+                {
+                    "prediction_id": r[0],
+                    "created_at": r[1].isoformat(),
+                    "claim": r[2],
+                    "direction": r[3],
+                    "probability": float(r[4]),
+                    "measurement": r[5],
+                    "due_date": r[6].isoformat(),
+                    "model_version": r[7],
+                    "domain": r[8],
+                    "source_kind": r[9],
+                    "forecast_type": r[10],
+                    "provenance": r[11],
+                    "resolution": (
+                        {
+                            "outcome": bool(r[12]),
+                            "observed_at": r[13].isoformat() if r[13] else None,
+                            "evidence_url": r[14],
+                            "evidence_name": r[15],
+                            "note": r[16],
+                            "brier": float(r[17]),
+                        }
+                        if r[12] is not None
+                        else None
+                    ),
+                }
+                for r in predictions
+            ],
+            "findings": [
+                {
+                    "finding_id": r[0],
+                    "created_at": r[1].isoformat(),
+                    "summary": r[2],
+                    "metrics": r[3],
+                    "provenance": r[4],
+                    "model_version": r[5],
+                }
+                for r in findings
+            ],
+        }
+
     def finalize_run(self, run_id: str) -> None:
-        """เรียกตอนจบทุก simulation run — ไม่มี prediction = run นี้ไม่ถูกต้อง (raise)"""
-        if self.predictions_for_run(run_id) < 1:
+        """Every run must yield a finding or a measurable real-world prediction."""
+        with self._conn() as conn:
+            finding_count = conn.execute(
+                "SELECT count(*) FROM simulation_findings WHERE run_id = %s", (run_id,)
+            ).fetchone()[0]
+        if self.predictions_for_run(run_id) < 1 and int(finding_count) < 1:
             raise RunWithoutPredictionError(run_id)

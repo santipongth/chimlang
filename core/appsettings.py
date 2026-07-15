@@ -5,7 +5,7 @@
 
 import json
 
-import psycopg
+from core.db import connection
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -42,8 +42,7 @@ _PROTECTED_KEYS = {"llm_api_key_enc", "tavily_api_key_enc"}
 
 
 def get_app_settings(dsn: str) -> dict:
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
+    with connection(dsn) as conn:
         row = conn.execute("SELECT data FROM app_settings WHERE id = 1").fetchone()
     return {**DEFAULTS, **(row[0] if row else {})}
 
@@ -90,7 +89,7 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
                 raise ValueError(f"ราคาของ {model} ต้องอยู่ใน 0-1000 USD ต่อ 1 ล้าน token")
     current = get_app_settings(dsn)
     merged = {**{k: v for k, v in current.items() if k in _ALLOWED_KEYS}, **patch}
-    with psycopg.connect(dsn) as conn:
+    with connection(dsn) as conn:
         conn.execute(
             "UPDATE app_settings SET data = %s WHERE id = 1",
             (json.dumps(merged, ensure_ascii=False),),
@@ -105,7 +104,7 @@ def _set_encrypted(dsn: str, field: str, plaintext: str) -> None:
     enc = encrypt(plaintext) if plaintext.strip() else ""
     current = get_app_settings(dsn)
     current[field] = enc
-    with psycopg.connect(dsn) as conn:
+    with connection(dsn) as conn:
         conn.execute(
             "UPDATE app_settings SET data = %s WHERE id = 1",
             (json.dumps(current, ensure_ascii=False),),

@@ -41,12 +41,36 @@ function BrierSparkline({ points, lang }: { points: CalibrationData["trend"]; la
   );
 }
 
+function ReliabilityDiagram({ bins }: { bins: CalibrationData["reliability"] }) {
+  return (
+    <div className="mt-4 grid gap-3 sm:grid-cols-5" role="img" aria-label="Reliability diagram 5 bins">
+      {bins.map((bin) => (
+        <div key={bin.lower} className="rounded-xl border border-border bg-background p-3 text-center">
+          <div className="flex h-24 items-end justify-center gap-2" aria-hidden="true">
+            <span className="w-4 rounded-t bg-muted" style={{ height: `${(bin.mean_confidence ?? 0) * 100}%` }} />
+            <span className="w-4 rounded-t bg-primary" style={{ height: `${(bin.observed_rate ?? 0) * 100}%` }} />
+          </div>
+          <div className="mt-2 text-[11px] tabular-nums">
+            {(bin.lower * 100).toFixed(0)}–{(bin.upper * 100).toFixed(0)}% · n={bin.n}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            forecast {bin.mean_confidence == null ? "—" : `${(bin.mean_confidence * 100).toFixed(0)}%`} / observed {bin.observed_rate == null ? "—" : `${(bin.observed_rate * 100).toFixed(0)}%`}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Calibration() {
   const { lang, t } = useLang();
   const [data, setData] = useState<CalibrationData | null>(null);
   const [error, setError] = useState("");
-  const [pending, setPending] = useState<{ id: number; outcome: "true" | "partial" | "false" } | null>(null);
+  const [pending, setPending] = useState<{ id: number; outcome: "true" | "false" } | null>(null);
   const [note, setNote] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceName, setEvidenceName] = useState("");
+  const [observedAt, setObservedAt] = useState(new Date().toISOString().slice(0, 16));
   const [busy, setBusy] = useState(false);
 
   const load = () =>
@@ -67,9 +91,15 @@ export default function Calibration() {
     if (!pending) return;
     setBusy(true);
     try {
-      await resolvePrediction(pending.id, pending.outcome, note.trim());
+      await resolvePrediction(pending.id, pending.outcome, note.trim(), {
+        observed_at: new Date(observedAt).toISOString(),
+        evidence_url: evidenceUrl.trim(),
+        evidence_name: evidenceName.trim(),
+      });
       setPending(null);
       setNote("");
+      setEvidenceUrl("");
+      setEvidenceName("");
       await load();
     } catch (e: any) {
       setError(String(e.message ?? e));
@@ -80,7 +110,6 @@ export default function Calibration() {
 
   const outcomeLabel: Record<string, string> = {
     true: t("cal_happened"),
-    partial: t("cal_partial"),
     false: t("cal_didnt"),
   };
 
@@ -131,6 +160,13 @@ export default function Calibration() {
           </div>
 
           {/* Weekly trend */}
+          <div className={card}>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Reliability · 5 bins · n={data.sample_size}
+            </div>
+            <ReliabilityDiagram bins={data.reliability} />
+          </div>
+
           {data.trend.length >= 2 && (
             <div className={card}>
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
@@ -201,16 +237,14 @@ export default function Calibration() {
                         <div className="mt-1">{p.claim}</div>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {(["true", "partial", "false"] as const).map((o) => (
+                        {(["true", "false"] as const).map((o) => (
                           <button
                             key={o}
                             onClick={() => setPending({ id: p.prediction_id, outcome: o })}
                             className={`rounded-full border px-3 py-1 text-xs transition ${
                               o === "true"
                                 ? "border-primary/40 text-primary-strong hover:bg-primary/5"
-                                : o === "partial"
-                                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                                  : "border-red-200 text-red-700 hover:bg-red-50"
+                                : "border-red-200 text-red-700 hover:bg-red-50"
                             }`}
                           >
                             {outcomeLabel[o]}
@@ -224,6 +258,24 @@ export default function Calibration() {
                           {t("cal_confirm_prefix")} <b>{outcomeLabel[pending.outcome]}</b> — {t("cal_confirm_suffix")}
                         </div>
                         <input
+                          value={evidenceName}
+                          onChange={(e) => setEvidenceName(e.target.value)}
+                          placeholder="ชื่อหลักฐาน"
+                          className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
+                        />
+                        <input
+                          value={evidenceUrl}
+                          onChange={(e) => setEvidenceUrl(e.target.value)}
+                          placeholder="https://แหล่งหลักฐาน"
+                          className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={observedAt}
+                          onChange={(e) => setObservedAt(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
+                        />
+                        <input
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
                           placeholder={t("cal_note_ph")}
@@ -231,7 +283,7 @@ export default function Calibration() {
                         />
                         <div className="flex gap-2">
                           <button
-                            disabled={busy}
+                            disabled={busy || !evidenceName.trim() || !evidenceUrl.trim()}
                             onClick={submitResolve}
                             className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                           >

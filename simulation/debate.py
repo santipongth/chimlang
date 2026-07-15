@@ -29,6 +29,42 @@ DEFAULT_ROUNDS = 3
 REPLY_SAMPLE = 6
 MAX_POST_CHARS = 400
 
+POST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string"},
+        "stance": {"type": "number", "minimum": -1, "maximum": 1},
+        "sentiment": {"type": "number", "minimum": -1, "maximum": 1},
+        "want_to_know": {"type": "string"},
+    },
+    "required": ["content", "stance", "sentiment", "want_to_know"],
+    "additionalProperties": False,
+}
+
+SYNTHESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "distribution": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "bucket": {"type": "string"},
+                    "pct": {"type": "number", "minimum": 0, "maximum": 100},
+                },
+                "required": ["bucket", "pct"],
+                "additionalProperties": False,
+            },
+        },
+        "key_drivers": {"type": "array", "items": {"type": "string"}},
+        "risks": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["summary", "confidence", "distribution", "key_drivers", "risks"],
+    "additionalProperties": False,
+}
+
 
 class DebateUnavailableError(RuntimeError):
     """Raised when no agent response is usable, so no prediction can be trusted."""
@@ -45,6 +81,7 @@ class DebatePost:
     failed: bool = False
     failure_reason: str = ""
     want_to_know: str = ""  # query intent (P7-M3) — สิ่งที่ agent อยากรู้เพิ่ม → โต๊ะข่าวค้นให้
+    parser_mode: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -57,6 +94,7 @@ class DebatePost:
             "failed": self.failed,
             "failure_reason": self.failure_reason,
             "want_to_know": self.want_to_know,
+            "parser_mode": self.parser_mode,
         }
 
 
@@ -202,6 +240,9 @@ def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> 
         "posts_ok": len(ok),
         "posts_failed": len(posts) - len(ok),
         "agent_count": agent_count,
+        "parser_fallback_posts": sum(
+            1 for p in ok if p.parser_mode == "parser_fallback_unsupported"
+        ),
     }
 
 
@@ -377,6 +418,11 @@ def run_debate(
                 f'"sentiment": โทนอารมณ์ -1..1{want_hint}}}'
             )
             try:
+                structured_kwargs = (
+                    {"response_schema": POST_SCHEMA, "schema_name": "debate_post"}
+                    if getattr(adapter, "supports_structured_outputs", lambda: False)()
+                    else {}
+                )
                 result = adapter.chat(
                     ModelTier.CROWD,
                     [
@@ -387,10 +433,18 @@ def run_debate(
                     temperature=0.7,
                     seed=seed + r * 1000 + idx,  # best-effort pin ต่อ (round, agent)
                     reasoning=False,
+                    **structured_kwargs,
                 )
                 content, stance, sentiment, want = _parse_post(result.text)
                 return DebatePost(
-                    r, idx, p.segment_name, content, stance, sentiment, want_to_know=want
+                    r,
+                    idx,
+                    p.segment_name,
+                    content,
+                    stance,
+                    sentiment,
+                    want_to_know=want,
+                    parser_mode=getattr(result, "structured_mode", "parser_fallback_capability"),
                 )
             except Exception as exc:
                 # fail-closed: ติดธง ไม่ปนใน metrics — จุดยืนเดิมคงไว้
@@ -403,6 +457,7 @@ def run_debate(
                     0.0,
                     failed=True,
                     failure_reason=_failure_reason(exc),
+                    parser_mode="failed",
                 )
 
         with ThreadPoolExecutor(max_workers=8) as pool_ex:
@@ -438,6 +493,11 @@ def run_debate(
     ok_last = [p for p in all_posts if not p.failed and p.round_no == rounds - 1]
     digest = "\n".join(f"- [{p.segment}] จุดยืน {p.stance:+.2f}: {p.content}" for p in ok_last)
     try:
+        structured_kwargs = (
+            {"response_schema": SYNTHESIS_SCHEMA, "schema_name": "debate_synthesis"}
+            if getattr(adapter, "supports_structured_outputs", lambda: False)()
+            else {}
+        )
         result = adapter.chat(
             ModelTier.ANALYST,
             [
@@ -457,12 +517,17 @@ def run_debate(
             max_tokens=900,
             temperature=0,
             seed=seed,
+            **structured_kwargs,
         )
         synthesis = _load_json_object(result.text)
         synthesis["confidence"] = max(0.0, min(1.0, float(synthesis.get("confidence", 0.5))))
         synthesis["fallback"] = False
-    except Exception:
+        synthesis["parser_mode"] = getattr(result, "structured_mode", "parser_fallback_capability")
+        synthesis["model_version"] = getattr(result, "model", "")
+    except Exception as exc:
         synthesis = _mechanical_synthesis(all_posts, subject, rounds)
+        synthesis["parser_mode"] = "mechanical_fallback"
+        synthesis["failure_reason"] = _failure_reason(exc)
 
     # ความมั่นใจถูกลดตามสัดส่วน agent ที่พัง (คำตอบหายไป = ความไม่แน่นอนเพิ่ม)
     failed = metrics["posts_failed"]

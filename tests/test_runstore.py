@@ -4,42 +4,25 @@ from threading import Lock
 import core.runstore as runstore
 
 
-class _Result:
-    def fetchone(self):
-        return ("CHECK status IN (queued, running, complete, error, canceled)",)
-
-
-class _Connection:
-    def __init__(self, statements: list[str], statements_lock: Lock):
-        self._statements = statements
-        self._statements_lock = statements_lock
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, traceback):
-        return False
-
-    def execute(self, statement: str, params=None):
-        with self._statements_lock:
-            self._statements.append(statement)
-        return _Result()
-
-
-def test_setup_runs_schema_once_when_called_concurrently(monkeypatch):
+def test_setup_is_read_only_schema_check_when_called_concurrently(monkeypatch):
     dsn = "postgresql://runstore-concurrency-test"
-    statements: list[str] = []
-    statements_lock = Lock()
-    monkeypatch.setattr(runstore, "_SETUP_DONE", set())
-    monkeypatch.setattr(
-        runstore.RunStore,
-        "_conn",
-        lambda self: _Connection(statements, statements_lock),
-    )
+    calls: list[str] = []
+    lock = Lock()
 
+    def checked(value: str) -> None:
+        with lock:
+            calls.append(value)
+
+    monkeypatch.setattr(runstore, "require_schema", checked)
     with ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(lambda _: runstore.RunStore(dsn).setup(), range(16)))
 
-    assert statements.count(runstore._SCHEMA) == 1
-    assert sum("pg_advisory_xact_lock" in statement for statement in statements) == 1
-    assert not any("DROP CONSTRAINT" in statement for statement in statements)
+    assert calls == [dsn] * 16
+    assert "CREATE TABLE" not in runstore.RunStore.setup.__doc__
+
+
+def test_new_run_id_is_unique_across_concurrent_requests():
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        run_ids = list(executor.map(lambda _: runstore.new_run_id("fabric"), range(100)))
+
+    assert len(run_ids) == len(set(run_ids)) == 100

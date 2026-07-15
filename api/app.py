@@ -6,13 +6,16 @@ Phase 1 ขอบเขต: endpoint อ่านผล what-if ที่รั�
 ทุก scenario ถูกตรวจ election mode; response ระดับ individual ถูก block ถ้าเข้าโหมด (GOV-02)
 """
 
+import asyncio
+import json
 import time
 from collections import deque
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.auth import get_principal, require, require_election
@@ -34,7 +37,18 @@ from trust.signal import build_signal_bundle
 from trust.signal_harness import SampleTooSmallError, evaluate
 from trust.universe import run_multiverse_whatif
 
-app = FastAPI(title="ชิมลาง API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Runtime only checks the migration ledger; it never creates or alters tables."""
+    from core.db import close_pools, require_schema
+
+    require_schema(get_settings().postgres_url)
+    yield
+    close_pools()
+
+
+app = FastAPI(title="ชิมลาง API", version="0.2.0", lifespan=lifespan)
 
 # P4-M1: เสิร์ฟ React UI ที่ /app ถ้า build แล้ว (web/dist) — deployment ชิ้นเดียวกับ API
 app.include_router(runs_router)
@@ -180,7 +194,6 @@ def insights_json(principal: Principal = Depends(get_principal)) -> dict:
     settings = get_settings()
     try:
         store = GovernanceStore(settings.postgres_url)
-        store.setup()
         return store.insights()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -195,7 +208,6 @@ def _load_pack_factory(pack_id: int | None) -> "PersonaFactory | None":
     settings = get_settings()
     try:
         store = PackStore(settings.postgres_url)
-        store.setup()
         pack = store.get(pack_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -423,7 +435,6 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     settings = get_settings()
     try:
         store = GovernanceStore(settings.postgres_url)
-        store.setup()
         runs = store.recent_runs()
         due = [
             {
@@ -596,6 +607,8 @@ class RunBody(BaseModel):
     claim: str = ""
     measurement: str = ""
     due_days: int = 30
+    probability: float | None = Field(None, ge=0.01, le=0.99)
+    seed: int | None = None
     # มุมมองผลลัพธ์ที่จะเปิดใช้ (P6-M6) — RunDetail แสดงเฉพาะ tab เหล่านี้; ว่าง = ครบทุกมุม
     views: list[str] = []
     # News Desk (P7, SIM-11): เปิดโต๊ะข่าวสด (debate เท่านั้น) — agent ได้ข่าวตาม media diet กลุ่มตัวเอง
@@ -611,7 +624,7 @@ def engines_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"engines": [e.to_dict() for e in ENGINES.values()]}
 
 
-def _register_run_prediction(
+def _register_run_result(
     store,
     run_id: str,
     subject: str,
@@ -621,16 +634,13 @@ def _register_run_prediction(
     claim: str = "",
     measurement: str = "",
     due_days: int = 30,
-) -> None:
-    """กฎเหล็กข้อ 3: ทุก run ต้องมี prediction ≥1
-
-    ผู้ใช้ตั้ง claim/measurement/due_days เองได้ (เหตุการณ์จริง — จุดปลดล็อก calibration);
-    ไม่ตั้ง = heuristic v1: fabric ทิศจาก headline range (confidence ลดตาม fragility),
-    debate ทิศจากจุดยืนเฉลี่ยรอบสุดท้าย (confidence จาก synthesis ถูกลดตาม failed แล้ว)
-    """
+    probability: float | None = None,
+    created_by: str = "",
+) -> str:
+    """Register an explicit Prediction or a non-calibrating SimulationFinding."""
     from datetime import date, timedelta
 
-    from governance.store import Prediction
+    from governance.store import Prediction, SimulationFinding
 
     if "brief" in payload:  # fabric dashboard payload
         lo, hi = payload["brief"]["headline_range"]
@@ -641,24 +651,50 @@ def _register_run_prediction(
             direction, conf = "เพิ่มขึ้น", round(max(0.5, 0.75 * (1 - frag / 100)), 2)
         else:
             direction, conf = "ไม่ชัด", 0.5
-        auto_claim = f"{subject}: ทิศทาง delta ของความเชื่อจะ{direction}เมื่อทดสอบซ้ำด้วยชุด parameter ใหม่"
+        finding_summary = f"ผลจำลอง '{subject}' มีทิศทาง {direction} ใน multiverse ชุดนี้"
+        finding_metrics = {
+            "headline_range": [lo, hi],
+            "fragility_index": frag,
+            "direction": direction,
+        }
     else:  # debate payload
         avg = (payload.get("metrics", {}).get("per_round_avg_stance") or [0])[-1]
         direction = "เพิ่มขึ้น" if avg > 0.15 else "ลดลง" if avg < -0.15 else "ไม่ชัด"
         conf = float(payload.get("synthesis", {}).get("confidence", 0.5))
-        auto_claim = f"{subject}: ฉันทามติของวงดีเบตเอนไปทาง '{direction}' และจะคงทิศเมื่อดีเบตซ้ำ"
+        finding_summary = f"วงดีเบตจำลองเรื่อง '{subject}' เอนไปทาง {direction} ใน run นี้"
+        finding_metrics = {
+            "final_avg_stance": avg,
+            "final_dispersion": payload.get("metrics", {}).get("final_dispersion", 0),
+            "direction": direction,
+        }
+    if not claim.strip() or not measurement.strip():
+        store.register_finding(
+            run_id,
+            SimulationFinding(
+                summary=finding_summary,
+                metrics=finding_metrics,
+                provenance={"source": "simulation_run", "run_id": run_id},
+                model_version="chimlang-run@prediction-experience-v1",
+            ),
+        )
+        return "simulation_finding"
     store.register_prediction(
         run_id,
         Prediction(
-            claim=claim.strip() or auto_claim,
+            claim=claim.strip(),
             direction=direction,
-            confidence=max(0.01, min(0.99, conf)),
-            measurement=measurement.strip() or "ผู้ใช้ป้อนผลจริงเมื่อครบกำหนด (หน้า Calibration ใน /app)",
+            confidence=max(0.01, min(0.99, probability if probability is not None else conf)),
+            measurement=measurement.strip(),
             due_date=date.today() + timedelta(days=max(1, min(365, due_days))),
             model_version="chimlang-run@p6",
             domain=domain,
+            source_kind="user",
+            forecast_type="binary",
+            provenance={"source_run_id": run_id, "created_from": "run_contract"},
+            created_by=created_by,
         ),
     )
+    return "prediction"
 
 
 @app.post("/runs")
@@ -703,13 +739,12 @@ def _run_create_impl(
     n = min(body.agents, engine.max_agents)
     rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
     run_id = run_id or new_run_id(body.engine)
+    run_seed = body.seed if body.seed is not None else settings.default_seed
     factory = _load_pack_factory(body.pack_id)
 
     try:
         rstore = RunStore(settings.postgres_url)
-        rstore.setup()
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
 
@@ -724,6 +759,7 @@ def _run_create_impl(
     }
     config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
+    config["seed"] = run_seed
     if precreated:
         if not rstore.mark_running(run_id, "เริ่มรันใน worker"):
             raise HTTPException(
@@ -738,7 +774,7 @@ def _run_create_impl(
             domain=body.domain,
             agents=n,
             rounds=rounds,
-            seed=settings.default_seed,
+            seed=run_seed,
             config=config,
             status="running",
             parent_run_id=body.parent_run_id,
@@ -764,9 +800,7 @@ def _run_create_impl(
             # Budget/model readiness must fail before source or News Desk I/O.
             rstore.update_progress(run_id, 10, "กำลังตรวจงบและโมเดล")
             debate_adapter = make_debate_adapter(n, rounds)
-            personas = (factory or PersonaFactory()).sample(
-                n, seed=settings.default_seed, max_agents=n
-            )
+            personas = (factory or PersonaFactory()).sample(n, seed=run_seed, max_agents=n)
             if body.red_team:
                 personas = inject_red_team(personas)
             source_status: list[dict] = []
@@ -789,16 +823,14 @@ def _run_create_impl(
                 from core.run_context import RunContext
                 from simulation.newsdesk import gather, load_items, segment_feed
 
-                ctx = RunContext(run_id=run_id, seed=settings.default_seed)
+                ctx = RunContext(run_id=run_id, seed=run_seed)
                 seg_mixes = {p.segment_name: p.channel_mix for p in personas}
 
                 def _diet(items) -> dict[str, tuple[str, ...]]:
                     return {
                         seg: tuple(
                             f"{it.title}: {it.content[:250]}"
-                            for it in segment_feed(
-                                items, mix, subject, k=4, seed=settings.default_seed
-                            )
+                            for it in segment_feed(items, mix, subject, k=4, seed=run_seed)
                         )
                         for seg, mix in seg_mixes.items()
                     }
@@ -833,7 +865,7 @@ def _run_create_impl(
                 personas,
                 subject=subject,
                 rounds=rounds,
-                seed=settings.default_seed,
+                seed=run_seed,
                 adapter=debate_adapter,
                 context_chunks=context,
                 segment_news=segment_news,
@@ -871,9 +903,8 @@ def _run_create_impl(
                 "context_used": len(context),
                 "news": news_status,
             }
-        rstore.update_progress(run_id, 90, "กำลังบันทึกผลและลงทะเบียน prediction")
-        rstore.finish(run_id, payload)
-        _register_run_prediction(
+        rstore.update_progress(run_id, 90, "กำลังบันทึก finding/prediction contract")
+        result_kind = _register_run_result(
             gov,
             run_id,
             subject,
@@ -882,8 +913,23 @@ def _run_create_impl(
             claim=body.claim,
             measurement=body.measurement,
             due_days=body.due_days,
+            probability=body.probability,
+            created_by=principal.user_id,
         )
-        gov.finalize_run(run_id)  # ไม่มี prediction = raise (กฎเหล็กข้อ 3)
+        payload["result_kind"] = result_kind
+        if body.engine == "debate":
+            synthesis = payload.get("synthesis", {})
+            rstore.add_synthesis_revision(
+                run_id,
+                kind="mechanical" if synthesis.get("fallback") else "analyst",
+                synthesis=synthesis,
+                metrics=payload.get("metrics", {}),
+                model_version=str(synthesis.get("model_version", "")),
+                parser_mode=str(synthesis.get("parser_mode", "legacy_parser")),
+                cost_usd=float(payload.get("cost_usd", 0) or 0),
+            )
+        gov.finalize_run(run_id)
+        rstore.finish(run_id, payload)
         gov.append_audit(
             actor=principal.user_id, action="run_completed", run_id=run_id, config_hash="-"
         )
@@ -932,9 +978,9 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
     valid_views = {"overview", "debate", "canvas", "evidence"}
     views = [v for v in body.views if v in valid_views] or list(valid_views)
     run_id = new_run_id(body.engine)
+    run_seed = body.seed if body.seed is not None else settings.default_seed
     rstore = RunStore(settings.postgres_url)
     try:
-        rstore.setup()
         rstore.create(
             run_id=run_id,
             engine=body.engine,
@@ -942,7 +988,7 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
             domain=body.domain,
             agents=n,
             rounds=rounds,
-            seed=settings.default_seed,
+            seed=run_seed,
             config={
                 "pack_id": body.pack_id,
                 "red_team": body.red_team,
@@ -951,6 +997,7 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
                 "live_news": body.live_news,
                 "retrieval_mode": body.retrieval_mode,
                 "parent_run_id": body.parent_run_id,
+                "seed": run_seed,
             },
             status="queued",
             parent_run_id=body.parent_run_id,
@@ -966,8 +1013,9 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
         rstore.attach_job(run_id, res.id)
         return {"job_id": res.id, "run_id": run_id, "status": "SUCCESS", "result": res.get()}
     try:
-        res = persistent_run_task.delay(
-            payload, principal.user_id, principal.election_verified, run_id
+        res = persistent_run_task.apply_async(
+            args=(payload, principal.user_id, principal.election_verified, run_id),
+            queue=body.engine,
         )
         rstore.attach_job(run_id, res.id)
     except Exception as e:
@@ -987,7 +1035,6 @@ def run_job_status(job_id: str, principal: Principal = Depends(get_principal)) -
     body: dict = {"job_id": job_id, "status": res.status}
     try:
         store = RunStore(get_settings().postgres_url)
-        store.setup()
         run = store.find_by_job(job_id)
         if run:
             body.update(run)
@@ -1013,7 +1060,6 @@ def run_cancel(run_id: str, principal: Principal = Depends(get_principal)) -> di
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         detail = store.get(run_id)
         store.cancel(run_id, "ยกเลิกโดยผู้ใช้")
         if detail.get("job_id"):
@@ -1024,7 +1070,6 @@ def run_cancel(run_id: str, principal: Principal = Depends(get_principal)) -> di
             except Exception:
                 pass
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id, action="run_canceled", run_id=run_id, config_hash="-"
         )
@@ -1043,7 +1088,6 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         old = store.get(run_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -1074,6 +1118,125 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
     return out
 
 
+def _validation_report(parent_run_id: str, children: list[dict]) -> dict:
+    import re
+    import statistics
+
+    completed = [c for c in children if c["status"] == "complete" and c.get("payload")]
+    values: list[float] = []
+    summaries: list[str] = []
+    failed_posts = total_posts = 0
+    total_cost = 0.0
+    for child in completed:
+        payload = child["payload"]
+        total_cost += float(payload.get("cost_usd", 0) or 0)
+        if child["engine"] == "debate":
+            series = payload.get("metrics", {}).get("per_round_avg_stance") or [0]
+            values.append(float(series[-1]))
+            metrics = payload.get("metrics", {})
+            failed_posts += int(metrics.get("posts_failed", 0))
+            total_posts += int(metrics.get("posts_ok", 0)) + int(metrics.get("posts_failed", 0))
+            summaries.append(str(payload.get("synthesis", {}).get("summary", "")))
+        else:
+            lo, hi = payload.get("brief", {}).get("headline_range", [0, 0])
+            values.append((float(lo) + float(hi)) / 2)
+            summaries.append(
+                " ".join(line.get("text", "") for line in payload.get("brief", {}).get("lines", []))
+            )
+    signs = [1 if v > 0 else -1 if v < 0 else 0 for v in values]
+    agreement = max((signs.count(s) for s in set(signs)), default=0) / max(1, len(signs))
+    overlaps: list[float] = []
+    token_sets = [set(re.findall(r"[\w\u0E00-\u0E7F]{3,}", s.lower())) for s in summaries]
+    for i, left in enumerate(token_sets):
+        for right in token_sets[i + 1 :]:
+            overlaps.append(len(left & right) / max(1, len(left | right)))
+    return {
+        "parent_run_id": parent_run_id,
+        "status": (
+            "complete"
+            if len(completed) == 3
+            else "running"
+            if any(c["status"] in {"queued", "running"} for c in children)
+            else "incomplete"
+        ),
+        "children": [{k: c[k] for k in ("run_id", "seed", "status", "error")} for c in children],
+        "completed": len(completed),
+        "failure_rate": 1 - len(completed) / 3,
+        "sign_agreement": agreement if values else None,
+        "stance_range": [min(values), max(values)] if values else None,
+        "between_run_dispersion": statistics.pstdev(values) if len(values) > 1 else 0.0,
+        "claim_overlap": sum(overlaps) / len(overlaps) if overlaps else None,
+        "agent_failure_rate": failed_posts / total_posts if total_posts else 0.0,
+        "total_cost_usd": round(total_cost, 6),
+        "note": "empirical 3-seed stability; แยกจาก analyst confidence ของ run เดียว",
+    }
+
+
+@app.post("/runs/{run_id}/validate")
+def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """Queue exactly three child seeds after a fresh aggregate BudgetGuard check."""
+    require(principal, Permission.RUN)
+    from core.llm.budget import check_monthly_budget
+    from core.llm.cost import BudgetGuard, CostEstimator, TierLoad
+    from core.llm.userconfig import effective_llm_settings, effective_monthly_cap, effective_pricing
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    store = RunStore(settings.postgres_url)
+    try:
+        parent = store.get(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if parent["status"] != "complete":
+        raise HTTPException(status_code=409, detail="validate ได้เมื่อ parent run complete แล้ว")
+    existing = store.children(run_id)
+    if existing:
+        return _validation_report(run_id, existing)
+    if parent["engine"] == "debate":
+        llm = effective_llm_settings()
+        estimate = CostEstimator(effective_pricing()).estimate(
+            [
+                TierLoad(
+                    llm.llm_model_crowd,
+                    parent["agents"] * parent["rounds"] * 3,
+                    900,
+                    160,
+                ),
+                TierLoad(llm.llm_model_analyst, 3, 1500, 800),
+            ]
+        )
+        BudgetGuard(cap_usd=llm.run_budget_usd_cap).check_estimate(estimate)
+        check_monthly_budget(settings.postgres_url, estimate.total_usd, effective_monthly_cap())
+    jobs = []
+    base_seed = int(parent["seed"])
+    for offset in (1, 2, 3):
+        body = RunBody(
+            engine=parent["engine"],
+            subject=parent["subject"],
+            domain=parent["domain"],
+            agents=parent["agents"],
+            rounds=parent["rounds"],
+            pack_id=parent["config"].get("pack_id"),
+            red_team=bool(parent["config"].get("red_team")),
+            views=list(parent["config"].get("views") or []),
+            live_news=False,
+            retrieval_mode=parent["config"].get("retrieval_mode") or "hybrid",
+            parent_run_id=run_id,
+            seed=base_seed + offset,
+        )
+        jobs.append(run_create_async(body, principal=principal))
+    return {"parent_run_id": run_id, "status": "queued", "jobs": jobs}
+
+
+@app.get("/runs/{run_id}/validation")
+def get_run_validation(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+
+    children = RunStore(get_settings().postgres_url).children(run_id)
+    return _validation_report(run_id, children)
+
+
 def _news_payload_items(items) -> list[dict]:
     return [
         {
@@ -1101,7 +1264,6 @@ def run_refresh_news(run_id: str, principal: Principal = Depends(get_principal))
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         detail = store.get(run_id)
         if detail["engine"] != "debate":
             raise HTTPException(status_code=422, detail="refresh-news ใช้ได้กับ debate run เท่านั้น")
@@ -1120,7 +1282,6 @@ def run_refresh_news(run_id: str, principal: Principal = Depends(get_principal))
         }
         store.update_payload(run_id, payload, "news refreshed")
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id, action="run_news_refreshed", run_id=run_id, config_hash="-"
         )
@@ -1133,9 +1294,10 @@ def run_refresh_news(run_id: str, principal: Principal = Depends(get_principal))
         raise HTTPException(status_code=503, detail=f"รีเฟรชข่าวไม่สำเร็จ: {e}") from e
 
 
-@app.post("/runs/{run_id}/resynthesize")
-def run_resynthesize(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
-    """Partial repair: rebuild synthesis and metrics from stored debate posts."""
+@app.post("/runs/{run_id}/resynthesize", deprecated=True)
+@app.post("/runs/{run_id}/recompute-metrics")
+def run_recompute_metrics(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """Recompute mechanical metrics as a revision; never overwrite analyst synthesis."""
     require(principal, Permission.RUN)
     from core.runstore import RunStore
     from governance.store import GovernanceStore
@@ -1144,10 +1306,9 @@ def run_resynthesize(run_id: str, principal: Principal = Depends(get_principal))
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         detail = store.get(run_id)
         if detail["engine"] != "debate":
-            raise HTTPException(status_code=422, detail="resynthesize ใช้ได้กับ debate run เท่านั้น")
+            raise HTTPException(status_code=422, detail="recompute-metrics ใช้ได้กับ debate run เท่านั้น")
         if detail["status"] in {"queued", "running"}:
             raise HTTPException(status_code=409, detail="run ยังทำงานอยู่")
         if not detail["posts"]:
@@ -1155,22 +1316,28 @@ def run_resynthesize(run_id: str, principal: Principal = Depends(get_principal))
         rebuilt = synthesize_snapshot(
             detail["posts"], subject=detail["subject"], rounds=int(detail["rounds"])
         )
-        payload = dict(detail.get("payload") or {})
-        payload.update(rebuilt)
-        payload["resynthesized_at"] = datetime.now().isoformat()
-        store.update_payload(run_id, payload, "resynthesized from snapshot")
-        gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
-        gov.append_audit(
-            actor=principal.user_id, action="run_resynthesized", run_id=run_id, config_hash="-"
+        revision_id = store.add_synthesis_revision(
+            run_id,
+            kind="mechanical",
+            synthesis=rebuilt["synthesis"],
+            metrics=rebuilt["metrics"],
+            model_version="chimlang-mechanical@v1",
+            parser_mode="deterministic",
         )
-        return {"run_id": run_id, **rebuilt}
+        gov = GovernanceStore(settings.postgres_url)
+        gov.append_audit(
+            actor=principal.user_id,
+            action="run_metrics_recomputed",
+            run_id=run_id,
+            config_hash="-",
+        )
+        return {"run_id": run_id, "revision_id": revision_id, **rebuilt}
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"resynthesize ไม่สำเร็จ: {e}") from e
+        raise HTTPException(status_code=503, detail=f"recompute metrics ไม่สำเร็จ: {e}") from e
 
 
 @app.get("/run-metrics.json")
@@ -1181,7 +1348,6 @@ def run_metrics(principal: Principal = Depends(get_principal)) -> dict:
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         data = store.metrics()
         try:
             from core.llm.budget import spent_this_month
@@ -1206,25 +1372,84 @@ def simruns_json(
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         return {"runs": store.list_runs(search=search, engine=engine, status=status)}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+@app.get("/runs/{run_id}/events/stream")
+async def run_events_stream(
+    run_id: str,
+    request: Request,
+    after_id: int = Query(0, ge=0),
+    principal: Principal = Depends(get_principal),
+):
+    """Replay durable events then follow Redis wake-ups without losing reconnect events."""
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    store = RunStore(settings.postgres_url)
+    try:
+        store.events_after(run_id, after_id, limit=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    async def event_source():
+        import redis.asyncio as aioredis
+
+        cursor = after_id
+        client = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = client.pubsub()
+        await pubsub.subscribe(f"chimlang:run-events:{run_id}")
+        try:
+            while not await request.is_disconnected():
+                events = await asyncio.to_thread(store.events_after, run_id, cursor)
+                for event in events:
+                    cursor = int(event["id"])
+                    data = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+                    yield f"id: {cursor}\nevent: run_event\ndata: {data}\n\n"
+                if events and events[-1]["event_type"] in {
+                    "completed",
+                    "failed",
+                    "canceled",
+                    "stale",
+                }:
+                    break
+                try:
+                    await pubsub.get_message(ignore_subscribe_messages=True, timeout=10.0)
+                except Exception:
+                    await asyncio.sleep(1)
+                yield ": heartbeat\n\n"
+        finally:
+            await pubsub.unsubscribe(f"chimlang:run-events:{run_id}")
+            await pubsub.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/runs/{run_id}.json")
 def run_detail_json(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
     from core.runstore import RunStore
     from governance.gallery import GalleryStore
+    from governance.store import GovernanceStore
 
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         detail = store.get(run_id)
+        result_contract = GovernanceStore(settings.postgres_url).results_for_run(run_id)
+        detail.update(result_contract)
+        detail["result_kind"] = (
+            "prediction" if result_contract["predictions"] else "simulation_finding"
+        )
         # สถานะแชร์สาธารณะ (toggle เปิด/ปิด) — token ที่ยัง active ของ run นี้
         gstore = GalleryStore(settings.postgres_url)
-        gstore.setup()
         detail["share_token"] = gstore.find_by_run(run_id)
         try:
             from core.run_quality import build_trust_scorecard
@@ -1237,6 +1462,79 @@ def run_detail_json(run_id: str, principal: Principal = Depends(get_principal)) 
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+
+class PredictionCreateBody(BaseModel):
+    claim: str = Field(min_length=4, max_length=1000)
+    probability: float = Field(ge=0.01, le=0.99)
+    measurement: str = Field(min_length=4, max_length=1000)
+    due_date: date
+    domain: str = "ทั่วไป"
+    forecast_type: str = "binary"
+
+
+@app.post("/runs/{run_id}/predictions")
+def create_run_prediction(
+    run_id: str,
+    body: PredictionCreateBody,
+    principal: Principal = Depends(get_principal),
+) -> dict:
+    """Append an explicit, measurable real-world binary forecast to a completed run."""
+    require(principal, Permission.RUN)
+    if body.forecast_type != "binary":
+        raise HTTPException(status_code=422, detail="ระยะแรกรองรับ binary prediction เท่านั้น")
+    if body.due_date <= date.today():
+        raise HTTPException(status_code=422, detail="due_date ต้องเป็นวันในอนาคต")
+    from core.runstore import RunStore
+    from governance.pii import PIIDetector, load_allowlist
+    from governance.store import GovernanceStore, Prediction
+
+    detector = PIIDetector(load_allowlist())
+    if detector.check(f"{body.claim}\n{body.measurement}").blocked:
+        raise HTTPException(status_code=422, detail="prediction contract มี PII (GOV-01)")
+    settings = get_settings()
+    try:
+        run = RunStore(settings.postgres_url).get(run_id)
+        if run["status"] != "complete":
+            raise HTTPException(status_code=409, detail="สร้าง prediction ได้เมื่อ run complete แล้ว")
+        store = GovernanceStore(settings.postgres_url)
+        store.register_prediction(
+            run_id,
+            Prediction(
+                claim=body.claim.strip(),
+                direction="เกิดขึ้น",
+                confidence=body.probability,
+                measurement=body.measurement.strip(),
+                due_date=body.due_date,
+                model_version="chimlang-run@prediction-experience-v1",
+                domain=body.domain.strip() or run["domain"],
+                source_kind="user",
+                forecast_type="binary",
+                provenance={"source_run_id": run_id, "created_from": "run_detail_cta"},
+                created_by=principal.user_id,
+            ),
+        )
+        store.append_audit(
+            actor=principal.user_id,
+            action="prediction_created",
+            run_id=run_id,
+            config_hash="-",
+            detail=f"due={body.due_date.isoformat()} probability={body.probability:.3f}",
+        )
+        return store.results_for_run(run_id)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {exc}") from exc
+
+
+@app.get("/runs/{run_id}/predictions")
+def get_run_predictions(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    from governance.store import GovernanceStore
+
+    return GovernanceStore(get_settings().postgres_url).results_for_run(run_id)
 
 
 @app.post("/runs/{run_id}/share")
@@ -1255,7 +1553,6 @@ def run_share(run_id: str, principal: Principal = Depends(get_principal)) -> dic
     settings = get_settings()
     try:
         rstore = RunStore(settings.postgres_url)
-        rstore.setup()
         detail = rstore.get(run_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -1273,7 +1570,6 @@ def run_share(run_id: str, principal: Principal = Depends(get_principal)) -> dic
         raise HTTPException(status_code=422, detail=str(e)) from e
     try:
         gstore = GalleryStore(settings.postgres_url)
-        gstore.setup()
         existing = gstore.find_by_run(run_id)
         if existing:
             return {"share_token": existing, "url": f"/app/#gallery/{existing}"}
@@ -1286,7 +1582,6 @@ def run_share(run_id: str, principal: Principal = Depends(get_principal)) -> dic
             run_id=run_id,
         )
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id,
             action="gallery_shared",
@@ -1309,13 +1604,11 @@ def run_unshare(run_id: str, principal: Principal = Depends(get_principal)) -> d
     settings = get_settings()
     try:
         gstore = GalleryStore(settings.postgres_url)
-        gstore.setup()
         token = gstore.find_by_run(run_id)
         if not token:
             return {"ok": True, "shared": False}
         gstore.unshare(token)
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id,
             action="gallery_unshared",
@@ -1338,10 +1631,8 @@ def run_delete(run_id: str, principal: Principal = Depends(get_principal)) -> di
     settings = get_settings()
     try:
         store = RunStore(settings.postgres_url)
-        store.setup()
         store.delete(run_id)
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id, action="run_deleted", run_id=run_id, config_hash="-"
         )
@@ -1384,7 +1675,6 @@ def gallery_share(body: ShareBody, principal: Principal = Depends(get_principal)
     payload = _run_dashboard(body.subject, "aggregate", body.agents).to_dict()
     try:
         store = GalleryStore(settings.postgres_url)
-        store.setup()
         token = store.share(
             subject=body.subject.strip(),
             agents=min(body.agents, settings.max_agents_per_run),
@@ -1392,7 +1682,6 @@ def gallery_share(body: ShareBody, principal: Principal = Depends(get_principal)
             created_by=principal.user_id,
         )
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id,
             action="gallery_shared",
@@ -1413,7 +1702,6 @@ def gallery_list() -> dict:
     settings = get_settings()
     try:
         store = GalleryStore(settings.postgres_url)
-        store.setup()
         items = store.list_public()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -1441,7 +1729,6 @@ def gallery_detail(token: str) -> dict:
     settings = get_settings()
     try:
         store = GalleryStore(settings.postgres_url)
-        store.setup()
         item = store.get(token)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -1470,7 +1757,6 @@ def gallery_vote(token: str, body: VoteBody, request: Request) -> dict:
     ua = request.headers.get("user-agent", "")
     try:
         store = GalleryStore(settings.postgres_url)
-        store.setup()
         votes = store.vote(token, body.vote, voter_hash(ip, ua))
     except ValueError as e:
         raise HTTPException(status_code=404 if "ไม่พบ" in str(e) else 422, detail=str(e)) from e
@@ -1489,10 +1775,8 @@ def gallery_unshare(token: str, principal: Principal = Depends(get_principal)) -
     settings = get_settings()
     try:
         store = GalleryStore(settings.postgres_url)
-        store.setup()
         store.unshare(token)
         gov = GovernanceStore(settings.postgres_url)
-        gov.setup()
         gov.append_audit(
             actor=principal.user_id,
             action="gallery_unshared",
@@ -1534,7 +1818,6 @@ def personas_pool_json(
 
         try:
             store = PackStore(settings.postgres_url)
-            store.setup()
             pack = store.get(pack_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
@@ -1572,7 +1855,6 @@ def personas_packs_json(principal: Principal = Depends(get_principal)) -> dict:
     settings = get_settings()
     try:
         store = PackStore(settings.postgres_url)
-        store.setup()
         return {"packs": [p.__dict__ for p in store.list_packs()]}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -1587,7 +1869,6 @@ def personas_pack_create(body: PackBody, principal: Principal = Depends(get_prin
     settings = get_settings()
     try:
         store = PackStore(settings.postgres_url)
-        store.setup()
         pack_id = store.create(
             label=body.label.strip(),
             segments=body.segments,
@@ -1612,7 +1893,6 @@ def personas_pack_update(
     settings = get_settings()
     try:
         store = PackStore(settings.postgres_url)
-        store.setup()
         store.update(
             pack_id=pack_id, label=body.label.strip(), segments=body.segments, prompt=body.prompt
         )
@@ -1669,7 +1949,6 @@ def personas_pack_delete(pack_id: int, principal: Principal = Depends(get_princi
     settings = get_settings()
     try:
         store = PackStore(settings.postgres_url)
-        store.setup()
         store.delete(pack_id)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -1691,7 +1970,6 @@ def watchlists_json(principal: Principal = Depends(get_principal)) -> dict:
     settings = get_settings()
     try:
         store = WatchlistStore(settings.postgres_url)
-        store.setup()
         items = [w.__dict__ for w in store.list_watchlists()]
         alerts = store.list_alerts(limit=50)
     except Exception as e:
@@ -1714,7 +1992,6 @@ def watchlist_create(body: WatchlistBody, principal: Principal = Depends(get_pri
     settings = get_settings()
     try:
         store = WatchlistStore(settings.postgres_url)
-        store.setup()
         wid = store.create(
             label=body.label.strip() or body.subject[:40],
             subject=body.subject.strip(),
@@ -1737,7 +2014,6 @@ def watchlist_delete(watchlist_id: int, principal: Principal = Depends(get_princ
     settings = get_settings()
     try:
         store = WatchlistStore(settings.postgres_url)
-        store.setup()
         store.delete(watchlist_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -1756,7 +2032,6 @@ def watchlist_toggle(
     settings = get_settings()
     try:
         store = WatchlistStore(settings.postgres_url)
-        store.setup()
         store.set_active(watchlist_id, active)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -1772,7 +2047,6 @@ def watchlist_run_now(watchlist_id: int, principal: Principal = Depends(get_prin
     settings = get_settings()
     try:
         store = WatchlistStore(settings.postgres_url)
-        store.setup()
         w = store.get(watchlist_id)
         if ElectionPolicy(classify_scenario(w.subject)).active:
             require_election(principal)
@@ -1798,7 +2072,6 @@ def alerts_read(body: AlertReadBody, principal: Principal = Depends(get_principa
     settings = get_settings()
     try:
         store = WatchlistStore(settings.postgres_url)
-        store.setup()
         store.mark_read(body.id, all_alerts=body.all)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
@@ -1837,7 +2110,9 @@ def compare_json(
 
 
 @app.get("/calibration.json")
-def calibration_json(principal: Principal = Depends(get_principal)) -> dict:
+def calibration_json(
+    legacy: bool = Query(False), principal: Principal = Depends(get_principal)
+) -> dict:
     """หน้า Calibration (P5-M3): Brier รวม/รายโดเมน + trend รายสัปดาห์ + คิว resolve
 
     อ่านอย่างเดียว — แค่ authenticate (viewer ดูได้ เหมือน /runs.json)
@@ -1849,15 +2124,17 @@ def calibration_json(principal: Principal = Depends(get_principal)) -> dict:
     settings = get_settings()
     try:
         store = GovernanceStore(settings.postgres_url)
-        store.setup()
         # UI ไม่โชว์ขยะจาก test suite (domain ทดสอบ%) — registry ลบไม่ได้จึงกรองที่ชั้นอ่าน
-        return store.calibration_detail(date.today(), include_test=False)
+        return store.calibration_detail(date.today(), include_test=False, include_legacy=legacy)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
 
 
 class ResolveBody(BaseModel):
-    outcome: str  # "true" | "partial" | "false"
+    outcome: str  # "true" | "false"; legacy partial rows remain readable only
+    observed_at: datetime
+    evidence_url: str
+    evidence_name: str
     note: str = ""
 
 
@@ -1869,22 +2146,31 @@ def resolve_prediction_api(
 ) -> dict:
     """Resolve คำทำนาย (TRUST-02) — append-only: บันทึกแล้วแก้ไม่ได้ (TRUST-01)
 
-    partial = เกิดขึ้นบางส่วน → outcome_value 0.5 ใน Brier | ต้องสิทธิ์ RUN (analyst ขึ้นไป)
+    Resolution ใหม่รับเฉพาะ binary และต้องมีเวลา+หลักฐานโลกจริง; แถว partial เก่ายังอ่านได้
     """
     require(principal, Permission.RUN)
-    values = {"true": 1.0, "partial": 0.5, "false": 0.0}
+    values = {"true": True, "false": False}
     if body.outcome not in values:
-        raise HTTPException(status_code=422, detail="outcome ต้องเป็น true/partial/false")
+        raise HTTPException(status_code=422, detail="outcome ต้องเป็น true/false")
+    observed_at = (
+        body.observed_at
+        if body.observed_at.tzinfo is not None
+        else body.observed_at.replace(tzinfo=UTC)
+    )
+    if observed_at > datetime.now(UTC):
+        raise HTTPException(status_code=422, detail="observed_at ต้องไม่อยู่ในอนาคต")
     from governance.store import GovernanceStore
 
     settings = get_settings()
     try:
         store = GovernanceStore(settings.postgres_url)
-        store.setup()
         brier = store.resolve_prediction(
             prediction_id,
             outcome=values[body.outcome],
             resolver=principal.user_id,
+            observed_at=observed_at,
+            evidence_url=body.evidence_url,
+            evidence_name=body.evidence_name,
             note=body.note,
         )
         store.append_audit(
@@ -2011,7 +2297,6 @@ def citizen_feedback(req: CitizenFeedbackRequest) -> dict:
 
     settings = get_settings()
     pool = FeedbackPool(settings.postgres_url)
-    pool.setup()
     try:
         pool.add(req.segment_id, req.stance)
     except InvalidCitizenInputError as e:
@@ -2048,7 +2333,6 @@ def citizen_portal() -> str:
         sample, factory, max_agents=settings.max_agents_per_run, seed=settings.default_seed
     )
     pool = FeedbackPool(settings.postgres_url)
-    pool.setup()
     aggregates = pool.aggregates()
     effect = apply_feedback_round(
         aggregates, factory, max_agents=settings.max_agents_per_run, seed=settings.default_seed

@@ -1,7 +1,7 @@
 """tests P1-M2: Brier + resolve append-only (DB จริง), due queue, dashboard/page generator"""
 
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -30,6 +30,7 @@ def _prediction(confidence: float, domain: str = "ทดสอบ-calibration") 
         due_date=date.today() - timedelta(days=1),  # ครบกำหนดแล้ว
         model_version="test",
         domain=domain,
+        source_kind="user",
     )
 
 
@@ -50,7 +51,14 @@ def test_due_queue_and_brier_math(store):
     due_ids = [p.prediction_id for p in store.due_unresolved(date.today())]
     assert pid in due_ids  # ครบกำหนดและยังไม่ resolve → ต้องอยู่ในคิว
 
-    brier = store.resolve_prediction(pid, outcome=True, resolver="test")
+    brier = store.resolve_prediction(
+        pid,
+        outcome=True,
+        resolver="test",
+        observed_at=datetime.now(UTC),
+        evidence_url="https://example.org/outcome",
+        evidence_name="ผลจริง",
+    )
     assert brier == pytest.approx((0.8 - 1.0) ** 2)  # = 0.04
 
     assert pid not in [p.prediction_id for p in store.due_unresolved(date.today())]
@@ -59,7 +67,14 @@ def test_due_queue_and_brier_math(store):
 def test_brier_when_wrong(store):
     store.register_prediction("run-cal2", _prediction(confidence=0.9))
     pid = _latest_prediction_id(store, "run-cal2")
-    brier = store.resolve_prediction(pid, outcome=False, resolver="test")
+    brier = store.resolve_prediction(
+        pid,
+        outcome=False,
+        resolver="test",
+        observed_at=datetime.now(UTC),
+        evidence_url="https://example.org/outcome",
+        evidence_name="ผลจริง",
+    )
     assert brier == pytest.approx(0.81)  # มั่นใจ 0.9 แต่ผิด = โดนลงโทษหนัก
 
 
@@ -68,10 +83,16 @@ def test_resolution_append_only_and_no_double_resolve(store):
 
     store.register_prediction("run-cal3", _prediction(confidence=0.6))
     pid = _latest_prediction_id(store, "run-cal3")
-    store.resolve_prediction(pid, outcome=True, resolver="test")
+    kwargs = {
+        "resolver": "test",
+        "observed_at": datetime.now(UTC),
+        "evidence_url": "https://example.org/outcome",
+        "evidence_name": "ผลจริง",
+    }
+    store.resolve_prediction(pid, outcome=True, **kwargs)
 
     with pytest.raises(psycopg.errors.UniqueViolation):
-        store.resolve_prediction(pid, outcome=False, resolver="test")  # แก้ผลย้อนหลังไม่ได้
+        store.resolve_prediction(pid, outcome=False, **kwargs)  # แก้ผลย้อนหลังไม่ได้
     with psycopg.connect(DSN) as conn:
         with pytest.raises(psycopg.errors.RaiseException):
             conn.execute(

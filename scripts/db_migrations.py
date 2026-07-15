@@ -1,22 +1,20 @@
-"""Versioned idempotent DB migration runner for Chimlang.
+"""Versioned Chimlang migrations, serialized by one PostgreSQL advisory lock.
 
-Production can run this before app startup while the project still uses module-owned
-schema setup. The ledger prevents accidental silent drift between agents/tools.
+This module is the only production path allowed to execute DDL. API and Celery
+processes perform a read-only ledger check and fail closed when this runner has not
+finished.
 """
 
 import json
 from collections.abc import Callable
 
 import psycopg
+from psycopg import Connection
 
 from core.config import get_settings
-from core.runstore import RunStore
-from governance.gallery import GalleryStore
 from governance.pii import PIIDetector, load_allowlist
-from governance.store import GovernanceStore
-from governance.watchlist import WatchlistStore
-from simulation.newsdesk import setup_newsdesk
-from simulation.sources import setup_sources
+
+MIGRATION_LOCK = "chimlang:schema-migrations:v2"
 
 _LEDGER = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -27,110 +25,263 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 """
 
 
-def _apply_module_schemas(dsn: str) -> None:
-    RunStore(dsn).setup()
-    GovernanceStore(dsn).setup()
-    GalleryStore(dsn).setup()
-    WatchlistStore(dsn).setup()
-    setup_sources(dsn)
-    setup_newsdesk(dsn)
+def _apply_module_schemas(conn: Connection) -> None:
+    """Bootstrap a fresh database from every PostgreSQL-owned module schema."""
+    from core.appsettings import _SCHEMA as appsettings_schema
+    from core.llm.budget import _SCHEMA as budget_schema
+    from core.runstore import _SCHEMA as runstore_schema
+    from governance.gallery import _SCHEMA as gallery_schema
+    from governance.store import _SCHEMA as governance_schema
+    from governance.watchlist import _SCHEMA as watchlist_schema
+    from simulation.memory import _SCHEMA as memory_schema
+    from simulation.newsdesk import _SCHEMA as newsdesk_schema
+    from simulation.persona_packs import _SCHEMA as packs_schema
+    from simulation.sources import _SCHEMA as sources_schema
+
+    for schema in (
+        runstore_schema,
+        governance_schema,
+        gallery_schema,
+        watchlist_schema,
+        packs_schema,
+        sources_schema,
+        newsdesk_schema,
+        memory_schema,
+        appsettings_schema,
+        budget_schema,
+    ):
+        conn.execute(schema)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS citizen_feedback ("
+        "id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ NOT NULL DEFAULT now(), "
+        "segment_id TEXT NOT NULL, stance TEXT NOT NULL)"
+    )
 
 
-def _apply_pii_redaction_schema(dsn: str) -> None:
-    setup_sources(dsn)
-    setup_newsdesk(dsn)
+def _apply_rich_evidence_schema(conn: Connection) -> None:
+    conn.execute(
+        "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT ''"
+    )
+    conn.execute(
+        "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS duplicate_of TEXT NOT NULL DEFAULT ''"
+    )
+    conn.execute(
+        "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
+        "DOUBLE PRECISION NOT NULL DEFAULT 0"
+    )
+
+
+def _apply_pii_redaction_schema(conn: Connection) -> None:
+    conn.execute(
+        "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS pii_redactions "
+        "JSONB NOT NULL DEFAULT '{}'::jsonb"
+    )
+    conn.execute(
+        "ALTER TABLE external_fetch_cache ADD COLUMN IF NOT EXISTS pii_redactions "
+        "JSONB NOT NULL DEFAULT '{}'::jsonb"
+    )
+    conn.execute(
+        "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS pii_redactions "
+        "JSONB NOT NULL DEFAULT '{}'::jsonb"
+    )
     detector = PIIDetector(load_allowlist())
-    with psycopg.connect(dsn) as conn:
-        external_rows = conn.execute(
-            "SELECT url_hash, content FROM external_fetch_cache"
-        ).fetchall()
-        unsafe_external = [
-            (key,) for key, content in external_rows if detector.check(content).blocked
-        ]
-        if unsafe_external:
-            conn.cursor().executemany(
-                "DELETE FROM external_fetch_cache WHERE url_hash = %s", unsafe_external
-            )
-
-        news_rows = conn.execute("SELECT cache_key, payload FROM news_fetch_cache").fetchall()
-        unsafe_news = [
-            (key,)
-            for key, payload in news_rows
-            if detector.check(json.dumps(payload, ensure_ascii=False)).blocked
-        ]
-        if unsafe_news:
-            conn.cursor().executemany(
-                "DELETE FROM news_fetch_cache WHERE cache_key = %s", unsafe_news
-            )
+    external_rows = conn.execute("SELECT url_hash, content FROM external_fetch_cache").fetchall()
+    unsafe_external = [(key,) for key, content in external_rows if detector.check(content).blocked]
+    if unsafe_external:
+        conn.cursor().executemany(
+            "DELETE FROM external_fetch_cache WHERE url_hash = %s", unsafe_external
+        )
+    news_rows = conn.execute("SELECT cache_key, payload FROM news_fetch_cache").fetchall()
+    unsafe_news = [
+        (key,)
+        for key, payload in news_rows
+        if detector.check(json.dumps(payload, ensure_ascii=False)).blocked
+    ]
+    if unsafe_news:
+        conn.cursor().executemany("DELETE FROM news_fetch_cache WHERE cache_key = %s", unsafe_news)
 
 
-def _scrub_legacy_pii_error_metadata(dsn: str) -> None:
+def _scrub_legacy_pii_error_metadata(conn: Connection | str) -> None:
+    if isinstance(conn, str):
+        with psycopg.connect(conn) as opened:
+            _scrub_legacy_pii_error_metadata(opened)
+        return
     detector = PIIDetector(load_allowlist())
-    with psycopg.connect(dsn) as conn:
-        news_rows = conn.execute("SELECT id, error FROM news_items WHERE error <> ''").fetchall()
-        unsafe_news = [
-            ("พบ PII (GOV-01) — legacy metadata scrubbed", row_id)
-            for row_id, error in news_rows
-            if detector.check(error).blocked
-        ]
-        if unsafe_news:
-            conn.cursor().executemany("UPDATE news_items SET error = %s WHERE id = %s", unsafe_news)
-
-        source_rows = conn.execute("SELECT id, error FROM run_sources WHERE error <> ''").fetchall()
-        unsafe_sources = [
-            ("พบ PII (GOV-01) — legacy metadata scrubbed", row_id)
-            for row_id, error in source_rows
-            if detector.check(error).blocked
-        ]
-        if unsafe_sources:
-            conn.cursor().executemany(
-                "UPDATE run_sources SET error = %s WHERE id = %s", unsafe_sources
-            )
+    news_rows = conn.execute("SELECT id, error FROM news_items WHERE error <> ''").fetchall()
+    unsafe_news = [
+        ("พบ PII (GOV-01) — legacy metadata scrubbed", row_id)
+        for row_id, error in news_rows
+        if detector.check(error).blocked
+    ]
+    if unsafe_news:
+        conn.cursor().executemany("UPDATE news_items SET error = %s WHERE id = %s", unsafe_news)
+    source_rows = conn.execute("SELECT id, error FROM run_sources WHERE error <> ''").fetchall()
+    unsafe_sources = [
+        ("พบ PII (GOV-01) — legacy metadata scrubbed", row_id)
+        for row_id, error in source_rows
+        if detector.check(error).blocked
+    ]
+    if unsafe_sources:
+        conn.cursor().executemany("UPDATE run_sources SET error = %s WHERE id = %s", unsafe_sources)
 
 
-MIGRATIONS: list[tuple[str, str, Callable[[str], None]]] = [
+def _apply_runtime_and_prediction_experience(conn: Connection) -> None:
+    conn.execute(
+        """
+        ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMPTZ;
+        ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS attempt INT NOT NULL DEFAULT 0;
+        ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS idempotency_key TEXT NOT NULL DEFAULT '';
+        CREATE UNIQUE INDEX IF NOT EXISTS sim_runs_idempotency_key
+            ON sim_runs (idempotency_key) WHERE idempotency_key <> '';
+
+        ALTER TABLE run_events ADD COLUMN IF NOT EXISTS stage TEXT NOT NULL DEFAULT '';
+        ALTER TABLE run_events ADD COLUMN IF NOT EXISTS progress INT;
+        ALTER TABLE run_events ADD COLUMN IF NOT EXISTS call_status TEXT NOT NULL DEFAULT '';
+        ALTER TABLE run_events ADD COLUMN IF NOT EXISTS cost_usd DOUBLE PRECISION;
+        CREATE INDEX IF NOT EXISTS run_events_replay ON run_events (run_id, id);
+
+        CREATE TABLE IF NOT EXISTS run_synthesis_revisions (
+            id BIGSERIAL PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            kind TEXT NOT NULL CHECK (kind IN ('analyst', 'mechanical')),
+            synthesis JSONB NOT NULL,
+            metrics JSONB NOT NULL DEFAULT '{}',
+            model_version TEXT NOT NULL DEFAULT '',
+            parser_mode TEXT NOT NULL DEFAULT '',
+            cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS run_synthesis_revisions_run
+            ON run_synthesis_revisions (run_id, id);
+
+        CREATE TABLE IF NOT EXISTS simulation_findings (
+            id BIGSERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+            run_id TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            metrics JSONB NOT NULL DEFAULT '{}',
+            provenance JSONB NOT NULL DEFAULT '{}',
+            model_version TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS simulation_findings_run ON simulation_findings (run_id, id);
+
+        ALTER TABLE prediction_registry ADD COLUMN IF NOT EXISTS source_kind TEXT
+            NOT NULL DEFAULT 'legacy';
+        ALTER TABLE prediction_registry ADD COLUMN IF NOT EXISTS forecast_type TEXT
+            NOT NULL DEFAULT 'binary';
+        ALTER TABLE prediction_registry ADD COLUMN IF NOT EXISTS provenance JSONB
+            NOT NULL DEFAULT '{}';
+        ALTER TABLE prediction_registry ADD COLUMN IF NOT EXISTS created_by TEXT
+            NOT NULL DEFAULT '';
+
+        ALTER TABLE prediction_resolution ADD COLUMN IF NOT EXISTS observed_at TIMESTAMPTZ;
+        ALTER TABLE prediction_resolution ADD COLUMN IF NOT EXISTS evidence_url TEXT
+            NOT NULL DEFAULT '';
+        ALTER TABLE prediction_resolution ADD COLUMN IF NOT EXISTS evidence_name TEXT
+            NOT NULL DEFAULT '';
+        """
+    )
+
+
+def _apply_structured_output_schema(conn: Connection) -> None:
+    conn.execute(
+        "ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS parser_mode TEXT NOT NULL DEFAULT ''"
+    )
+    # Existing rows remain physically untouched and read as legacy via the new default.
+    conn.execute(
+        """
+        DROP TRIGGER IF EXISTS run_synthesis_revisions_append_only ON run_synthesis_revisions;
+        CREATE TRIGGER run_synthesis_revisions_append_only
+            BEFORE UPDATE OR DELETE ON run_synthesis_revisions
+            FOR EACH ROW EXECUTE FUNCTION reject_mutation();
+        DROP TRIGGER IF EXISTS simulation_findings_append_only ON simulation_findings;
+        CREATE TRIGGER simulation_findings_append_only
+            BEFORE UPDATE OR DELETE ON simulation_findings
+            FOR EACH ROW EXECUTE FUNCTION reject_mutation();
+        """
+    )
+
+
+def _retain_synthesis_revisions(conn: Connection) -> None:
+    conn.execute(
+        "ALTER TABLE run_synthesis_revisions "
+        "DROP CONSTRAINT IF EXISTS run_synthesis_revisions_run_id_fkey"
+    )
+
+
+Migration = tuple[str, str, Callable[[Connection], None]]
+
+MIGRATIONS: list[Migration] = [
     (
         "2026-07-15-run-lifecycle-newsdesk-cache",
-        "run lifecycle columns, source/news evidence tables, News Desk fetch cache",
+        "bootstrap all module schemas and run lifecycle/news cache",
         _apply_module_schemas,
     ),
     (
         "2026-07-15-run-trust-lineage-rich-evidence",
-        "run lineage events, trust/readiness metadata, rich evidence source columns",
-        _apply_module_schemas,
+        "run lineage, trust metadata and rich evidence columns",
+        _apply_rich_evidence_schema,
     ),
     (
         "2026-07-15-pii-redaction-before-processing",
-        "redaction provenance columns and purge of unsafe external fetch caches",
+        "redaction provenance columns and unsafe cache purge",
         _apply_pii_redaction_schema,
     ),
     (
         "2026-07-15-scrub-legacy-pii-error-metadata",
-        "remove raw PII values from legacy source and news error metadata",
+        "remove raw PII values from legacy error metadata",
         _scrub_legacy_pii_error_metadata,
+    ),
+    (
+        "2026-07-15-prediction-experience-v1",
+        "runtime heartbeat/events plus finding/prediction/synthesis contracts",
+        _apply_runtime_and_prediction_experience,
+    ),
+    (
+        "2026-07-15-structured-output-v1",
+        "structured-output parser provenance for debate posts",
+        _apply_structured_output_schema,
+    ),
+    (
+        "2026-07-15-synthesis-revision-retention-v1",
+        "retain append-only synthesis revisions after operational run deletion",
+        _retain_synthesis_revisions,
     ),
 ]
 
 
+def migrate(dsn: str) -> list[str]:
+    """Apply pending versions under one session-level advisory lock."""
+    applied_now: list[str] = []
+    with psycopg.connect(dsn) as conn:
+        conn.execute("SELECT pg_advisory_lock(hashtext(%s))", (MIGRATION_LOCK,))
+        try:
+            with conn.transaction():
+                conn.execute(_LEDGER)
+            for version, description, apply in MIGRATIONS:
+                row = conn.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version = %s", (version,)
+                ).fetchone()
+                if row is not None:
+                    continue
+                with conn.transaction():
+                    apply(conn)
+                    conn.execute(
+                        "INSERT INTO schema_migrations (version, description) VALUES (%s, %s)",
+                        (version, description),
+                    )
+                applied_now.append(version)
+        finally:
+            conn.execute("SELECT pg_advisory_unlock(hashtext(%s))", (MIGRATION_LOCK,))
+    return applied_now
+
+
 def main() -> None:
-    settings = get_settings()
-    with psycopg.connect(settings.postgres_url) as conn:
-        conn.execute(_LEDGER)
-        applied = {
-            row[0] for row in conn.execute("SELECT version FROM schema_migrations").fetchall()
-        }
-    for version, description, apply in MIGRATIONS:
-        if version in applied:
-            print(f"skip {version}")
-            continue
-        apply(settings.postgres_url)
-        with psycopg.connect(settings.postgres_url) as conn:
-            conn.execute(
-                "INSERT INTO schema_migrations (version, description) VALUES (%s, %s) "
-                "ON CONFLICT (version) DO NOTHING",
-                (version, description),
-            )
+    applied = migrate(get_settings().postgres_url)
+    for version in applied:
         print(f"applied {version}")
+    if not applied:
+        print("skip: database schema is already current")
     print("database schema is up to date")
 
 

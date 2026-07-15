@@ -10,8 +10,6 @@
 
 from dataclasses import dataclass
 
-import psycopg
-
 from simulation.persona import PersonaFactory
 
 CITIZEN_DISCLAIMER = (
@@ -164,15 +162,14 @@ class FeedbackPool:
         self._dsn = dsn
 
     def _conn(self):
-        return psycopg.connect(self._dsn)
+        from core.db import connection
+
+        return connection(self._dsn)
 
     def setup(self) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS citizen_feedback ("
-                "id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ NOT NULL DEFAULT now(), "
-                "segment_id TEXT NOT NULL, stance TEXT NOT NULL)"
-            )
+        from core.db import require_schema
+
+        require_schema(self._dsn)
 
     def add(self, segment_id: str, stance: str) -> None:
         if stance not in STANCES:

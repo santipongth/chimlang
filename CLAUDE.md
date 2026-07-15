@@ -5,7 +5,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - คู่มือ agent ทุกโมเดล + protocol ส่งมอบงานข้ามโมเดล: @AGENTS.md | สถานะล่าสุด: @docs/STATE.md (**อัปเดตก่อนจบทุก session**)
 - Spec ฉบับเต็ม: @docs/PRD-SANAM.md (PRD v1.1 — ชื่อชั่วคราวเดิม "SANAM" = ชิมลาง)
 - การตัดสินใจทางเทคนิค: @docs/TECH-DECISIONS.md (อ่านก่อนเลือก library/framework ใดๆ)
-- Scope ปัจจุบัน: **Phase 7 (News Desk + Media Diet — SIM-11 เต็มรูป)** — ดู @docs/PHASE7-BRIEF.md (Phase 0-6 ปิดครบแล้ว: ดู brief แต่ละเฟสใน docs/) ห้ามเริ่มงานนอก scope โดยไม่ถามก่อน
+- Scope ปัจจุบัน: **Phase 8 (Prediction Experience + Trusted Agent Runtime)** — ดู @docs/PHASE8-BRIEF.md; Phase 7 ปิดแล้ว
 
 ## โครงสร้าง repo (เป้าหมาย)
 
@@ -34,7 +34,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 
 1. **ห้าม ingest หรือจัดเก็บ PII ดิบ** — external URL/RSS/News Desk ต้อง redact typed identifiers แล้วสแกนซ้ำก่อน cache/chunk/snapshot/LLM (ADR-0010); URL ที่มี PII, direct input, detector ปิด/พัง หรือ re-scan ไม่ผ่าน = block. บุคคลสาธารณะใน allowlist คงไว้ได้ในบริบทข่าว (GOV-01)
 2. **Agent external retrieval (SIM-11) ต้องปิดใน Hindcast Mode เสมอ** — ทุก code path ที่ agent ดึงข้อมูลภายนอก ต้องตรวจ flag `hindcast_mode` ก่อน และมี leak test กำกับ (TRUST-03)
-3. **Prediction Registry เป็น append-only** — ห้ามมี code path สำหรับแก้ไขหรือลบ prediction record ทุก simulation run ต้องเขียน record อย่างน้อย 1 รายการ (TRUST-01)
+3. **Prediction/Finding Registry เป็น append-only** — ห้ามแก้ไขหรือลบ record; ทุก run ต้องมี SimulationFinding หรือ Prediction อย่างน้อย 1 รายการ และเฉพาะ Prediction ที่มี real-world measurement+due date เข้า Calibration (ADR-0011/TRUST-01)
 4. **ทุก export (PDF/ภาพ/ตาราง) ต้องผ่าน watermark module** ก่อนถึงมือผู้ใช้ (GOV-03)
 5. **ห้าม implement ฟีเจอร์สร้างคอนเทนต์ชักจูง** (ad copy, สคริปต์หาเสียง) จากผลจำลอง (GOV-05)
 6. **Scenario ประเภทเลือกตั้ง/การเมือง**: บังคับ output ระดับ aggregate เท่านั้น ปิด Sim-to-Signal และติดป้าย simulation_estimate / not_field_poll / aggregate_only (GOV-02)

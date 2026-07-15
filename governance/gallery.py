@@ -16,9 +16,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import psycopg
-
 from core.config import get_settings
+from core.db import connection, require_schema
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
 from governance.pii import PIIDetector, load_allowlist
 from governance.watermark import WATERMARK_LABEL, WatermarkDisabledError
@@ -90,11 +89,10 @@ class GalleryStore:
         self._dsn = dsn
 
     def _conn(self):
-        return psycopg.connect(self._dsn)
+        return connection(self._dsn)
 
     def setup(self) -> None:
-        with self._conn() as conn:
-            conn.execute(_SCHEMA)
+        require_schema(self._dsn)
 
     def share(
         self, *, subject: str, agents: int, payload: dict, created_by: str, run_id: str = ""

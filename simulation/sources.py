@@ -17,9 +17,9 @@ import re
 from urllib.parse import urlparse
 
 import httpx
-import psycopg
 
 from core.config import get_settings
+from core.db import connection, require_schema
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 
 MAX_SOURCES = 10
@@ -63,26 +63,7 @@ CREATE TABLE IF NOT EXISTS external_fetch_cache (
 
 
 def setup_sources(dsn: str) -> None:
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT ''"
-        )
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS duplicate_of TEXT NOT NULL DEFAULT ''"
-        )
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
-            "DOUBLE PRECISION NOT NULL DEFAULT 0"
-        )
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS pii_redactions "
-            "JSONB NOT NULL DEFAULT '{}'::jsonb"
-        )
-        conn.execute(
-            "ALTER TABLE external_fetch_cache ADD COLUMN IF NOT EXISTS pii_redactions "
-            "JSONB NOT NULL DEFAULT '{}'::jsonb"
-        )
+    require_schema(dsn)
 
 
 def _strip_html(html: str) -> str:
@@ -219,26 +200,7 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
         raise ValueError(f"จำกัด {MAX_SOURCES} sources ต่อ run")
     detector = PIIDetector(load_allowlist())
     results: list[dict] = []
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT ''"
-        )
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS duplicate_of TEXT NOT NULL DEFAULT ''"
-        )
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
-            "DOUBLE PRECISION NOT NULL DEFAULT 0"
-        )
-        conn.execute(
-            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS pii_redactions "
-            "JSONB NOT NULL DEFAULT '{}'::jsonb"
-        )
-        conn.execute(
-            "ALTER TABLE external_fetch_cache ADD COLUMN IF NOT EXISTS pii_redactions "
-            "JSONB NOT NULL DEFAULT '{}'::jsonb"
-        )
+    with connection(dsn) as conn:
         seen_hashes: dict[str, str] = {}
         for src in sources:
             kind = str(src.get("kind", "text"))
@@ -406,8 +368,7 @@ def retrieve_evidence(
 ) -> list[dict]:
     """Rich deterministic retrieval with citation spans and source-quality metadata."""
     try:
-        with psycopg.connect(dsn) as conn:
-            conn.execute(_SCHEMA)
+        with connection(dsn) as conn:
             rows = conn.execute(
                 "SELECT c.id, c.source_label, c.seq, c.content, "
                 "COALESCE(s.kind, 'text'), COALESCE(s.quality_score, 0), "
@@ -457,8 +418,7 @@ def retrieve_evidence(
 def _retrieve_context_legacy(dsn: str, run_id: str, query: str, *, k: int = 6) -> tuple[str, ...]:
     """top-k chunks ของ run แบบ hybrid deterministic: 3-gram overlap + term overlap."""
     try:
-        with psycopg.connect(dsn) as conn:
-            conn.execute(_SCHEMA)
+        with connection(dsn) as conn:
             rows = conn.execute(
                 "SELECT source_label, content FROM run_chunks WHERE run_id = %s LIMIT 500",
                 (run_id,),

@@ -429,14 +429,18 @@ def test_post_runs_fabric_full_governance(client):
     detail = client.get(f"/runs/{rid}.json").json()
     assert detail["status"] == "complete"
     assert "tipping_points" in detail["payload"]  # PRD ขั้น 7 ติดมากับ payload fabric
-    # ทุก run ต้องมี prediction ≥1 (กฎเหล็กข้อ 3)
+    # Run ที่ไม่มี real-world contract ต้องเป็น SimulationFinding และไม่เข้า Calibration
     import psycopg
 
     with psycopg.connect(DSN) as conn:
-        n = conn.execute(
+        predictions = conn.execute(
             "SELECT count(*) FROM prediction_registry WHERE run_id = %s", (rid,)
         ).fetchone()[0]
-    assert n >= 1
+        findings = conn.execute(
+            "SELECT count(*) FROM simulation_findings WHERE run_id = %s", (rid,)
+        ).fetchone()[0]
+    assert predictions == 0 and findings == 1
+    assert detail["result_kind"] == "simulation_finding"
     assert client.delete(f"/runs/{rid}").status_code == 200
     assert client.get(f"/runs/{rid}.json").status_code == 404
 
@@ -533,13 +537,14 @@ def test_post_runs_user_claim_registered(client):
 
     with psycopg.connect(DSN) as conn:
         row = conn.execute(
-            "SELECT claim, measurement, due_date FROM prediction_registry "
+            "SELECT claim, measurement, due_date, source_kind FROM prediction_registry "
             "WHERE run_id = %s ORDER BY id DESC LIMIT 1",
             (rid,),
         ).fetchone()
     assert row[0] == "โพลสำนัก X หลังแถลงจะต่ำกว่า 50%"
     assert row[1] == "โพลสำนัก X รอบสิ้นเดือน"
     assert row[2] == date.today() + timedelta(days=14)
+    assert row[3] == "user"
     client.delete(f"/runs/{rid}")
 
 

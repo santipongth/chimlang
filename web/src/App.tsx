@@ -115,9 +115,12 @@ function Sidebar({
 }
 
 function Shell() {
-  const [page, setPage] = useState<Page>("home");
+  const initialHash = window.location.hash.replace(/^#\/?/, "");
+  const initialRun = initialHash.match(/^runs\/([^/]+)$/)?.[1] ?? null;
+  const initialPage = (initialRun ? "run" : initialHash || "home") as Page;
+  const [page, setPage] = useState<Page>(initialPage);
   const [request, setRequest] = useState<RunRequest | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(initialRun);
   const [unread, setUnread] = useState(0);
 
   const refreshUnread = () =>
@@ -130,31 +133,56 @@ function Shell() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const syncRoute = () => {
+      const hash = window.location.hash.replace(/^#\/?/, "");
+      const matchedRun = hash.match(/^runs\/([^/]+)$/)?.[1];
+      if (matchedRun) {
+        setRunId(matchedRun);
+        setPage("run");
+      } else if (hash) {
+        setPage(hash as Page);
+      } else {
+        setPage("home");
+      }
+    };
+    window.addEventListener("hashchange", syncRoute);
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
+
+  const goPage = (next: Page) => {
+    window.location.hash = `/${next}`;
+    setPage(next);
+  };
+  const goRun = (id: string) => {
+    setRunId(id);
+    window.location.hash = `/runs/${encodeURIComponent(id)}`;
+    setPage("run");
+  };
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar page={page} setPage={setPage} badges={{ watchlist: unread }} />
+      <Sidebar page={page} setPage={goPage} badges={{ watchlist: unread }} />
       <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
         <div className="w-full">
-          {page === "home" && <Landing onStart={() => setPage("new")} />}
+          {page === "home" && <Landing onStart={() => goPage("new")} />}
           {page === "new" && (
             <NewRun
               onCompare={(req) => {
                 setRequest(req);
-                setPage("compare");
+                goPage("compare");
               }}
               onCreated={(id) => {
-                setRunId(id);
-                setPage("run");
+                goRun(id);
               }}
             />
           )}
-          {page === "run" && runId && <RunDetail runId={runId} onBack={() => setPage("history")} />}
+          {page === "run" && runId && <RunDetail runId={runId} onBack={() => goPage("history")} />}
           {page === "compare" && <Compare request={request} />}
           {page === "history" && (
             <Runs
               onOpen={(id) => {
-                setRunId(id);
-                setPage("run");
+                goRun(id);
               }}
             />
           )}

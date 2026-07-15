@@ -14,12 +14,16 @@ import {
 } from "lucide-react";
 import {
   SimRunDetail,
+  ValidationReport,
+  createPrediction,
+  fetchValidation,
   fetchRunDetail,
   pct,
   refreshRunNews,
   resynthesizeRun,
   shareRun,
   unshareRun,
+  validateRun,
 } from "../api";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader, Tabs } from "../ui";
@@ -339,6 +343,15 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
   const [repairBusy, setRepairBusy] = useState("");
   const [repairErr, setRepairErr] = useState("");
+  const [predictionOpen, setPredictionOpen] = useState(false);
+  const [predictionDraft, setPredictionDraft] = useState({
+    claim: "",
+    probability: 0.5,
+    measurement: "",
+    due_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+  });
+  const [contractBusy, setContractBusy] = useState(false);
+  const [validation, setValidation] = useState<ValidationReport | null>(null);
 
   useEffect(() => {
     fetchRunDetail(runId)
@@ -362,6 +375,37 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
       setRepairErr(String(e.message ?? e));
     } finally {
       setRepairBusy("");
+    }
+  }
+
+  async function savePrediction() {
+    setContractBusy(true);
+    setRepairErr("");
+    try {
+      await createPrediction(runId, {
+        ...predictionDraft,
+        domain: data?.domain,
+        forecast_type: "binary",
+      });
+      setPredictionOpen(false);
+      await reload();
+    } catch (e: any) {
+      setRepairErr(String(e.message ?? e));
+    } finally {
+      setContractBusy(false);
+    }
+  }
+
+  async function startValidation() {
+    setContractBusy(true);
+    setRepairErr("");
+    try {
+      await validateRun(runId);
+      setValidation(await fetchValidation(runId));
+    } catch (e: any) {
+      setRepairErr(String(e.message ?? e));
+    } finally {
+      setContractBusy(false);
     }
   }
 
@@ -422,12 +466,95 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
       {data && (data.status === "complete" || data.status === "error") && (
         <>
           <ExecutiveReadout data={data} p={p} isDebate={isDebate} t={t} />
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {data.result_kind === "prediction" ? "Prediction contract" : "Simulation finding"}
+                </div>
+                <p className="mt-2 text-sm">
+                  {data.predictions?.[0]?.claim ?? data.findings?.[0]?.summary ?? "ยังไม่มี result contract"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {data.result_kind === "prediction"
+                    ? `${Math.round((data.predictions?.[0]?.probability ?? 0) * 100)}% · due ${data.predictions?.[0]?.due_date}`
+                    : "ผลนี้ไม่เข้า Calibration จนกว่าจะสร้าง claim ที่วัดผลโลกจริงได้"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {data.result_kind !== "prediction" && (
+                  <button
+                    onClick={() => setPredictionOpen((v) => !v)}
+                    className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white"
+                  >
+                    สร้าง Prediction ที่วัดผลได้
+                  </button>
+                )}
+                <button
+                  disabled={contractBusy}
+                  onClick={startValidation}
+                  className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  Validate 3 seeds
+                </button>
+              </div>
+            </div>
+            {predictionOpen && (
+              <div className="mt-4 grid gap-3 rounded-xl border border-border bg-background p-4 md:grid-cols-2">
+                <input
+                  value={predictionDraft.claim}
+                  onChange={(e) => setPredictionDraft({ ...predictionDraft, claim: e.target.value })}
+                  placeholder="เหตุการณ์ binary ที่คาดว่าจะเกิด"
+                  className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
+                />
+                <input
+                  value={predictionDraft.measurement}
+                  onChange={(e) => setPredictionDraft({ ...predictionDraft, measurement: e.target.value })}
+                  placeholder="วิธีวัดผล"
+                  className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
+                />
+                <label className="text-xs text-muted-foreground">
+                  Probability {(predictionDraft.probability * 100).toFixed(0)}%
+                  <input
+                    type="range"
+                    min="0.01"
+                    max="0.99"
+                    step="0.01"
+                    value={predictionDraft.probability}
+                    onChange={(e) => setPredictionDraft({ ...predictionDraft, probability: Number(e.target.value) })}
+                    className="mt-2 w-full"
+                  />
+                </label>
+                <input
+                  type="date"
+                  value={predictionDraft.due_date}
+                  onChange={(e) => setPredictionDraft({ ...predictionDraft, due_date: e.target.value })}
+                  className="rounded-lg border border-border px-3 py-2 text-sm"
+                />
+                <button
+                  disabled={contractBusy || !predictionDraft.claim || !predictionDraft.measurement}
+                  onClick={savePrediction}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50 md:col-span-2"
+                >
+                  บันทึกแบบ append-only
+                </button>
+              </div>
+            )}
+            {validation && (
+              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
+                <div>Sign agreement {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
+                <div>Dispersion {validation.between_run_dispersion.toFixed(3)}</div>
+                <div>Failure {pct(validation.failure_rate)}</div>
+                <div>Cost ${validation.total_cost_usd.toFixed(4)}</div>
+              </div>
+            )}
+          </section>
           <TrustScorecard scorecard={data.trust_scorecard} />
           {canRepair && (
             <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
               <div>
                 <div className="text-sm font-semibold">Run repair</div>
-                <p className="text-xs text-muted-foreground">Refresh evidence or rebuild synthesis from the stored snapshot.</p>
+                <p className="text-xs text-muted-foreground">Refresh evidence or append mechanical metrics from the stored snapshot.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {data.config?.live_news && (
@@ -444,7 +571,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   onClick={() => repair("synthesis")}
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong disabled:opacity-50"
                 >
-                  <FileSearch className="h-4 w-4" /> Resynthesize
+                  <FileSearch className="h-4 w-4" /> Recompute metrics
                 </button>
               </div>
               {repairErr && <div className="basis-full rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{repairErr}</div>}

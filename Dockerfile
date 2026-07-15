@@ -21,6 +21,7 @@ COPY simulation/ simulation/
 COPY graphlayer/ graphlayer/
 COPY trust/ trust/
 COPY governance/ governance/
+COPY scripts/ scripts/
 COPY config/ config/
 COPY assets/ assets/
 COPY data/samples/ data/samples/

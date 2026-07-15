@@ -150,7 +150,7 @@ def test_async_run_precreates_queued_row(client, monkeypatch):
 
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
-    monkeypatch.setattr(persistent_run_task, "delay", lambda *args: _QueuedResult())
+    monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         r = client.post(
             "/runs/async",
@@ -183,7 +183,7 @@ def test_cancel_queued_run_updates_status(client, monkeypatch):
 
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
-    monkeypatch.setattr(persistent_run_task, "delay", lambda *args: _QueuedResult())
+    monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         r = client.post(
             "/runs/async",
@@ -260,10 +260,11 @@ def test_resynthesize_run_rebuilds_payload_from_posts(client):
         r = client.post(f"/runs/{rid}/resynthesize")
         assert r.status_code == 200
         detail = client.get(f"/runs/{rid}.json").json()
-        assert detail["payload"]["synthesis"]["resynthesized_from_snapshot"] is True
-        assert detail["payload"]["metrics"]["posts_ok"] == 4
-        assert detail["payload"]["protocol"]["contention_graph"]["nodes"]
-        assert detail["payload"]["resynthesized_at"]
+        assert detail["payload"]["synthesis"]["summary"] == "old"
+        revision = detail["synthesis_revisions"][-1]
+        assert revision["kind"] == "mechanical"
+        assert revision["synthesis"]["resynthesized_from_snapshot"] is True
+        assert revision["metrics"]["posts_ok"] == 4
     finally:
         client.delete(f"/runs/{rid}")
 

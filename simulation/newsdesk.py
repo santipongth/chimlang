@@ -18,9 +18,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import httpx
-import psycopg
 
 from core.config import get_settings
+from core.db import connection, require_schema
 from core.run_context import RunContext, ensure_external_retrieval_allowed
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 from simulation.sources import _parse_rss, _strip_html, _trigrams, validate_external_url
@@ -123,8 +123,7 @@ def _tavily_search(query: str, api_key: str, *, max_results: int = 3) -> list[tu
 
 
 def setup_newsdesk(dsn: str) -> None:
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
+    require_schema(dsn)
 
 
 def _cache_key(provider: str, query: str, url: str) -> str:
@@ -207,8 +206,7 @@ def _cached_fetch(
     if detector.check(f"{query}\n{url}").blocked:
         raise PIIRedactionError("news query or URL contains PII")
     key = _cache_key(provider, query, url)
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
+    with connection(dsn) as conn:
         row = conn.execute(
             "SELECT payload, fetched_at FROM news_fetch_cache WHERE cache_key = %s",
             (key,),
@@ -216,8 +214,7 @@ def _cached_fetch(
         if row and row[1] > datetime.now(UTC) - timedelta(hours=NEWS_CACHE_TTL_HOURS):
             return _prepare_news_payload(provider, list(row[0]), detector)
     payload = _prepare_news_payload(provider, list(fetcher()), detector)
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
+    with connection(dsn) as conn:
         conn.execute(
             "INSERT INTO news_fetch_cache (cache_key, provider, query, url, payload, fetched_at) "
             "VALUES (%s, %s, %s, %s, %s::jsonb, now()) "
@@ -311,12 +308,7 @@ def gather(
     items: list[NewsItem] = []
     seen: set[str] = set()
     now = datetime.now(UTC).isoformat()
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
-        conn.execute(
-            "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS pii_redactions "
-            "JSONB NOT NULL DEFAULT '{}'::jsonb"
-        )
+    with connection(dsn) as conn:
         for provider, query, url, error in failures:
             if len(items) >= MAX_ITEMS_PER_RUN:
                 break
@@ -398,8 +390,7 @@ def gather(
 
 def load_items(dsn: str, run_id: str) -> list[NewsItem]:
     """อ่าน snapshot จาก DB เท่านั้น — path สำหรับ replay/แสดงผล ไม่แตะเน็ต (NFR-07)"""
-    with psycopg.connect(dsn) as conn:
-        conn.execute(_SCHEMA)
+    with connection(dsn) as conn:
         rows = conn.execute(
             "SELECT provider, url, title, content, fetched_at::text, channel_tags, status, error, "
             "pii_redactions "

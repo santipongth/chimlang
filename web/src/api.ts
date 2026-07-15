@@ -219,6 +219,48 @@ export interface SimRunDetail extends SimRunSummary {
   payload: Record<string, any> | null;
   error: string | null;
   posts: DebatePostItem[];
+  result_kind?: "simulation_finding" | "prediction";
+  findings?: SimulationFinding[];
+  predictions?: PredictionContract[];
+  synthesis_revisions?: SynthesisRevision[];
+}
+
+export interface SimulationFinding {
+  finding_id: number;
+  created_at: string;
+  summary: string;
+  metrics: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  model_version: string;
+}
+
+export interface PredictionContract {
+  prediction_id: number;
+  claim: string;
+  probability: number;
+  measurement: string;
+  due_date: string;
+  domain: string;
+  source_kind: string;
+  forecast_type: "binary";
+  resolution: null | {
+    outcome: boolean;
+    observed_at: string;
+    evidence_url: string;
+    evidence_name: string;
+    note: string;
+    brier: number;
+  };
+}
+
+export interface SynthesisRevision {
+  id: number;
+  created_at: string;
+  kind: "analyst" | "mechanical";
+  synthesis: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+  parser_mode: string;
+  cost_usd: number;
 }
 
 export interface SimRunDetail {
@@ -252,6 +294,53 @@ export async function fetchRunDetail(runId: string): Promise<SimRunDetail> {
 export async function deleteRun(runId: string): Promise<void> {
   const r = await fetch(`/runs/${runId}`, { method: "DELETE" });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+export async function createPrediction(
+  runId: string,
+  body: {
+    claim: string;
+    probability: number;
+    measurement: string;
+    due_date: string;
+    domain?: string;
+    forecast_type: "binary";
+  },
+): Promise<{ predictions: PredictionContract[]; findings: SimulationFinding[] }> {
+  const r = await fetch(`/runs/${runId}/predictions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export interface ValidationReport {
+  parent_run_id: string;
+  status: string;
+  completed: number;
+  failure_rate: number;
+  sign_agreement: number | null;
+  stance_range: [number, number] | null;
+  between_run_dispersion: number;
+  claim_overlap: number | null;
+  agent_failure_rate: number;
+  total_cost_usd: number;
+  children: { run_id: string; seed: number; status: string; error: string | null }[];
+  note: string;
+}
+
+export async function validateRun(runId: string): Promise<ValidationReport> {
+  const r = await fetch(`/runs/${runId}/validate`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchValidation(runId: string): Promise<ValidationReport> {
+  const r = await fetch(`/runs/${runId}/validation`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
 }
 
 export async function cancelRun(runId: string): Promise<void> {
@@ -706,6 +795,17 @@ export interface CalibrationData {
   items: CalibrationItem[];
   due: { prediction_id: number; claim: string; domain: string; confidence: number; due_date: string }[];
   upcoming: { prediction_id: number; claim: string; domain: string; confidence: number; due_date: string }[];
+  baseline_brier: number;
+  sample_size: number;
+  reliability: {
+    lower: number;
+    upper: number;
+    n: number;
+    mean_confidence: number | null;
+    observed_rate: number | null;
+    standard_error: number | null;
+  }[];
+  confidence_histogram: { lower: number; upper: number; n: number }[];
 }
 
 export async function fetchCalibration(): Promise<CalibrationData> {
@@ -716,13 +816,14 @@ export async function fetchCalibration(): Promise<CalibrationData> {
 
 export async function resolvePrediction(
   id: number,
-  outcome: "true" | "partial" | "false",
+  outcome: "true" | "false",
   note: string,
+  evidence: { observed_at: string; evidence_url: string; evidence_name: string },
 ): Promise<{ brier: number }> {
   const r = await fetch(`/predictions/${id}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outcome, note }),
+    body: JSON.stringify({ outcome, note, ...evidence }),
   });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
