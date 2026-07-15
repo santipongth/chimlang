@@ -164,3 +164,26 @@ Verification:
 - working tree ก่อนและหลังงานยังมี `.gitignore` modified และ `diagrams/` untracked จากผู้ใช้; ห้าม commit/revert โดยไม่ถาม
 - partial `resynthesize` ตั้งใจเป็น deterministic fallback ไม่ใช่ analyst LLM synthesis เพื่อไม่ทำให้ repair endpoint ใช้งบหรือได้ผลไม่ reproducible
 - `refresh-news` ใช้ run_id เดิมและ append snapshot ข่าวใน `news_items`; UI อ่านรายการทั้งหมดของ run เพื่อคง evidence history
+
+## Codex — trust/readiness/retrieval/debate/lineage pass (15 ก.ค. 2026)
+
+ผู้ใช้สั่งให้ทำชุดปรับปรุง 9 ข้อจากรีวิวรอบใหม่ให้ครบ ทั้ง core engine และ frontend:
+
+- Backend: เพิ่ม `core/run_quality.py` สำหรับ `POST /runs/readiness` และ `trust_scorecard` ใน run detail; ย้าย readiness endpoint ใหม่เข้า router package `api/routers/runs.py` เป็นก้าวแรกของการแยก API structure
+- RunStore: เพิ่ม `parent_run_id`, `run_events` audit trail, `failure_reason` ใน `debate_posts`, event อัตโนมัติสำหรับ create/job/running/finish/fail/cancel/update payload และ lineage จาก retry
+- Retrieval: เพิ่ม `retrieve_evidence()` พร้อม deterministic hybrid/BM25-style scoring, vector fallback metadata, citation spans, source quality score, content hash และ duplicate detection; `retrieve_context()` ยัง backward-compatible
+- Debate: เพิ่ม `failure_reason`, deterministic protocol analysis (`claim_decomposition`, `per_round_disagreement`, `contention_graph`, `failure_taxonomy`) และให้ resynthesize rebuild protocol จาก snapshot ด้วย
+- API payload: debate run เก็บ `evidence_matches`, `protocol`, `retrieval_mode`, `parent_run_id`; retry สร้าง child run พร้อม event `retry_requested`
+- Frontend: New Run มี readiness/cost estimate, validation target, retrieval mode; RunDetail มี Trust Scorecard, Evidence highlights, Debate protocol panel, lineage/audit trail; แก้ `SocialSignalMap` ให้นับตาม `channel_tags` จริง; Runs page ใช้ stacked 24h trend
+- Migration: เพิ่ม version `2026-07-15-run-trust-lineage-rich-evidence`
+- Tests: เพิ่ม coverage readiness, trust scorecard shape, rich retrieval/vector fallback/duplicate, run lineage events, debate protocol/failure taxonomy
+
+Verification:
+- `uv run pytest -q` ผ่าน 335 tests (มี warning เดิมจาก FastAPI/TestClient เรื่อง httpx2)
+- `uv run ruff check .` ผ่าน
+- `uv run ruff format --check .` ผ่าน
+- `web npm.cmd run build` ผ่าน
+
+ข้อควรระวังส่งต่อ:
+- `.gitignore` modified และ `diagrams/` untracked เป็น user changes เดิม ห้าม commit/revert หากผู้ใช้ไม่สั่ง
+- API split ตอนนี้เริ่มที่ router ใหม่สำหรับ run readiness; endpoints legacy อื่นยังอยู่ใน `api/app.py` เพื่อเลี่ยง regression ใหญ่ ควรย้ายเป็นกลุ่มในรอบถัดไปเมื่อมีเวลาทดสอบเฉพาะทาง

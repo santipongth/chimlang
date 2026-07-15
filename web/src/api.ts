@@ -52,6 +52,34 @@ export async function fetchEngines(): Promise<EngineInfo[]> {
   return (await r.json()).engines;
 }
 
+export interface RunReadiness {
+  can_run: boolean;
+  checks: { id: string; label: string; status: "pass" | "warn" | "block"; detail: string }[];
+  cost: {
+    estimated_usd: number;
+    currency?: string;
+    calls?: number;
+    run_cap_usd?: number;
+    note?: string;
+    error?: string;
+  };
+}
+
+export interface CreateRunBody {
+  retrieval_mode?: "hybrid" | "bm25" | "vector";
+  parent_run_id?: string;
+}
+
+export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadiness> {
+  const r = await fetch("/runs/readiness", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
 export interface SourceInput {
   kind: "text" | "url" | "rss";
   label: string;
@@ -181,6 +209,7 @@ export interface DebatePostItem {
   stance: number;
   sentiment: number;
   failed: boolean;
+  failure_reason?: string;
 }
 
 export interface SimRunDetail extends SimRunSummary {
@@ -190,6 +219,28 @@ export interface SimRunDetail extends SimRunSummary {
   payload: Record<string, any> | null;
   error: string | null;
   posts: DebatePostItem[];
+}
+
+export interface SimRunDetail {
+  parent_run_id?: string;
+  events?: {
+    created_at: string;
+    event_type: string;
+    actor: string;
+    message: string;
+    payload: Record<string, any>;
+  }[];
+  trust_scorecard?: {
+    score: number;
+    band: string;
+    checks: {
+      id: string;
+      label: string;
+      status: "pass" | "warn" | "block";
+      detail: string;
+      weight?: number;
+    }[];
+  };
 }
 
 export async function fetchRunDetail(runId: string): Promise<SimRunDetail> {

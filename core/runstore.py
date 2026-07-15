@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS sim_runs (
     progress INT NOT NULL DEFAULT 0,
     progress_message TEXT NOT NULL DEFAULT '',
     payload JSONB,
-    error TEXT
+    error TEXT,
+    parent_run_id TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS debate_posts (
     id BIGSERIAL PRIMARY KEY,
@@ -43,9 +44,20 @@ CREATE TABLE IF NOT EXISTS debate_posts (
     content TEXT NOT NULL,
     stance DOUBLE PRECISION NOT NULL,
     sentiment DOUBLE PRECISION NOT NULL,
-    failed BOOLEAN NOT NULL DEFAULT false
+    failed BOOLEAN NOT NULL DEFAULT false,
+    failure_reason TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS debate_posts_run ON debate_posts (run_id, round_no, agent_idx);
+CREATE TABLE IF NOT EXISTS run_events (
+    id BIGSERIAL PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    event_type TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT 'system',
+    message TEXT NOT NULL DEFAULT '',
+    payload JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS run_events_run ON run_events (run_id, created_at);
 """
 
 
@@ -80,6 +92,24 @@ class RunStore:
                 "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS progress_message "
                 "TEXT NOT NULL DEFAULT ''"
             )
+            conn.execute(
+                "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS parent_run_id "
+                "TEXT NOT NULL DEFAULT ''"
+            )
+            conn.execute(
+                "ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS failure_reason "
+                "TEXT NOT NULL DEFAULT ''"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS run_events ("
+                "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, "
+                "created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+                "event_type TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system', "
+                "message TEXT NOT NULL DEFAULT '', payload JSONB NOT NULL DEFAULT '{}')"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS run_events_run ON run_events (run_id, created_at)"
+            )
 
     def create(
         self,
@@ -95,14 +125,15 @@ class RunStore:
         status: str = "running",
         job_id: str = "",
         progress_message: str = "",
+        parent_run_id: str = "",
     ) -> None:
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO sim_runs "
                 "(run_id, engine, subject, domain, agents, rounds, seed, config, status, "
-                "job_id, started_at, progress, progress_message) "
+                "job_id, started_at, progress, progress_message, parent_run_id) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "CASE WHEN %s = 'running' THEN now() ELSE NULL END, %s, %s)",
+                "CASE WHEN %s = 'running' THEN now() ELSE NULL END, %s, %s, %s)",
                 (
                     run_id,
                     engine,
@@ -117,12 +148,31 @@ class RunStore:
                     status,
                     5 if status == "running" else 0,
                     progress_message,
+                    parent_run_id,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message, payload) "
+                "VALUES (%s, %s, %s, %s)",
+                (
+                    run_id,
+                    "created",
+                    status,
+                    json.dumps(
+                        {"engine": engine, "status": status, "parent_run_id": parent_run_id},
+                        ensure_ascii=False,
+                    ),
                 ),
             )
 
     def attach_job(self, run_id: str, job_id: str) -> None:
         with self._conn() as conn:
             conn.execute("UPDATE sim_runs SET job_id = %s WHERE run_id = %s", (job_id, run_id))
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message, payload) "
+                "VALUES (%s, 'job_attached', %s, %s)",
+                (run_id, job_id, json.dumps({"job_id": job_id}, ensure_ascii=False)),
+            )
 
     def mark_running(self, run_id: str, message: str = "running") -> None:
         with self._conn() as conn:
@@ -130,6 +180,10 @@ class RunStore:
                 "UPDATE sim_runs SET status = 'running', started_at = COALESCE(started_at, now()), "
                 "progress = GREATEST(progress, 5), progress_message = %s WHERE run_id = %s",
                 (message, run_id),
+            )
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message) VALUES (%s, 'running', %s)",
+                (run_id, message[:200]),
             )
 
     def update_progress(self, run_id: str, progress: int, message: str) -> None:
@@ -147,12 +201,22 @@ class RunStore:
                 "progress_message = 'complete', finished_at = now() WHERE run_id = %s",
                 (json.dumps(payload, ensure_ascii=False), run_id),
             )
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message) "
+                "VALUES (%s, 'completed', 'complete')",
+                (run_id,),
+            )
 
     def update_payload(self, run_id: str, payload: dict, message: str = "updated") -> None:
         with self._conn() as conn:
             conn.execute(
                 "UPDATE sim_runs SET payload = %s, progress_message = %s WHERE run_id = %s",
                 (json.dumps(payload, ensure_ascii=False), message[:200], run_id),
+            )
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message) "
+                "VALUES (%s, 'payload_updated', %s)",
+                (run_id, message[:200]),
             )
 
     def fail(self, run_id: str, error: str) -> None:
@@ -161,6 +225,10 @@ class RunStore:
                 "UPDATE sim_runs SET status = 'error', error = %s, progress_message = 'error', "
                 "finished_at = now() WHERE run_id = %s",
                 (error[:500], run_id),
+            )
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message) VALUES (%s, 'failed', %s)",
+                (run_id, error[:500]),
             )
 
     def cancel(self, run_id: str, reason: str = "canceled") -> None:
@@ -171,6 +239,10 @@ class RunStore:
                 "finished_at = now() WHERE run_id = %s AND status IN ('queued', 'running')",
                 (reason[:500], run_id),
             )
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, message) VALUES (%s, 'canceled', %s)",
+                (run_id, reason[:500]),
+            )
 
     def add_posts(self, run_id: str, posts: list[dict]) -> None:
         if not posts:
@@ -178,8 +250,9 @@ class RunStore:
         with self._conn() as conn:
             conn.cursor().executemany(
                 "INSERT INTO debate_posts "
-                "(run_id, round_no, agent_idx, segment, content, stance, sentiment, failed) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                "(run_id, round_no, agent_idx, segment, content, stance, sentiment, "
+                "failed, failure_reason) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 [
                     (
                         run_id,
@@ -190,6 +263,7 @@ class RunStore:
                         p["stance"],
                         p["sentiment"],
                         p.get("failed", False),
+                        p.get("failure_reason", ""),
                     )
                     for p in posts
                 ],
@@ -247,14 +321,20 @@ class RunStore:
             row = conn.execute(
                 "SELECT run_id, created_at, engine, subject, domain, agents, rounds, seed, "
                 "config, status, payload, error, job_id, queued_at, started_at, finished_at, "
-                "progress, progress_message FROM sim_runs WHERE run_id = %s",
+                "progress, progress_message, parent_run_id FROM sim_runs WHERE run_id = %s",
                 (run_id,),
             ).fetchone()
             if row is None:
                 raise ValueError(f"ไม่พบ run {run_id}")
             posts = conn.execute(
-                "SELECT round_no, agent_idx, segment, content, stance, sentiment, failed "
+                "SELECT round_no, agent_idx, segment, content, stance, sentiment, failed, "
+                "COALESCE(failure_reason, '') "
                 "FROM debate_posts WHERE run_id = %s ORDER BY round_no, agent_idx",
+                (run_id,),
+            ).fetchall()
+            events = conn.execute(
+                "SELECT created_at, event_type, actor, message, payload "
+                "FROM run_events WHERE run_id = %s ORDER BY created_at, id",
                 (run_id,),
             ).fetchall()
         return {
@@ -276,6 +356,7 @@ class RunStore:
             "finished_at": row[15].isoformat() if row[15] else None,
             "progress": row[16],
             "progress_message": row[17],
+            "parent_run_id": row[18],
             "posts": [
                 {
                     "round_no": p[0],
@@ -285,10 +366,43 @@ class RunStore:
                     "stance": p[4],
                     "sentiment": p[5],
                     "failed": p[6],
+                    "failure_reason": p[7],
                 }
                 for p in posts
             ],
+            "events": [
+                {
+                    "created_at": e[0].isoformat(),
+                    "event_type": e[1],
+                    "actor": e[2],
+                    "message": e[3],
+                    "payload": e[4],
+                }
+                for e in events
+            ],
         }
+
+    def add_event(
+        self,
+        run_id: str,
+        event_type: str,
+        *,
+        actor: str = "system",
+        message: str = "",
+        payload: dict | None = None,
+    ) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO run_events (run_id, event_type, actor, message, payload) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (
+                    run_id,
+                    event_type[:80],
+                    actor[:120],
+                    message[:500],
+                    json.dumps(payload or {}, ensure_ascii=False),
+                ),
+            )
 
     def find_by_job(self, job_id: str) -> dict | None:
         with self._conn() as conn:

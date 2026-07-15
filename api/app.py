@@ -23,6 +23,7 @@ from api.dashboard import (
     build_risk_heatmap,
 )
 from api.render import render_dashboard_html
+from api.routers.runs import router as runs_router
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
 from governance.rbac import Permission, Principal
@@ -36,6 +37,8 @@ from trust.universe import run_multiverse_whatif
 app = FastAPI(title="ชิมลาง API", version="0.1.0")
 
 # P4-M1: เสิร์ฟ React UI ที่ /app ถ้า build แล้ว (web/dist) — deployment ชิ้นเดียวกับ API
+app.include_router(runs_router)
+
 _WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 if _WEB_DIST.exists():
     from fastapi.staticfiles import StaticFiles
@@ -595,6 +598,8 @@ class RunBody(BaseModel):
     views: list[str] = []
     # News Desk (P7, SIM-11): เปิดโต๊ะข่าวสด (debate เท่านั้น) — agent ได้ข่าวตาม media diet กลุ่มตัวเอง
     live_news: bool = False
+    retrieval_mode: str = "hybrid"
+    parent_run_id: str = ""
 
 
 @app.get("/engines.json")
@@ -715,6 +720,8 @@ def _run_create_impl(
         "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
         "live_news": body.live_news,  # provenance: run นี้ใช้ข่าวสดหรือไม่ (P7)
     }
+    config["retrieval_mode"] = body.retrieval_mode
+    config["parent_run_id"] = body.parent_run_id
     if precreated:
         rstore.mark_running(run_id, "เริ่มรันใน worker")
     else:
@@ -728,6 +735,7 @@ def _run_create_impl(
             seed=settings.default_seed,
             config=config,
             status="running",
+            parent_run_id=body.parent_run_id,
             progress_message="เริ่มรัน",
         )
     gov.append_audit(
@@ -745,7 +753,7 @@ def _run_create_impl(
             from simulation.debate import make_debate_adapter, run_debate
             from simulation.persona import PersonaFactory
             from simulation.redteam_population import inject_red_team
-            from simulation.sources import retrieve_context
+            from simulation.sources import retrieve_evidence
 
             personas = (factory or PersonaFactory()).sample(
                 n, seed=settings.default_seed, max_agents=n
@@ -760,7 +768,10 @@ def _run_create_impl(
                 source_status = ingest_sources(settings.postgres_url, run_id, body.sources)
             else:
                 rstore.update_progress(run_id, 20, "ไม่มีหลักฐานแนบ")
-            context = retrieve_context(settings.postgres_url, run_id, subject, k=6)
+            evidence_matches = retrieve_evidence(
+                settings.postgres_url, run_id, subject, k=6, mode=body.retrieval_mode
+            )
+            context = tuple(item["content"] for item in evidence_matches)
             # News Desk (P7, SIM-11): โต๊ะข่าวกลางดึงข่าวสด → media diet รายกลุ่ม
             segment_news: dict[str, tuple[str, ...]] = {}
             news_fetcher = None
@@ -843,9 +854,11 @@ def _run_create_impl(
             payload = {
                 "synthesis": result.synthesis,
                 "metrics": result.metrics,
+                "protocol": result.protocol,
                 "cost_usd": result.cost_usd,
                 "red_team": body.red_team,
                 "sources": source_status,
+                "evidence_matches": evidence_matches,
                 "context_used": len(context),
                 "news": news_status,
             }
@@ -927,8 +940,11 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
                 "requested_agents": body.agents,
                 "views": views,
                 "live_news": body.live_news,
+                "retrieval_mode": body.retrieval_mode,
+                "parent_run_id": body.parent_run_id,
             },
             status="queued",
+            parent_run_id=body.parent_run_id,
             progress_message="รอ worker",
         )
     except Exception as e:
@@ -1032,8 +1048,21 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
         red_team=bool(old["config"].get("red_team")),
         views=old["config"].get("views") or [],
         live_news=bool(old["config"].get("live_news")),
+        retrieval_mode=old["config"].get("retrieval_mode") or "hybrid",
+        parent_run_id=run_id,
     )
-    return run_create_async(body, principal=principal)
+    out = run_create_async(body, principal=principal)
+    try:
+        store.add_event(
+            run_id,
+            "retry_requested",
+            actor=principal.user_id,
+            message=str(out.get("run_id", "")),
+            payload={"child_run_id": out.get("run_id"), "job_id": out.get("job_id")},
+        )
+    except Exception:
+        pass
+    return out
 
 
 def _news_payload_items(items) -> list[dict]:
@@ -1188,6 +1217,12 @@ def run_detail_json(run_id: str, principal: Principal = Depends(get_principal)) 
         gstore = GalleryStore(settings.postgres_url)
         gstore.setup()
         detail["share_token"] = gstore.find_by_run(run_id)
+        try:
+            from core.run_quality import build_trust_scorecard
+
+            detail["trust_scorecard"] = build_trust_scorecard(detail)
+        except Exception:
+            detail["trust_scorecard"] = {"score": 0, "band": "unknown", "checks": []}
         return detail
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e

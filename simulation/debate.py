@@ -39,6 +39,7 @@ class DebatePost:
     stance: float
     sentiment: float
     failed: bool = False
+    failure_reason: str = ""
     want_to_know: str = ""  # query intent (P7-M3) — สิ่งที่ agent อยากรู้เพิ่ม → โต๊ะข่าวค้นให้
 
     def to_dict(self) -> dict:
@@ -50,6 +51,7 @@ class DebatePost:
             "stance": round(self.stance, 4),
             "sentiment": round(self.sentiment, 4),
             "failed": self.failed,
+            "failure_reason": self.failure_reason,
             "want_to_know": self.want_to_know,
         }
 
@@ -59,6 +61,7 @@ class DebateResult:
     posts: tuple[DebatePost, ...]
     synthesis: dict
     metrics: dict
+    protocol: dict
     failed_posts: int
     cost_usd: float
 
@@ -130,6 +133,16 @@ def _parse_post(text: str) -> tuple[str, float, float, str]:
     return content, stance, sentiment, want
 
 
+def _failure_reason(exc: Exception) -> str:
+    if isinstance(exc, json.JSONDecodeError):
+        return "json_parse_error"
+    if isinstance(exc, KeyError):
+        return "schema_missing_field"
+    if isinstance(exc, (TypeError, ValueError)):
+        return "schema_value_error"
+    return "llm_call_error"
+
+
 def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> dict:
     ok = [p for p in posts if not p.failed]
     per_round_avg: list[float] = []
@@ -149,6 +162,55 @@ def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> 
         "posts_ok": len(ok),
         "posts_failed": len(posts) - len(ok),
         "agent_count": agent_count,
+    }
+
+
+def analyze_protocol(posts: list[DebatePost], *, subject: str, rounds: int) -> dict:
+    ok = [p for p in posts if not p.failed]
+    terms = [w for w in re.findall(r"[\w\u0E00-\u0E7F]{4,}", subject) if len(w.strip()) >= 4][:6]
+    per_round = []
+    for r in range(rounds):
+        rs = [p.stance for p in ok if p.round_no == r]
+        avg = sum(rs) / len(rs) if rs else 0.0
+        dispersion = statistics.pstdev(rs) if len(rs) > 1 else 0.0
+        per_round.append(
+            {
+                "round": r,
+                "avg_stance": round(avg, 4),
+                "dispersion": round(dispersion, 4),
+                "support": sum(1 for s in rs if s > 0.2),
+                "neutral": sum(1 for s in rs if -0.2 <= s <= 0.2),
+                "oppose": sum(1 for s in rs if s < -0.2),
+            }
+        )
+    by_segment: dict[str, list[float]] = {}
+    for p in ok:
+        by_segment.setdefault(p.segment, []).append(p.stance)
+    nodes = [
+        {"segment": seg, "avg_stance": round(sum(vals) / len(vals), 4), "posts": len(vals)}
+        for seg, vals in sorted(by_segment.items())
+        if vals
+    ]
+    edges = []
+    for i, a in enumerate(nodes):
+        for b in nodes[i + 1 :]:
+            gap = abs(float(a["avg_stance"]) - float(b["avg_stance"]))
+            if gap >= 0.35:
+                edges.append({"from": a["segment"], "to": b["segment"], "tension": round(gap, 4)})
+    failures: dict[str, int] = {}
+    for p in posts:
+        if p.failed:
+            key = p.failure_reason or "unknown_failure"
+            failures[key] = failures.get(key, 0) + 1
+    return {
+        "claim_decomposition": {
+            "main_claim": subject,
+            "facets": terms or [subject[:80]],
+            "method": "deterministic_subject_terms",
+        },
+        "per_round_disagreement": per_round,
+        "contention_graph": {"nodes": nodes, "edges": edges},
+        "failure_taxonomy": failures,
     }
 
 
@@ -188,6 +250,7 @@ def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict
             stance=float(p.get("stance", 0.0)),
             sentiment=float(p.get("sentiment", 0.0)),
             failed=bool(p.get("failed", False)),
+            failure_reason=str(p.get("failure_reason", "")),
         )
         for p in posts
     ]
@@ -201,7 +264,8 @@ def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict
         float(synthesis.get("confidence", 0.5)) * (1 - failed / total), 2
     )
     synthesis["resynthesized_from_snapshot"] = True
-    return {"synthesis": synthesis, "metrics": metrics}
+    protocol = analyze_protocol(debate_posts, subject=subject, rounds=effective_rounds)
+    return {"synthesis": synthesis, "metrics": metrics, "protocol": protocol}
 
 
 def run_debate(
@@ -288,9 +352,18 @@ def run_debate(
                 return DebatePost(
                     r, idx, p.segment_name, content, stance, sentiment, want_to_know=want
                 )
-            except Exception:
+            except Exception as exc:
                 # fail-closed: ติดธง ไม่ปนใน metrics — จุดยืนเดิมคงไว้
-                return DebatePost(r, idx, p.segment_name, "", stances[idx], 0.0, failed=True)
+                return DebatePost(
+                    r,
+                    idx,
+                    p.segment_name,
+                    "",
+                    stances[idx],
+                    0.0,
+                    failed=True,
+                    failure_reason=_failure_reason(exc),
+                )
 
         with ThreadPoolExecutor(max_workers=8) as pool_ex:
             round_posts = list(pool_ex.map(ask, range(len(personas))))
@@ -314,6 +387,7 @@ def run_debate(
             on_round(r, round_posts)
 
     metrics = _compute_metrics(all_posts, rounds, len(personas))
+    protocol = analyze_protocol(all_posts, subject=subject, rounds=rounds)
 
     ok_last = [p for p in all_posts if not p.failed and p.round_no == rounds - 1]
     digest = "\n".join(f"- [{p.segment}] จุดยืน {p.stance:+.2f}: {p.content}" for p in ok_last)
@@ -356,7 +430,8 @@ def run_debate(
     return DebateResult(
         posts=tuple(all_posts),
         synthesis=synthesis,
-        metrics=metrics,
+        metrics={**metrics, "protocol_version": 1},
+        protocol=protocol,
         failed_posts=failed,
         cost_usd=round(spent_after - spent_before, 6),
     )

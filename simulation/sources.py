@@ -11,6 +11,7 @@
 
 import hashlib
 import ipaddress
+import math
 import re
 from urllib.parse import urlparse
 
@@ -35,7 +36,10 @@ CREATE TABLE IF NOT EXISTS run_sources (
     label TEXT NOT NULL,
     status TEXT NOT NULL,
     error TEXT NOT NULL DEFAULT '',
-    chunks INT NOT NULL DEFAULT 0
+    chunks INT NOT NULL DEFAULT 0,
+    content_hash TEXT NOT NULL DEFAULT '',
+    duplicate_of TEXT NOT NULL DEFAULT '',
+    quality_score DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS run_chunks (
     id BIGSERIAL PRIMARY KEY,
@@ -58,6 +62,16 @@ CREATE TABLE IF NOT EXISTS external_fetch_cache (
 def setup_sources(dsn: str) -> None:
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT ''"
+        )
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS duplicate_of TEXT NOT NULL DEFAULT ''"
+        )
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
+            "DOUBLE PRECISION NOT NULL DEFAULT 0"
+        )
 
 
 def _strip_html(html: str) -> str:
@@ -94,6 +108,17 @@ def _chunk(text: str) -> list[str]:
             break
         i += CHUNK_SIZE - CHUNK_OVERLAP
     return out
+
+
+def _quality_score(kind: str, text: str, chunks: int) -> float:
+    length_score = min(1.0, len(text.strip()) / 2000)
+    structure_score = 0.15 if re.search(r"https?://|^#{1,3}\s|\n[-*]\s", text, re.M) else 0.0
+    kind_score = {"text": 0.75, "url": 0.85, "rss": 0.8}.get(kind, 0.65)
+    chunk_score = min(1.0, chunks / 4) * 0.15
+    return round(
+        max(0.0, min(1.0, kind_score * 0.55 + length_score * 0.3 + structure_score + chunk_score)),
+        3,
+    )
 
 
 def validate_external_url(url: str) -> str:
@@ -162,18 +187,33 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
     results: list[dict] = []
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS content_hash TEXT NOT NULL DEFAULT ''"
+        )
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS duplicate_of TEXT NOT NULL DEFAULT ''"
+        )
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
+            "DOUBLE PRECISION NOT NULL DEFAULT 0"
+        )
+        seen_hashes: dict[str, str] = {}
         for src in sources:
             kind = str(src.get("kind", "text"))
             label = str(src.get("label", ""))[:200] or kind
             status, error, n_chunks = "ready", "", 0
+            content_hash, duplicate_of, quality_score = "", "", 0.0
             try:
                 text = _fetch_text_cached(conn, kind, label, src.get("url"), src.get("text"))
+                content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
                 report = detector.check(text)
                 if report.blocked:
                     status, error = (
                         "blocked",
                         "พบ PII (GOV-01): " + "; ".join(report.block_reasons[:5]),
                     )
+                elif content_hash in seen_hashes:
+                    status, duplicate_of = "duplicate", seen_hashes[content_hash]
                 else:
                     chunks = _chunk(text)
                     if not chunks:
@@ -185,15 +225,38 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
                             [(run_id, label, i, c) for i, c in enumerate(chunks)],
                         )
                         n_chunks = len(chunks)
+                        seen_hashes[content_hash] = label
+                quality_score = _quality_score(kind, text, n_chunks)
             except Exception as e:
                 status, error = "error", str(e)[:300]
             conn.execute(
-                "INSERT INTO run_sources (run_id, kind, label, status, error, chunks) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                (run_id, kind, label, status, error, n_chunks),
+                "INSERT INTO run_sources "
+                "(run_id, kind, label, status, error, chunks, content_hash, "
+                "duplicate_of, quality_score) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    run_id,
+                    kind,
+                    label,
+                    status,
+                    error,
+                    n_chunks,
+                    content_hash,
+                    duplicate_of,
+                    quality_score,
+                ),
             )
             results.append(
-                {"label": label, "kind": kind, "status": status, "error": error, "chunks": n_chunks}
+                {
+                    "label": label,
+                    "kind": kind,
+                    "status": status,
+                    "error": error,
+                    "chunks": n_chunks,
+                    "content_hash": content_hash[:12],
+                    "duplicate_of": duplicate_of,
+                    "quality_score": quality_score,
+                }
             )
     return results
 
@@ -207,7 +270,135 @@ def _terms(s: str) -> set[str]:
     return {w.lower() for w in re.findall(r"[\w\u0E00-\u0E7F]{3,}", s)}
 
 
-def retrieve_context(dsn: str, run_id: str, query: str, *, k: int = 6) -> tuple[str, ...]:
+def _term_counts(s: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for term in (w.lower() for w in re.findall(r"[\w\u0E00-\u0E7F]{3,}", s)):
+        counts[term] = counts.get(term, 0) + 1
+    return counts
+
+
+def _citation_spans(content: str, query: str, *, max_spans: int = 4) -> list[dict]:
+    spans: list[dict] = []
+    lowered = content.lower()
+    for term in sorted(_terms(query), key=len, reverse=True):
+        start = lowered.find(term.lower())
+        if start < 0:
+            continue
+        end = min(len(content), start + len(term))
+        left = max(0, start - 42)
+        right = min(len(content), end + 42)
+        spans.append(
+            {
+                "start": start,
+                "end": end,
+                "text": content[left:right].strip(),
+                "match": content[start:end],
+            }
+        )
+        if len(spans) >= max_spans:
+            break
+    if not spans and content:
+        spans.append(
+            {"start": 0, "end": min(len(content), 120), "text": content[:120], "match": ""}
+        )
+    return spans
+
+
+def _lexical_score(label: str, content: str, query: str) -> tuple[float, dict]:
+    q = _trigrams(query)
+    qt = _terms(query)
+    trigram_hits = len(q & _trigrams(content))
+    term_hits = len(qt & _terms(content))
+    label_hits = len(qt & _terms(label))
+    score = trigram_hits + 2 * term_hits + label_hits
+    return float(score), {
+        "trigram_hits": trigram_hits,
+        "term_hits": term_hits,
+        "label_hits": label_hits,
+    }
+
+
+def _bm25_scores(rows: list[tuple[int, str, int, str]], query: str) -> dict[int, float]:
+    terms = _terms(query)
+    if not terms or not rows:
+        return {}
+    docs = [(row[0], _term_counts(row[3])) for row in rows]
+    avgdl = sum(sum(counts.values()) for _, counts in docs) / max(1, len(docs))
+    out: dict[int, float] = {}
+    for term in terms:
+        df = sum(1 for _, counts in docs if term in counts)
+        if not df:
+            continue
+        idf = math.log(1 + (len(docs) - df + 0.5) / (df + 0.5))
+        for chunk_id, counts in docs:
+            tf = counts.get(term, 0)
+            if not tf:
+                continue
+            dl = max(1, sum(counts.values()))
+            denom = tf + 1.2 * (1 - 0.75 + 0.75 * dl / max(1, avgdl))
+            out[chunk_id] = out.get(chunk_id, 0.0) + idf * (tf * 2.2 / denom)
+    return out
+
+
+def retrieve_evidence(
+    dsn: str,
+    run_id: str,
+    query: str,
+    *,
+    k: int = 6,
+    mode: str = "hybrid",
+) -> list[dict]:
+    """Rich deterministic retrieval with citation spans and source-quality metadata."""
+    try:
+        with psycopg.connect(dsn) as conn:
+            conn.execute(_SCHEMA)
+            rows = conn.execute(
+                "SELECT c.id, c.source_label, c.seq, c.content, "
+                "COALESCE(s.kind, 'text'), COALESCE(s.quality_score, 0), "
+                "COALESCE(s.duplicate_of, ''), COALESCE(s.status, 'ready') "
+                "FROM run_chunks c "
+                "LEFT JOIN run_sources s ON s.run_id = c.run_id AND s.label = c.source_label "
+                "WHERE c.run_id = %s LIMIT 500",
+                (run_id,),
+            ).fetchall()
+    except Exception:
+        return []
+    if not rows:
+        return []
+    bm25 = _bm25_scores([(r[0], r[1], r[2], r[3]) for r in rows], query)
+    requested_mode = mode
+    mode_used = "bm25" if mode == "bm25" else "lexical_hybrid"
+    if mode == "vector":
+        mode_used = "lexical_hybrid"
+    scored: list[dict] = []
+    for chunk_id, label, seq, content, kind, quality, duplicate_of, status in rows:
+        lexical, components = _lexical_score(label, content, query)
+        bm = bm25.get(chunk_id, 0.0)
+        score = bm if mode == "bm25" else lexical + bm * 3 + float(quality or 0)
+        if score <= 0:
+            continue
+        scored.append(
+            {
+                "source_label": label,
+                "seq": seq,
+                "kind": kind,
+                "status": status,
+                "score": round(float(score), 4),
+                "quality_score": float(quality or 0),
+                "duplicate_of": duplicate_of,
+                "content": content,
+                "citation_spans": _citation_spans(content, query),
+                "score_components": {**components, "bm25": round(bm, 4)},
+                "retrieval_mode": mode_used,
+                "requested_mode": requested_mode,
+                "note": "vector_unavailable_fell_back" if requested_mode == "vector" else "",
+            }
+        )
+    scored.sort(key=lambda x: (-x["score"], x["source_label"], x["seq"]))
+    return scored[:k]
+
+
+def _retrieve_context_legacy(dsn: str, run_id: str, query: str, *, k: int = 6) -> tuple[str, ...]:
     """top-k chunks ของ run แบบ hybrid deterministic: 3-gram overlap + term overlap."""
     try:
         with psycopg.connect(dsn) as conn:
@@ -235,3 +426,8 @@ def retrieve_context(dsn: str, run_id: str, query: str, *, k: int = 6) -> tuple[
         key=lambda x: -x[0],
     )
     return tuple(content for score, content in scored[:k] if score > 0)
+
+
+def retrieve_context(dsn: str, run_id: str, query: str, *, k: int = 6) -> tuple[str, ...]:
+    """Backward-compatible context wrapper backed by rich retrieval."""
+    return tuple(item["content"] for item in retrieve_evidence(dsn, run_id, query, k=k))

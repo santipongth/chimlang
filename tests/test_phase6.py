@@ -11,7 +11,7 @@ from core.runstore import RunStore, new_run_id
 from simulation.debate import DebatePost, _compute_metrics, run_debate
 from simulation.engines import ENGINES, get_engine
 from simulation.persona import PersonaFactory
-from simulation.sources import ingest_sources, retrieve_context
+from simulation.sources import ingest_sources, retrieve_context, retrieve_evidence
 
 DSN = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
 
@@ -96,6 +96,8 @@ def test_debate_runs_and_is_seed_deterministic_in_sampling():
     assert [p.to_dict() for p in a.posts] == [p.to_dict() for p in b.posts]
     assert a.metrics["posts_ok"] == 12 and a.failed_posts == 0
     assert a.synthesis["confidence"] == 0.8 and not a.synthesis["fallback"]
+    assert a.protocol["claim_decomposition"]["main_claim"]
+    assert len(a.protocol["per_round_disagreement"]) == 2
 
 
 def test_debate_failed_posts_flagged_and_excluded():
@@ -104,6 +106,7 @@ def test_debate_failed_posts_flagged_and_excluded():
     r = run_debate(_personas(), subject="ทดสอบ", rounds=1, seed=3, adapter=adapter)
     assert r.failed_posts == 2
     assert all(p.content == "" for p in r.posts if p.failed)
+    assert r.protocol["failure_taxonomy"]["json_parse_error"] == 2
     assert r.synthesis["confidence"] == pytest.approx(0.8 * (1 - 2 / 6), abs=0.01)
 
 
@@ -177,6 +180,28 @@ def test_source_url_guard_blocks_internal_targets():
     assert validate_external_url("https://example.com/feed") == "https://example.com/feed"
 
 
+@needs_pg
+def test_sources_rich_retrieval_duplicate_and_vector_fallback():
+    run_id = new_run_id("debate")
+    text = "congestion charge public transport household impact " * 80
+    results = ingest_sources(
+        DSN,
+        run_id,
+        [
+            {"kind": "text", "label": "source-a", "text": text},
+            {"kind": "text", "label": "source-b", "text": text},
+        ],
+    )
+    assert results[0]["quality_score"] > 0
+    assert results[1]["status"] == "duplicate"
+    assert results[1]["duplicate_of"] == "source-a"
+    rich = retrieve_evidence(DSN, run_id, "congestion household", mode="vector")
+    assert rich
+    assert rich[0]["citation_spans"]
+    assert rich[0]["requested_mode"] == "vector"
+    assert rich[0]["note"] == "vector_unavailable_fell_back"
+
+
 # ---- runstore + POST /runs (M2) ----
 
 
@@ -215,6 +240,44 @@ def test_runstore_crud():
     store.delete(rid)
     with pytest.raises(ValueError):
         store.get(rid)
+
+
+@needs_pg
+def test_runstore_lineage_events():
+    store = RunStore(DSN)
+    store.setup()
+    parent = new_run_id("fabric") + "-parent"
+    child = new_run_id("fabric") + "-child"
+    store.create(
+        run_id=parent,
+        engine="fabric",
+        subject="parent run",
+        domain="general",
+        agents=20,
+        rounds=20,
+        seed=1,
+        config={},
+    )
+    store.create(
+        run_id=child,
+        engine="fabric",
+        subject="child run",
+        domain="general",
+        agents=20,
+        rounds=20,
+        seed=1,
+        config={},
+        parent_run_id=parent,
+    )
+    store.add_event(parent, "retry_requested", actor="test", payload={"child_run_id": child})
+    try:
+        detail = store.get(child)
+        parent_detail = store.get(parent)
+        assert detail["parent_run_id"] == parent
+        assert any(e["event_type"] == "retry_requested" for e in parent_detail["events"])
+    finally:
+        store.delete(child)
+        store.delete(parent)
 
 
 @needs_pg

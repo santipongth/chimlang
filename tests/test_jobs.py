@@ -64,6 +64,18 @@ def test_agents_clamped_to_cap(client):
     assert r.status_code == 200
 
 
+def test_run_readiness_preflight_for_fabric(client):
+    r = client.post(
+        "/runs/readiness",
+        json={"engine": "fabric", "subject": "readiness scenario", "agents": 20},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["can_run"] is True
+    assert body["cost"]["estimated_usd"] == 0
+    assert any(c["id"] == "pii" and c["status"] == "pass" for c in body["checks"])
+
+
 def test_task_itself_enforces_governance():
     """ยิง task ตรง (ข้าม API) — require_aggregate ใน _run_dashboard ต้องยังกันได้"""
     from core.tasks import whatif_dashboard_task
@@ -87,6 +99,8 @@ def test_submit_persistent_run_async_eager(client):
     detail = client.get(f"/runs/{rid}.json").json()
     assert detail["status"] == "complete"
     assert detail["payload"]["brief"]["fragility_index"] >= 0
+    assert detail["trust_scorecard"]["score"] >= 0
+    assert any(c["id"] == "reproducibility" for c in detail["trust_scorecard"]["checks"])
     client.delete(f"/runs/{rid}")
 
 
@@ -228,6 +242,7 @@ def test_resynthesize_run_rebuilds_payload_from_posts(client):
         detail = client.get(f"/runs/{rid}.json").json()
         assert detail["payload"]["synthesis"]["resynthesized_from_snapshot"] is True
         assert detail["payload"]["metrics"]["posts_ok"] == 4
+        assert detail["payload"]["protocol"]["contention_graph"]["nodes"]
         assert detail["payload"]["resynthesized_at"]
     finally:
         client.delete(f"/runs/{rid}")

@@ -13,9 +13,11 @@ import {
   fetchEngines,
   fetchPacks,
   fetchPool,
+  fetchRunReadiness,
   fetchRunJob,
   fetchSettings,
   pct,
+  RunReadiness,
 } from "../api";
 import PersonaPackModal, { StackedBar, type PackModalIntent } from "../PersonaPackModal";
 import type { RunRequest } from "../App";
@@ -98,6 +100,11 @@ export default function NewRun({
   const [packLimits, setPackLimits] = useState<PackLimits>(FALLBACK_PACK_LIMITS);
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [liveNews, setLiveNews] = useState(false);
+  const [retrievalMode, setRetrievalMode] = useState<"hybrid" | "bm25" | "vector">("hybrid");
+  const [claim, setClaim] = useState("");
+  const [measurement, setMeasurement] = useState("");
+  const [dueDays, setDueDays] = useState(30);
+  const [readiness, setReadiness] = useState<RunReadiness | null>(null);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
@@ -142,6 +149,32 @@ export default function NewRun({
   const lastStep = labels.length - 1;
   const card = "bg-card border border-border rounded-2xl p-6";
 
+  useEffect(() => {
+    if (stepKey !== "review" || subject.trim().length < 4) {
+      setReadiness(null);
+      return;
+    }
+    const body = {
+      engine,
+      subject: subject.trim(),
+      domain,
+      agents: Math.min(agents, cap),
+      rounds,
+      pack_id: packId,
+      red_team: redTeam,
+      sources: isDebate ? sources : [],
+      views,
+      live_news: isDebate && liveNews,
+      retrieval_mode: retrievalMode,
+      claim,
+      measurement,
+      due_days: dueDays,
+    };
+    fetchRunReadiness(body)
+      .then(setReadiness)
+      .catch(() => setReadiness(null));
+  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews, retrievalMode, claim, measurement, dueDays]);
+
   function addSource() {
     if (sources.length >= 10) return;
     const v = srcDraft.value.trim();
@@ -180,6 +213,10 @@ export default function NewRun({
         sources: isDebate ? sources : [],
         views,
         live_news: isDebate && liveNews,
+        retrieval_mode: retrievalMode,
+        claim,
+        measurement,
+        due_days: dueDays,
       });
       if (job.result?.run_id) {
         onCreated(job.result.run_id);
@@ -295,6 +332,22 @@ export default function NewRun({
         <div className={card + " space-y-4"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">📎 {t("wiz_src_title")}</div>
           <p className="text-xs text-muted-foreground">{t("wiz_src_desc")}</p>
+          <div className="rounded-xl border border-border bg-background p-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Retrieval</div>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+              {(["hybrid", "bm25", "vector"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setRetrievalMode(m)}
+                  className={`rounded-lg border px-3 py-2 ${retrievalMode === m ? "border-primary bg-primary/5 text-primary-strong" : "border-border text-muted-foreground hover:bg-muted"}`}
+                >
+                  {m === "hybrid" ? "Hybrid" : m === "bm25" ? "BM25" : "Vector"}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Vector mode falls back to deterministic retrieval until embeddings are configured.</p>
+          </div>
 
           {/* โต๊ะข่าวสด (P7, SIM-11) — โต๊ะข่าวกลางดึงข่าวให้ agent ตาม media diet ของกลุ่ม */}
           <button
@@ -569,10 +622,41 @@ export default function NewRun({
       {stepKey === "review" && (
         <div className={card + " space-y-3 text-sm"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_review")}</div>
+          <div className="rounded-xl border border-border bg-background p-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Validation target</div>
+            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_110px]">
+              <input value={claim} onChange={(e) => setClaim(e.target.value)} placeholder="Measurable claim" className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
+              <input value={measurement} onChange={(e) => setMeasurement(e.target.value)} placeholder="Outcome measurement" className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
+              <input type="number" min={1} max={365} value={dueDays} onChange={(e) => setDueDays(Math.max(1, Math.min(365, Number(e.target.value) || 30)))} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-background p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Readiness</div>
+                <div className="mt-1 text-sm font-medium">{readiness ? (readiness.can_run ? "Ready to run" : "Needs review") : "Checking..."}</div>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <div>Estimated cost</div>
+                <div className="text-base font-semibold text-foreground">${(readiness?.cost?.estimated_usd ?? 0).toFixed(4)}</div>
+              </div>
+            </div>
+            {readiness && (
+              <div className="mt-3 grid gap-1.5 md:grid-cols-2">
+                {readiness.checks.map((c) => (
+                  <div key={c.id} className={`rounded-lg border px-3 py-2 text-xs ${c.status === "block" ? "border-red-200 bg-red-50 text-red-700" : c.status === "warn" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-primary/20 bg-primary/5 text-primary-strong"}`}>
+                    <span className="font-medium">{c.label}</span>
+                    <span className="ml-2 text-muted-foreground">{c.detail}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-[130px_1fr] gap-y-2">
             <span className="text-muted-foreground">{t("wiz_step1")}</span><span className="font-medium">{subject || "—"}</span>
             <span className="text-muted-foreground">Engine</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : ` · ${t("wiz_universes_short")}`}</span>
             <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{Math.min(agents, cap).toLocaleString()}</span>
+            {isDebate && <><span className="text-muted-foreground">Retrieval</span><span>{retrievalMode}</span></>}
             <span className="text-muted-foreground">Personas</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
             {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
             <span className="text-muted-foreground">Red Team</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ON`) : "—"}</span>
@@ -596,7 +680,7 @@ export default function NewRun({
             {t("next")}
           </button>
         ) : (
-          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy} onClick={submit}>
+          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy || readiness?.can_run === false} onClick={submit}>
             {busy ? `⏳ ${t("running")}` : t("run_now")}
           </button>
         )}

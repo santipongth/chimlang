@@ -60,3 +60,17 @@
 - [x] Job Center observability: เพิ่ม `runs_24h/recent` metrics, loading skeleton, 24h run trend
 - [x] Run Detail repair UX: เพิ่มปุ่ม Refresh news/Resynthesize และ reload payload หลัง repair
 - [x] Tests/verification: เพิ่ม coverage cache/refresh/resynthesis; `uv run pytest -q`, ruff, format check, และ web build ผ่าน
+
+## Post-phase hardening addendum #2 (15 ก.ค. 2026) ✅
+
+งานนี้เป็น hardening ต่อจากคำสั่งผู้ใช้ให้ทำทุกข้อจากรีวิว core engine + frontend:
+
+- [x] UI correctness: แก้ `SocialSignalMap` ให้นับตาม `channel_tags` จริง ไม่ fallback นับทุก provider
+- [x] Pre-run Readiness & Cost Estimate: เพิ่ม `POST /runs/readiness` ผ่าน router ใหม่ `api/routers/runs.py` และแสดงใน New Run review
+- [x] Run Trust Scorecard: เพิ่ม deterministic scorecard ใน run detail response และ UI
+- [x] Evidence/Retrieval Upgrade: เพิ่ม rich evidence retrieval (`retrieve_evidence`) พร้อม BM25-style scoring, vector fallback metadata, citation spans, source quality, duplicate detection
+- [x] Debate Engine Protocol Upgrade: เพิ่ม failure taxonomy, claim decomposition, contention graph, per-round disagreement map และ protocol rebuild ใน resynthesize
+- [x] Run Lineage/Audit Trail: เพิ่ม `parent_run_id`, `run_events`, retry lineage และ audit trail ใน RunDetail
+- [x] Frontend Polish: เพิ่ม readiness panel, validation target, evidence highlights, debate protocol panel, stacked 24h run trend
+- [x] API Structure: เริ่มแยก router package โดยย้าย endpoint ใหม่กลุ่ม runs/preflight ออกจาก `api/app.py`
+- [x] Tests/verification: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`, `web npm.cmd run build` ผ่าน

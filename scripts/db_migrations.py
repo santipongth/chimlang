@@ -40,6 +40,11 @@ MIGRATIONS: list[tuple[str, str, Callable[[str], None]]] = [
         "run lifecycle columns, source/news evidence tables, News Desk fetch cache",
         _apply_module_schemas,
     ),
+    (
+        "2026-07-15-run-trust-lineage-rich-evidence",
+        "run lineage events, trust/readiness metadata, rich evidence source columns",
+        _apply_module_schemas,
+    ),
 ]
 
 

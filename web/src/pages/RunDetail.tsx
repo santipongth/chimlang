@@ -113,7 +113,7 @@ function SocialSignalMap({ newsItems }: { newsItems: any[] }) {
       </div>
       <div className="grid gap-2 md:grid-cols-4">
         {channels.map(([id, label]) => {
-          const count = ready.filter((x) => (x.channel_tags?.[id] ?? 0) > 0.12 || x.provider).length;
+          const count = ready.filter((x) => (x.channel_tags?.[id] ?? 0) > 0.12).length;
           return (
             <div key={id} className="rounded-xl border border-border bg-card p-3">
               <div className="text-xs font-medium">{label}</div>
@@ -126,6 +126,30 @@ function SocialSignalMap({ newsItems }: { newsItems: any[] }) {
         })}
       </div>
     </div>
+  );
+}
+
+function TrustScorecard({ scorecard }: { scorecard: SimRunDetail["trust_scorecard"] }) {
+  if (!scorecard) return null;
+  const tone = scorecard.band === "strong" ? "text-primary-strong" : scorecard.band === "usable" ? "text-amber-700" : "text-red-700";
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trust Scorecard</div>
+          <div className={`mt-1 text-3xl font-semibold ${tone}`}>{scorecard.score}/100</div>
+          <div className="text-xs text-muted-foreground">{scorecard.band}</div>
+        </div>
+        <div className="grid flex-1 gap-2 md:grid-cols-3">
+          {scorecard.checks.map((c) => (
+            <div key={c.id} className={`rounded-xl border px-3 py-2 text-xs ${c.status === "block" ? "border-red-200 bg-red-50 text-red-700" : c.status === "warn" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-primary/20 bg-primary/5 text-primary-strong"}`}>
+              <div className="font-medium">{c.label}</div>
+              <div className="mt-0.5 text-muted-foreground">{c.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -180,6 +204,56 @@ function DebateScatter({ posts, rounds, t }: { posts: any[]; rounds: number; t: 
         })}
       </svg>
       <p className="text-xs text-muted-foreground">{last.length} {t("rd_scatter_agents")}</p>
+    </div>
+  );
+}
+
+function DebateProtocolPanel({ protocol }: { protocol: any }) {
+  if (!protocol) return null;
+  const rounds = protocol.per_round_disagreement ?? [];
+  const nodes = protocol.contention_graph?.nodes ?? [];
+  const edges = protocol.contention_graph?.edges ?? [];
+  const failures = Object.entries(protocol.failure_taxonomy ?? {});
+  return (
+    <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+      <div className="rounded-2xl border border-border bg-background p-4">
+        <div className="text-sm font-semibold">Disagreement by round</div>
+        <div className="mt-3 space-y-2">
+          {rounds.map((r: any) => (
+            <div key={r.round} className="grid grid-cols-[42px_1fr_52px] items-center gap-2 text-xs">
+              <span className="text-muted-foreground">r{r.round + 1}</span>
+              <div className="flex h-2 overflow-hidden rounded-full bg-secondary">
+                <span className="bg-red-400" style={{ width: `${Math.min(100, r.oppose * 12)}%` }} />
+                <span className="bg-muted-foreground/40" style={{ width: `${Math.min(100, r.neutral * 12)}%` }} />
+                <span className="bg-primary" style={{ width: `${Math.min(100, r.support * 12)}%` }} />
+              </div>
+              <span className="text-right tabular-nums">{Number(r.dispersion ?? 0).toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-2xl border border-border bg-background p-4">
+        <div className="text-sm font-semibold">Contention graph</div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {nodes.map((n: any) => (
+            <span key={n.segment} className="rounded-full border border-border px-2 py-1 text-[11px]">
+              {n.segment}: {Number(n.avg_stance ?? 0).toFixed(2)}
+            </span>
+          ))}
+        </div>
+        {edges.length > 0 && (
+          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+            {edges.slice(0, 5).map((e: any, i: number) => (
+              <div key={i}>{e.from} - {e.to}: tension {Number(e.tension ?? 0).toFixed(2)}</div>
+            ))}
+          </div>
+        )}
+        {failures.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1 text-[11px] text-red-700">
+            {failures.map(([k, v]) => <span key={k} className="rounded-full bg-red-50 px-2 py-0.5">{k}: {String(v)}</span>)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -280,6 +354,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
       {data && (data.status === "complete" || data.status === "error") && (
         <>
           <ExecutiveReadout data={data} p={p} isDebate={isDebate} t={t} />
+          <TrustScorecard scorecard={data.trust_scorecard} />
           {canRepair && (
             <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
               <div>
@@ -379,6 +454,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   </div>
                 )}
               </section>
+              <DebateProtocolPanel protocol={p.protocol} />
             </>
           )}
 
@@ -525,6 +601,25 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   </ul>
                 </div>
               )}
+              {isDebate && (p.evidence_matches ?? []).length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Retrieved evidence highlights ({p.evidence_matches.length})</p>
+                  <ul className="space-y-1.5 text-sm">
+                    {p.evidence_matches.map((m: any, i: number) => (
+                      <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">{m.source_label} #{m.seq}</span>
+                          <span className="text-[10px] text-muted-foreground">{m.retrieval_mode} · score {Number(m.score ?? 0).toFixed(2)} · quality {Number(m.quality_score ?? 0).toFixed(2)}</span>
+                        </div>
+                        {(m.citation_spans ?? []).slice(0, 2).map((s: any, j: number) => (
+                          <p key={j} className="mt-1 text-xs text-muted-foreground">{s.text}</p>
+                        ))}
+                        {m.note && <p className="mt-1 text-[11px] text-amber-700">{m.note}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {isDebate ? (
                 (p.sources ?? []).length > 0 ? (
                   <>
@@ -585,7 +680,22 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <span>rounds</span><span className="text-foreground">{data.rounds}</span>
                 <span>seed</span><span className="text-foreground">{data.seed} ({t("rd_seed_note")})</span>
                 <span>domain</span><span className="text-foreground">{data.domain}</span>
+                <span>parent</span><span className="font-mono text-xs text-foreground">{data.parent_run_id || "none"}</span>
               </div>
+              {(data.events ?? []).length > 0 && (
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Audit trail</div>
+                  <ul className="mt-1 space-y-1 text-xs">
+                    {(data.events ?? []).slice(-8).map((e, i) => (
+                      <li key={i} className="rounded-lg border border-border bg-background px-3 py-2">
+                        <span className="font-mono text-muted-foreground">{e.created_at.slice(0, 16).replace("T", " ")}</span>
+                        <span className="mx-2 font-medium">{e.event_type}</span>
+                        <span className="text-muted-foreground">{e.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {isDebate && (p.sources ?? []).length > 0 && (
                 <div>
                   <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("rd_sources")}</div>

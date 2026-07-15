@@ -59,6 +59,20 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
     () => runs.filter((r) => r.status === "queued" || r.status === "running").length,
     [runs],
   );
+  const hourlyTrend = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    for (const row of metrics?.runs_24h ?? []) {
+      const key = row.hour;
+      const bucket = map.get(key) ?? {};
+      bucket[row.status] = (bucket[row.status] ?? 0) + row.count;
+      map.set(key, bucket);
+    }
+    return [...map.entries()].slice(-24).map(([hour, counts]) => ({
+      hour,
+      counts,
+      total: Object.values(counts).reduce((a, b) => a + b, 0),
+    }));
+  }, [metrics]);
 
   const load = () => {
     setLoading(true);
@@ -250,18 +264,29 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
       {metrics && (
         <section className={card + " space-y-3"}>
           <h2 className="font-semibold">{t("runs_evidence_health")}</h2>
-          {(metrics.runs_24h ?? []).length > 0 && (
+          {hourlyTrend.length > 0 && (
             <div>
               <div className="mb-2 text-xs text-muted-foreground">24h run trend</div>
               <div className="flex h-16 items-end gap-1 rounded-xl border border-border bg-background p-2">
-                {metrics.runs_24h.slice(-24).map((x, i) => (
-                  <div
-                    key={`${x.hour}-${x.status}-${i}`}
-                    className={`min-w-2 flex-1 rounded-t ${x.status === "error" ? "bg-red-400" : x.status === "complete" ? "bg-primary" : "bg-amber-400"}`}
-                    style={{ height: `${Math.max(8, Math.min(100, x.count * 18))}%` }}
-                    title={`${x.hour.slice(11, 16)} ${x.status}: ${x.count}`}
-                  />
-                ))}
+                {hourlyTrend.map((x, i) => {
+                  const h = Math.max(8, Math.min(100, x.total * 18));
+                  const order = [
+                    ["complete", "bg-primary"],
+                    ["running", "bg-blue-400"],
+                    ["queued", "bg-amber-400"],
+                    ["error", "bg-red-400"],
+                    ["canceled", "bg-muted-foreground/40"],
+                  ] as const;
+                  return (
+                    <div key={`${x.hour}-${i}`} className="flex min-w-2 flex-1 flex-col justify-end overflow-hidden rounded-t" style={{ height: `${h}%` }} title={`${x.hour.slice(11, 16)} total: ${x.total}`}>
+                      {order.map(([k, cls]) => {
+                        const v = x.counts[k] ?? 0;
+                        if (!v) return null;
+                        return <span key={k} className={cls} style={{ height: `${Math.max(10, (v / x.total) * 100)}%` }} />;
+                      })}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
