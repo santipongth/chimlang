@@ -1,7 +1,7 @@
 # STATE.md — สถานะโครงการ (ไฟล์ส่งมอบข้ามโมเดล)
 
 > ไฟล์นี้คือ "ความจำกลาง" ของโครงการ — agent ทุกตัว (Claude/Codex/GLM/Kimi/อื่นๆ) อ่านก่อนเริ่ม
-> และ**อัปเดตก่อนจบทุก session** (protocol ใน AGENTS.md) | อัปเดตล่าสุด: 13 ก.ค. 2026
+> และ**อัปเดตก่อนจบทุก session** (protocol ใน AGENTS.md) | อัปเดตล่าสุด: 15 ก.ค. 2026
 
 ## 🔵 เริ่มตรงนี้ (พรุ่งนี้/เมื่อกลับมา)
 
@@ -38,6 +38,7 @@
 - **บทเรียนใหม่ (6 ก.ค.)**: qwen3.5-flash เผา ~1,200 hidden thinking tokens/call — `adapter.chat(reasoning=False)` สำหรับ path interactive/สั้น (เร็วขึ้น 29x ถูกลง 10x); ห้ามปิดกับ judge/hindcast/benchmark (คุณภาพที่วัดไว้ใช้ thinking)
 - **GitHub: `santipongth/chimlang` (private) push แล้ว + CI (Actions) รันเขียว** — push ทุก commit ต่อจากนี้ (gh CLI login ด้วย device flow แล้ว มี workflow scope) — **ดู CI ด้วย SHA เสมอ**: `gh run list --commit "$SHA"` ห้ามใช้ `--limit 1`
 - test: **331 ข้อเขียว** | ต้นทุนสะสม ~$0.62 (Phase 5 ทั้งเฟส $0 — กลไกล้วน ไม่มี LLM call) | benchmark page: docs/reports/public-benchmark.md (rebuild ด้วย `scripts/build_benchmark_page.py` หลัง hindcast/resolve ใหม่ทุกครั้ง)
+- **Review ล่าสุด (15 ก.ค. Codex):** อ่าน AGENTS/CLAUDE/STATE/PHASE7/ADR แล้ว review codebase แบบไม่แก้โค้ด; พบ 3 จุดต้องพิจารณาแก้ถัดไป: (1) `/runs`, `/gallery/share`, `/watchlists` รับ `agents <= 0` จาก API ได้เพราะ clamp ด้วย `min()` อย่างเดียว ต่างจาก `/jobs/whatif` ที่มี lower bound 10; (2) `tests/test_phase6.py` ตรวจ PostgreSQL readiness ตอน import ด้วย `psycopg.connect(DSN)` ไม่มี `connect_timeout` ทำให้ pytest ทั้ง suite ค้างเมื่อ dev stack ไม่เปิด; (3) News Desk กลืน error ของ RSS/Tavily ก่อน snapshot ทำให้ evidence tab บอกไม่ได้ว่า provider ล้ม/ไม่มี key/ไม่มีข่าวจริง กรณีนี้ยังไม่ขัด leak/PII แต่ลด auditability ของ P7. Verification: `docker compose up -d`, `uv run pytest -q` ผ่านครบ, `uv run ruff check .` ผ่าน, `web npm.cmd run build` ผ่านเมื่อรัน escalated.
 - hindcast batch มี run-to-run variance (4/5 ↔ 5/5 — target เสียงก้ำกึ่งพลิกได้): เผยแพร่ทุกรอบ ห้ามเลือกรอบสวย
 - ถัดไป (12 ก.ค.): (1) **prediction #161 ครบกำหนดตั้งแต่ 8 ก.ค. ยังไม่ resolve** — ตอนนี้ resolve ผ่าน UI ได้แล้ว (หน้า Calibration ใน /app — รองรับ partial ด้วย) รอผู้ใช้ป้อน outcome (2) งานที่รออินพุต/มติผู้ใช้: ป้อนเหตุการณ์/นโยบายจริงเข้าระบบ (ปลดล็อก calibration แท้จริง), calibrate segments กับสำมะโนจริง (รอไฟล์/ลิงก์ → วาง data/samples/population/sources/), TRUST-08 panel (รอผู้ใช้ตัดสินใจ sourcing), GA สาธารณะ (TLS/pen test/SSO/multi-tenant), semantic memory (เมื่อความจำโต)
 - **หมายเหตุ resolve predictions**: prediction ปัจจุบันมาจาก scenario สังเคราะห์ (corpus demo) — ไม่มีผลจริงภายนอกให้เทียบ; การ resolve ให้มีความหมายต้องเริ่มป้อนเหตุการณ์/นโยบายจริงเข้าระบบก่อน แล้วเมื่อครบกำหนดผู้ใช้ป้อนผลจริง: `uv run python scripts/resolve_predictions.py --id N --outcome true|false --note "แหล่งอ้างอิง"` → Brier สะสมอัตโนมัติ → rebuild benchmark page
@@ -98,6 +99,7 @@
 
 ## บันทึกการส่งมอบ (append — บรรทัดละ session)
 
+- 2026-07-15 (Codex): **review codebase ทั้งหมดตามคำขอผู้ใช้ — ไม่แก้โค้ด production** — อ่านเอกสารกำกับครบตาม AGENTS.md (`AGENTS.md` → `CLAUDE.md` → `docs/STATE.md` → `docs/PHASE7-BRIEF.md` → ADR list), สแกน governance/security surfaces (external retrieval, PII, append-only registry, exports/gallery, secrets, BudgetGuard), เปิดไฟล์หลัก `api/app.py`, `core/runstore.py`, `governance/store.py`, `simulation/newsdesk.py`, `simulation/debate.py`, `simulation/sources.py`, `governance/gallery.py`, `governance/watchlist.py`, frontend RunDetail/Watchlist และ tests; findings หลัก: agents lower-bound validation ขาดใน `/runs`/gallery/watchlist, `test_phase6.py` DB readiness ไม่มี timeout ทำให้ pytest collection ค้างเมื่อ DB down, News Desk ไม่ snapshot provider failure; verification: เปิด dev stack แล้ว `uv run pytest -q` ผ่านครบ, `uv run ruff check .` ผ่าน, `web npm.cmd run build` ผ่าน; working tree เดิมมี `.gitignore` modified + `diagrams/` untracked ที่ Codex ไม่แตะ
 - 2026-07-05 (Claude Fable 5): วางแผน Phase 0 + M-1/M0/M1/M2 เสร็จ — M1 gate ผ่านโดยมติผู้ใช้ (รายละเอียด docs/reports/), M2 ได้ graph 114 entities + indirect query; สร้าง AGENTS.md + STATE.md สำหรับส่งมอบข้ามโมเดล; ถัดไป: M3 เริ่มที่ spike OASIS
 - 2026-07-05 (Claude Fable 5): **M3 เสร็จ** — ADR-0002 (runtime เอง, มติผู้ใช้), persona factory + cap guard, 4 channels + engine deterministic, benchmark FAB-01 ผ่าน sign test (59/60 p=5e-17; 45/58 p=1.5e-5) หลัง iterate โครงกลุ่ม 3 รอบ, voice layer เห็น say-do gap จริง; ถัดไป: M4
 - 2026-07-05 (Claude Fable 5): **M4 เสร็จ** — SIM-04 fork+belief revision (delta −18.0% CI ไม่คร่อม 0), รายงาน what-if ครบ field บังคับ, hindcast 5 ชุด + batch **ผ่าน 4/5 (exit criteria #1 ✅)**, leak test True-DTAC 0.0%, แก้ leak_if a1; เหลือ M5 ปิดเฟส
