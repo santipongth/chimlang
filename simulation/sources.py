@@ -9,7 +9,9 @@
 - จำกัด ≤ 10 sources/run, เนื้อหา ≤ 2MB/ชิ้น (กัน DoS ตัวเอง)
 """
 
+import ipaddress
 import re
+from urllib.parse import urlparse
 
 import httpx
 import psycopg
@@ -21,6 +23,7 @@ MAX_SOURCES = 10
 MAX_TEXT_CHARS = 2_000_000
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
+BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain"}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS run_sources (
@@ -79,13 +82,29 @@ def _chunk(text: str) -> list[str]:
     return out
 
 
+def validate_external_url(url: str) -> str:
+    """URL guard กลางก่อน fetch user/admin-provided URL — ลด SSRF/localhost access."""
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("ต้องเป็น URL แบบ http(s)")
+    host = parsed.hostname.strip().lower().rstrip(".")
+    if host in BLOCKED_HOSTNAMES or host.endswith(".localhost"):
+        raise ValueError("URL ภายในเครื่องถูกปฏิเสธ")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return parsed.geturl()
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        raise ValueError("URL ไปยัง private/internal IP ถูกปฏิเสธ")
+    return parsed.geturl()
+
+
 def _fetch_text(kind: str, label: str, url: str | None, text: str | None) -> str:
     if kind == "text":
         return (text or "")[:MAX_TEXT_CHARS]
-    if not url or not url.startswith(("http://", "https://")):
-        raise ValueError("ต้องเป็น URL แบบ http(s)")
+    safe_url = validate_external_url(url or "")
     resp = httpx.get(
-        url, timeout=15.0, follow_redirects=True, headers={"User-Agent": "chimlang/1.0"}
+        safe_url, timeout=15.0, follow_redirects=True, headers={"User-Agent": "chimlang/1.0"}
     )
     resp.raise_for_status()
     raw = resp.text[:MAX_TEXT_CHARS]

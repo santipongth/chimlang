@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppSettings, fetchSettings, saveLlmKey, saveSettings, saveTavilyKey } from "../api";
+import { AppSettings, DeepHealth, fetchDeepHealth, fetchSettings, saveLlmKey, saveSettings, saveTavilyKey } from "../api";
 import { useLang } from "../i18n";
 import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 
@@ -10,6 +10,7 @@ export default function Settings() {
   const [data, setData] = useState<AppSettings | null>(null);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const [health, setHealth] = useState<DeepHealth | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [prices, setPrices] = useState<Record<string, { input_usd_per_m: number; output_usd_per_m: number }>>({});
@@ -27,6 +28,7 @@ export default function Settings() {
         setPrices({ ...(d.llm?.yaml_prices ?? {}), ...(d.llm_prices ?? {}) });
       })
       .catch((e) => setError(String(e.message ?? e)));
+    fetchDeepHealth().then(setHealth).catch(() => setHealth(null));
   };
   useEffect(load, []);
 
@@ -420,6 +422,23 @@ export default function Settings() {
 
           <section className={card + " text-sm space-y-2"}>
             <h2 className="font-semibold">{t("set_system")}</h2>
+            {health && (
+              <div className="rounded-xl border border-border bg-background p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium">{t("set_health")}</span>
+                  <span className={health.status === "ok" ? "text-primary-strong" : "text-amber-700"}>
+                    {health.status === "ok" ? "✅ ok" : `⚠️ ${health.status}`}
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-1 sm:grid-cols-3">
+                  {Object.entries(health.components).map(([name, status]) => (
+                    <span key={name} className="rounded-lg border border-border px-2 py-1 text-xs">
+                      {status === "ok" ? "✅" : "⚠️"} {name}: {status}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-[180px_1fr] gap-y-1.5 text-muted-foreground">
               <span>Webhook (Slack/Discord)</span>
               <span className="text-foreground">{data.webhook_configured ? `✅ ${t("set_webhook_on")}` : `— ${t("set_webhook_off")}`}</span>

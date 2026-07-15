@@ -77,6 +77,8 @@ class PersonaFactory:
         return counts
 
     def sample(self, n: int, *, seed: int, max_agents: int) -> list[Persona]:
+        if n <= 0:
+            raise ValueError("จำนวน agents ต้องมากกว่า 0")
         if n > max_agents:
             raise AgentCapExceededError(n, max_agents)
         rng = Random(seed)

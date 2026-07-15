@@ -8,11 +8,12 @@ import {
   PersonaPack,
   PoolSegment,
   SourceInput,
-  createRun,
+  createRunAsync,
   deletePack,
   fetchEngines,
   fetchPacks,
   fetchPool,
+  fetchRunJob,
   fetchSettings,
   pct,
 } from "../api";
@@ -99,6 +100,7 @@ export default function NewRun({
   const [liveNews, setLiveNews] = useState(false);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
 
   const loadPacks = () => fetchPacks().then(setPacks).catch(() => {});
@@ -165,8 +167,9 @@ export default function NewRun({
     }
     setBusy(true);
     setError("");
+    setProgress(t("run_queued"));
     try {
-      const runId = await createRun({
+      const job = await createRunAsync({
         engine,
         subject: subject.trim(),
         domain,
@@ -178,11 +181,29 @@ export default function NewRun({
         views,
         live_news: isDebate && liveNews,
       });
-      onCreated(runId);
+      if (job.result?.run_id) {
+        onCreated(job.result.run_id);
+        return;
+      }
+      setProgress(t("run_running"));
+      for (let i = 0; i < 240; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const status = await fetchRunJob(job.job_id);
+        if (status.result?.run_id) {
+          onCreated(status.result.run_id);
+          return;
+        }
+        if (status.status === "FAILURE") {
+          throw new Error(status.error || "run failed");
+        }
+        setProgress(status.status === "STARTED" ? t("run_running") : t("run_queued"));
+      }
+      throw new Error(t("run_timeout"));
     } catch (e: any) {
       setError(String(e.message ?? e));
     } finally {
       setBusy(false);
+      setProgress("");
     }
   }
 
@@ -191,6 +212,7 @@ export default function NewRun({
       <PageHeader eyebrow={t("wiz_eyebrow")} title={t("wiz_title")} />
       <Steps step={step} labels={labels} onJump={setStep} />
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm">{error}</div>}
+      {progress && <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary-strong">{progress}</div>}
 
       {stepKey === "question" && (
         <div className={card + " space-y-5"}>

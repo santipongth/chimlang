@@ -13,7 +13,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.auth import get_principal, require, require_election
 from api.dashboard import (
@@ -369,7 +369,7 @@ def dashboard_pdf(
 class JobRequest(BaseModel):
     subject: str
     granularity: str = "aggregate"
-    agents: int = 100
+    agents: int = Field(100, ge=1)
 
 
 @app.post("/jobs/whatif")
@@ -581,8 +581,8 @@ class RunBody(BaseModel):
     engine: str = "fabric"  # fabric | debate
     subject: str
     domain: str = "ทั่วไป"
-    agents: int = 100
-    rounds: int = 3  # ใช้กับ debate เท่านั้น (fabric ใช้ config ภายใน 20)
+    agents: int = Field(100, ge=1)
+    rounds: int = Field(3, ge=1, le=10)  # ใช้กับ debate เท่านั้น (fabric ใช้ config ภายใน 20)
     pack_id: int | None = None
     red_team: bool = False  # debate: ฝัง adversarial 2 ตัว (fabric ใช้หน้า compare อยู่แล้ว)
     # P6-M3: เอกสารอ้างอิง (เฉพาะ debate) — {kind: text|url|rss, label, url?, text?}
@@ -852,6 +852,42 @@ def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> 
     return {"run_id": run_id, "engine": body.engine, "agents": n}
 
 
+@app.post("/runs/async")
+def run_create_async(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+    """ส่ง persistent run เข้า queue — ใช้ code path เดียวกับ /runs ใน worker แล้ว poll ด้วย job id"""
+    require(principal, Permission.RUN)
+    if ElectionPolicy(classify_scenario(body.subject)).active:
+        require_election(principal)
+    from core.tasks import celery_app, persistent_run_task
+
+    payload = body.model_dump()
+    if celery_app.conf.task_always_eager:
+        res = persistent_run_task.apply(
+            args=(payload, principal.user_id, principal.election_verified), throw=True
+        )
+        return {"job_id": res.id, "status": "SUCCESS", "result": res.get()}
+    try:
+        res = persistent_run_task.delay(payload, principal.user_id, principal.election_verified)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"queue ไม่พร้อม (redis?): {e}") from e
+    return {"job_id": res.id, "status": res.status}
+
+
+@app.get("/run-jobs/{job_id}")
+def run_job_status(job_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """สถานะ queue สำหรับ persistent run — result สำเร็จมี run_id ให้ UI เปิด RunDetail"""
+    require(principal, Permission.RUN)
+    from core.tasks import celery_app
+
+    res = celery_app.AsyncResult(job_id)
+    body: dict = {"job_id": job_id, "status": res.status}
+    if res.successful():
+        body["result"] = res.result
+    elif res.failed():
+        body["error"] = str(res.result)
+    return body
+
+
 @app.get("/simruns.json")
 def simruns_json(
     search: str = Query(""),
@@ -1009,7 +1045,7 @@ gallery_rate_limiter = RateLimiter(max_calls=60, window_s=60.0)
 
 class ShareBody(BaseModel):
     subject: str
-    agents: int = 100
+    agents: int = Field(100, ge=1)
 
 
 class VoteBody(BaseModel):
@@ -1331,7 +1367,7 @@ def personas_pack_delete(pack_id: int, principal: Principal = Depends(get_princi
 class WatchlistBody(BaseModel):
     label: str
     subject: str
-    agents: int = 100
+    agents: int = Field(100, ge=1)
     cadence: str = "daily"  # daily | weekly
 
 

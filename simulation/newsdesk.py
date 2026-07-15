@@ -5,7 +5,8 @@
 - PII gate ทุกชิ้นแบบ fail-closed (GOV-01) — item ที่พบ PII ถูก block ทั้งชิ้น
 - snapshot-first (NFR-07): เก็บลง DB ก่อนใช้ — replay อ่านจาก `load_items` เท่านั้น ไม่แตะเน็ต
 - media diet (M2): แต่ละ segment เห็นข่าวถ่วงด้วย channel_mix ของกลุ่มตัวเอง = selective exposure
-- Tavily search: key จาก .env (`TAVILY_API_KEY`) — ไม่มี key = โหมด RSS อย่างเดียว (degrade ไม่พัง)
+- Tavily search: key จาก .env/Settings (`TAVILY_API_KEY`) — ไม่มี key =
+  บันทึก skipped evidence แล้วใช้ RSS ต่อ
 """
 
 import hashlib
@@ -21,7 +22,7 @@ import psycopg
 from core.config import get_settings
 from core.run_context import RunContext, ensure_external_retrieval_allowed
 from governance.pii import PIIDetector, load_allowlist
-from simulation.sources import _parse_rss, _strip_html, _trigrams
+from simulation.sources import _parse_rss, _strip_html, _trigrams, validate_external_url
 
 MAX_ITEMS_PER_RUN = 30
 MAX_SEARCH_QUERIES_PER_RUN = 8
@@ -66,7 +67,7 @@ class NewsItem:
     content: str
     fetched_at: str
     channel_tags: dict[str, float]
-    status: str  # ready | blocked
+    status: str  # ready | blocked | error | skipped
     error: str = ""
 
 
@@ -76,8 +77,9 @@ def _hash(text: str) -> str:
 
 def _fetch_rss_items(feed_url: str) -> list[tuple[str, str]]:
     """คืน [(title, content)] จาก feed — แยกราย item เพื่อ PII gate เป็นชิ้นๆ"""
+    safe_url = validate_external_url(feed_url)
     resp = httpx.get(
-        feed_url, timeout=15.0, follow_redirects=True, headers={"User-Agent": "chimlang/1.0"}
+        safe_url, timeout=15.0, follow_redirects=True, headers={"User-Agent": "chimlang/1.0"}
     )
     resp.raise_for_status()
     out: list[tuple[str, str]] = []
@@ -146,6 +148,7 @@ def gather(
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
 
     raw: list[tuple[str, str, str, str, str]] = []  # (provider, query, url, title, content)
+    failures: list[tuple[str, str, str, str]] = []  # (provider, query, url, error)
     # ผลค้น (ตรงหัวข้อ) เข้าคิวก่อน RSS (ข่าวแวดล้อม) — กัน RSS ท่วมจนชน cap แล้วผลค้นตกขบวน
     # (บั๊กที่ smoke จริงจับได้ 12 ก.ค.: 3 feeds × 10 = 30 ชน MAX_ITEMS ก่อนถึงคิว search)
     if queries and tavily_key:
@@ -153,20 +156,48 @@ def gather(
             try:
                 for title, url, content in _tavily_search(q, tavily_key):
                     raw.append(("search", q, url, title, content))
-            except Exception:
-                continue
+            except Exception as e:
+                failures.append(("search", q, "", f"Tavily search failed: {type(e).__name__}: {e}"))
+    elif queries and not tavily_key:
+        for q in queries:
+            failures.append(("search", q, "", "Tavily skipped: TAVILY_API_KEY ยังไม่ได้ตั้งค่า"))
     for feed in feeds[:10]:
         try:
             for title, content in _fetch_rss_items(feed)[:10]:
                 raw.append(("rss", feed, feed, title, content))
-        except Exception:
-            continue  # feed เสีย = ข้าม (ข่าวจากแหล่งอื่นยังใช้ได้)
+        except Exception as e:
+            failures.append(("rss", feed, feed, f"RSS fetch failed: {type(e).__name__}: {e}"))
 
     items: list[NewsItem] = []
     seen: set[str] = set()
     now = datetime.now(UTC).isoformat()
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
+        for provider, query, url, error in failures:
+            if len(items) >= MAX_ITEMS_PER_RUN:
+                break
+            tags = CHANNEL_TAGS[provider]
+            title = "ค้นหาข่าวไม่สำเร็จ" if provider == "search" else "อ่าน RSS ไม่สำเร็จ"
+            h = _hash(provider + query + url + error)
+            status = "skipped" if "skipped" in error.lower() else "error"
+            conn.execute(
+                "INSERT INTO news_items (run_id, provider, query, url, title, content, "
+                "content_hash, channel_tags, status, error) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)",
+                (
+                    ctx.run_id,
+                    provider,
+                    query,
+                    url,
+                    title,
+                    "",
+                    h,
+                    json.dumps(tags),
+                    status,
+                    error[:500],
+                ),
+            )
+            items.append(NewsItem(provider, url, title, "", now, tags, status, error[:500]))
         for provider, query, url, title, content in raw:
             if len(items) >= MAX_ITEMS_PER_RUN:
                 break

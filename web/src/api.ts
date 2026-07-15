@@ -114,6 +114,35 @@ export async function createRun(body: CreateRunBody): Promise<string> {
   return (await r.json()).run_id;
 }
 
+export interface RunJobResult {
+  run_id: string;
+  engine: string;
+  agents: number;
+}
+
+export interface RunJobStatus {
+  job_id: string;
+  status: string;
+  result?: RunJobResult;
+  error?: string;
+}
+
+export async function createRunAsync(body: CreateRunBody): Promise<RunJobStatus> {
+  const r = await fetch("/runs/async", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchRunJob(jobId: string): Promise<RunJobStatus> {
+  const r = await fetch(`/run-jobs/${jobId}`);
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
 export interface SimRunSummary {
   run_id: string;
   created_at: string;
@@ -241,6 +270,17 @@ export async function saveLlmKey(apiKey: string): Promise<void> {
 
 export async function fetchSettings(): Promise<AppSettings> {
   const r = await fetch("/settings.json");
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export interface DeepHealth {
+  status: string;
+  components: Record<string, string>;
+}
+
+export async function fetchDeepHealth(): Promise<DeepHealth> {
+  const r = await fetch("/health/deep");
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
 }

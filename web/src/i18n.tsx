@@ -73,6 +73,9 @@ const DICT: Record<string, { th: string; en: string }> = {
   next: { th: "ถัดไป →", en: "Next →" },
   run_now: { th: "รันจำลอง →", en: "Run simulation →" },
   running: { th: "กำลังจำลอง...", en: "Simulating..." },
+  run_queued: { th: "เข้าคิวรันแล้ว กำลังรอ worker...", en: "Queued. Waiting for a worker..." },
+  run_running: { th: "กำลังรันและบันทึกผลถาวร...", en: "Running and saving the result..." },
+  run_timeout: { th: "รันยังไม่เสร็จในเวลาที่กำหนด เปิดหน้าประวัติเพื่อตรวจสถานะต่อ", en: "Run is still in progress. Open History to continue tracking it." },
   wiz_templates_title: { th: "ตัวอย่างพร้อมใช้", en: "STARTER TEMPLATES" },
   wiz_templates_hint: {
     th: "คลิกเพื่อเซ็ตคำถามและโดเมนอัตโนมัติ — แก้ต่อได้",
@@ -350,6 +353,7 @@ const DICT: Record<string, { th: string; en: string }> = {
     en: "Enter a URL/RSS link or paste text first, then add",
   },
   set_system: { th: "สถานะระบบ", en: "System status" },
+  set_health: { th: "สถานะ dependency", en: "Dependency health" },
   set_webhook_on: { th: "เชื่อมแล้วผ่าน ALERT_WEBHOOK_URL", en: "connected via ALERT_WEBHOOK_URL" },
   set_webhook_off: { th: "ยังไม่ตั้ง (เพิ่มใน .env)", en: "not set (add to .env)" },
   set_auth_dev: { th: "ปิดอยู่ (โหมด dev) — production ต้องเปิด", en: "off (dev mode) — must be on in production" },

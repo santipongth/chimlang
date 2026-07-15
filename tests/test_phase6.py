@@ -20,7 +20,7 @@ def _pg_ok() -> bool:
     try:
         import psycopg
 
-        psycopg.connect(DSN).close()
+        psycopg.connect(DSN, connect_timeout=2).close()
         return True
     except Exception:
         return False
@@ -168,6 +168,15 @@ def test_sources_detector_disabled_fails_closed(monkeypatch):
         ingest_sources(DSN, "x", [{"kind": "text", "label": "a", "text": "b"}])
 
 
+def test_source_url_guard_blocks_internal_targets():
+    from simulation.sources import validate_external_url
+
+    for url in ("http://localhost:8000/x", "http://127.0.0.1/a", "http://10.0.0.1/a"):
+        with pytest.raises(ValueError):
+            validate_external_url(url)
+    assert validate_external_url("https://example.com/feed") == "https://example.com/feed"
+
+
 # ---- runstore + POST /runs (M2) ----
 
 
@@ -261,6 +270,23 @@ def test_post_runs_guards(client):
                 "subject": "ทดสอบ sources",
                 "sources": [{"kind": "text", "label": "x", "text": "y"}],
             },
+        ).status_code
+        == 422
+    )
+
+
+def test_api_rejects_too_few_agents_before_db(client):
+    assert (
+        client.post("/runs", json={"engine": "fabric", "subject": "ทดสอบ", "agents": 0}).status_code
+        == 422
+    )
+    assert (
+        client.post("/gallery/share", json={"subject": "หัวข้อแชร์", "agents": -1}).status_code == 422
+    )
+    assert (
+        client.post(
+            "/watchlists",
+            json={"label": "x", "subject": "หัวข้อ watchlist", "agents": 0, "cadence": "daily"},
         ).status_code
         == 422
     )

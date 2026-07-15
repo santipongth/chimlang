@@ -21,6 +21,13 @@ function StanceBar({ v }: { v: number }) {
   );
 }
 
+function StatusIcon({ status }: { status: string }) {
+  if (status === "ready") return <>✅</>;
+  if (status === "blocked") return <>⛔</>;
+  if (status === "skipped") return <>⏭</>;
+  return <>⚠️</>;
+}
+
 // แผนภาพสวอร์มของ debate — จุดยืน agent รอบสุดท้าย (x = จุดยืน −1..1, สี = ทิศ)
 function DebateScatter({ posts, rounds, t }: { posts: any[]; rounds: number; t: (k: string) => string }) {
   const last = posts.filter((x) => x.round_no === rounds - 1 && !x.failed);
@@ -74,6 +81,21 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   const rounds = useMemo(
     () => (data ? [...new Set(data.posts.map((x) => x.round_no))].sort((a, b) => a - b) : []),
     [data],
+  );
+  const newsItems: any[] = p.news?.items ?? [];
+  const newsCounts = newsItems.reduce(
+    (acc: Record<string, number>, item: any) => {
+      acc[item.status || "unknown"] = (acc[item.status || "unknown"] ?? 0) + 1;
+      return acc;
+    },
+    {},
+  );
+  const sourceCounts = (p.sources ?? []).reduce(
+    (acc: Record<string, number>, item: any) => {
+      acc[item.status || "unknown"] = (acc[item.status || "unknown"] ?? 0) + 1;
+      return acc;
+    },
+    {},
   );
   const shownRound = replayRound ?? (rounds.length ? rounds[rounds.length - 1] : 0);
 
@@ -286,12 +308,19 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
               {isDebate && p.news?.enabled && (
                 <div className="space-y-1.5">
                   <p className="text-xs text-muted-foreground">🌐 {t("rd_news_head")} ({(p.news.items ?? []).length})</p>
+                  <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                    {["ready", "blocked", "error", "skipped"].map((s) => (
+                      <span key={s} className="rounded-full border border-border bg-background px-2 py-0.5">
+                        <StatusIcon status={s} /> {s}: {newsCounts[s] ?? 0}
+                      </span>
+                    ))}
+                  </div>
                   <ul className="space-y-1.5 text-sm">
                     {(p.news.items ?? []).map((n: any, i: number) => (
                       <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate font-medium">
-                            {n.status === "ready" ? "✅" : "⛔"} {n.title || n.url}
+                            <StatusIcon status={n.status} /> {n.title || n.url}
                           </span>
                           <span className="shrink-0 text-[10px] text-muted-foreground">
                             {n.provider === "search" ? "🔎 search" : "📡 RSS"} · {String(n.fetched_at).slice(0, 16).replace("T", " ")}
@@ -310,11 +339,18 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 (p.sources ?? []).length > 0 ? (
                   <>
                     <p className="text-xs text-muted-foreground">{t("rd_evidence_debate")}</p>
+                    <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                      {["ready", "blocked", "error", "empty"].map((s) => (
+                        <span key={s} className="rounded-full border border-border bg-background px-2 py-0.5">
+                          <StatusIcon status={s} /> {s}: {sourceCounts[s] ?? 0}
+                        </span>
+                      ))}
+                    </div>
                     <ul className="space-y-1.5 text-sm">
                       {p.sources.map((s: any, i: number) => (
                         <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
                           <div className="flex items-center justify-between">
-                            <span className="font-medium">{s.status === "ready" ? "✅" : s.status === "blocked" ? "⛔" : "⚠️"} {s.label}</span>
+                            <span className="font-medium"><StatusIcon status={s.status} /> {s.label}</span>
                             <span className="text-xs text-muted-foreground">{s.chunks} {t("rd_evidence_chunks")}</span>
                           </div>
                           {s.error && <div className="mt-1 text-xs text-red-700">{s.error}</div>}

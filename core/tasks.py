@@ -33,6 +33,17 @@ def whatif_dashboard_task(subject: str, granularity: str, agents: int) -> dict:
     return _run_dashboard(subject, granularity, agents).to_dict()
 
 
+@celery_app.task(name="chimlang.persistent_run")
+def persistent_run_task(body: dict, actor: str, election_verified: bool = False) -> dict:
+    """สร้าง persistent run ใน worker — ใช้ code path เดียวกับ POST /runs เพื่อไม่ข้าม governance."""
+    from api.app import RunBody, run_create
+    from governance.rbac import Principal, Role
+
+    role = Role.ADMIN if election_verified else Role.ANALYST
+    principal = Principal(user_id=actor, role=role, election_verified=election_verified)
+    return run_create(RunBody(**body), principal=principal)
+
+
 @celery_app.task(name="chimlang.check_watchlists")
 def check_watchlists_task() -> dict:
     """P5-M5 — ไล่ตรวจ watchlist ที่ถึงรอบตาม cadence แล้วสร้าง alert/webhook

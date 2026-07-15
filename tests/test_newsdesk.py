@@ -79,6 +79,32 @@ def test_gather_blocks_pii_item(monkeypatch):
     assert stored and all(it.content == "" for it in stored)
 
 
+@needs_pg
+def test_gather_snapshots_provider_failures(monkeypatch):
+    """provider ล้ม/ไม่มี key ต้องมี snapshot ใน evidence ไม่หายเงียบ"""
+    import simulation.newsdesk as nd
+    from core.config import Settings
+
+    def _rss_fail(url):
+        raise RuntimeError("feed down")
+
+    monkeypatch.setattr(nd, "_fetch_rss_items", _rss_fail)
+    monkeypatch.setattr(
+        nd,
+        "get_settings",
+        lambda **kw: Settings(news_rss_feeds="", tavily_api_key="", _env_file=None),
+    )
+    monkeypatch.setattr(nd, "effective_news_config", lambda settings: ([], ""))
+    ctx = RunContext(run_id="news-provider-fail", seed=1)
+    items = gather(DSN, ctx, feeds=["https://example.com/rss"], queries=["ทดสอบค้นข่าว"])
+    statuses = {it.provider: it.status for it in items}
+    assert statuses["rss"] == "error"
+    assert statuses["search"] == "skipped"
+    stored = load_items(DSN, "news-provider-fail")
+    assert any(it.provider == "rss" and "feed down" in it.error for it in stored)
+    assert any(it.provider == "search" and "TAVILY_API_KEY" in it.error for it in stored)
+
+
 # ---- NFR-07: replay จาก snapshot ไม่แตะเน็ต + deterministic ----
 
 

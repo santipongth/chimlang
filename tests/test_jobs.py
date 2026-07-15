@@ -6,14 +6,32 @@ from fastapi.testclient import TestClient
 from api.app import app
 from core.tasks import celery_app
 
+DSN = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
+
+
+def _pg_ok() -> bool:
+    try:
+        import psycopg
+
+        psycopg.connect(DSN, connect_timeout=2).close()
+        return True
+    except Exception:
+        return False
+
+
+needs_pg = pytest.mark.skipif(not _pg_ok(), reason="PostgreSQL ไม่พร้อม (docker compose up -d)")
+
 
 @pytest.fixture(autouse=True)
 def eager_celery():
     """โหมด test: รัน task ทันทีในโปรเซสเดียว — ไม่ต้องมี broker/worker จริง"""
+    old_eager = celery_app.conf.task_always_eager
+    old_propagates = celery_app.conf.task_eager_propagates
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = True
     yield
-    celery_app.conf.task_always_eager = False
+    celery_app.conf.task_always_eager = old_eager
+    celery_app.conf.task_eager_propagates = old_propagates
 
 
 @pytest.fixture()
@@ -51,3 +69,37 @@ def test_task_itself_enforces_governance():
 
     with pytest.raises(ElectionModeError):
         whatif_dashboard_task.apply(args=("เลือกตั้ง ส.ส.", "individual", 20), throw=True).get()
+
+
+@needs_pg
+def test_submit_persistent_run_async_eager(client):
+    r = client.post(
+        "/runs/async",
+        json={"engine": "fabric", "subject": "ทดสอบ persistent run ผ่าน queue", "agents": 20},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "SUCCESS"
+    assert body["job_id"]
+    rid = body["result"]["run_id"]
+    detail = client.get(f"/runs/{rid}.json").json()
+    assert detail["status"] == "complete"
+    assert detail["payload"]["brief"]["fragility_index"] >= 0
+    client.delete(f"/runs/{rid}")
+
+
+def test_run_job_status_reports_failure(client, monkeypatch):
+    class _FailedResult:
+        status = "FAILURE"
+        result = RuntimeError("worker failed")
+
+        def successful(self):
+            return False
+
+        def failed(self):
+            return True
+
+    monkeypatch.setattr(celery_app, "AsyncResult", lambda job_id: _FailedResult())
+    r = client.get("/run-jobs/job-1")
+    assert r.status_code == 200
+    assert r.json() == {"job_id": "job-1", "status": "FAILURE", "error": "worker failed"}
