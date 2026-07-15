@@ -85,3 +85,13 @@
 - [x] Operational recovery: ล้าง retry ซ้ำ 2 งาน, เปิด Celery worker, ตรวจ ping ผ่าน และยืนยันคิวถูกดึง
 - [x] Verification: concurrent endpoint stress 100/100 ได้ HTTP 200; `uv run pytest -q` ผ่าน 345 tests; ruff check/format ผ่าน
 - [x] Governance: งานจริงถูก BudgetGuard block ที่ยอดเดือน `$96.01/$50.00`; ไม่ปรับเพดานโดยไม่มีมติผู้ใช้
+
+## Post-phase hardening addendum #4 (15 ก.ค. 2026) ✅
+
+งานนี้เป็น trust hardening จากการ monitor Debate prediction จริง:
+
+- [x] Root cause: worker ที่เปิดจาก Codex environment สืบทอด proxy กันเน็ต `127.0.0.1:9`; OpenRouter key/credit/model ปกติ
+- [x] Operational recovery: รีสตาร์ต worker โดยล้าง proxy และ retry งานเดิมจนสำเร็จจริง 59/60 posts, analyst synthesis ไม่ fallback
+- [x] All-failure gate: `run_debate()` raise `DebateUnavailableError` เมื่อไม่มี agent post ที่ใช้ได้ ห้ามสร้าง mechanical false-success
+- [x] Failure observability: จำแนก connection, timeout, rate-limit, auth, permission, model-not-found, bad-request และ provider error
+- [x] Verification: real run `debate-20260715-134130-116660` สำเร็จใน 48 วินาที cost `$0.005746`; `uv run pytest -q` ผ่าน 347 tests; ruff check/format ผ่าน

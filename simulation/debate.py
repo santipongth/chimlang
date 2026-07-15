@@ -30,6 +30,10 @@ REPLY_SAMPLE = 6
 MAX_POST_CHARS = 400
 
 
+class DebateUnavailableError(RuntimeError):
+    """Raised when no agent response is usable, so no prediction can be trusted."""
+
+
 @dataclass(frozen=True)
 class DebatePost:
     round_no: int
@@ -140,6 +144,18 @@ def _failure_reason(exc: Exception) -> str:
         return "schema_missing_field"
     if isinstance(exc, (TypeError, ValueError)):
         return "schema_value_error"
+    by_exception = {
+        "APIConnectionError": "llm_connection_error",
+        "APITimeoutError": "llm_timeout",
+        "RateLimitError": "llm_rate_limit",
+        "AuthenticationError": "llm_auth_error",
+        "PermissionDeniedError": "llm_permission_error",
+        "NotFoundError": "llm_model_not_found",
+        "BadRequestError": "llm_bad_request",
+        "InternalServerError": "llm_provider_error",
+    }
+    if reason := by_exception.get(type(exc).__name__):
+        return reason
     return "llm_call_error"
 
 
@@ -388,6 +404,12 @@ def run_debate(
 
     metrics = _compute_metrics(all_posts, rounds, len(personas))
     protocol = analyze_protocol(all_posts, subject=subject, rounds=rounds)
+    if metrics["posts_ok"] == 0:
+        failures = protocol["failure_taxonomy"]
+        summary = ", ".join(f"{reason}={count}" for reason, count in sorted(failures.items()))
+        raise DebateUnavailableError(
+            f"debate ใช้งานไม่ได้: agent LLM ล้มเหลวทุกคำตอบ ({summary or 'unknown'})"
+        )
 
     ok_last = [p for p in all_posts if not p.failed and p.round_no == rounds - 1]
     digest = "\n".join(f"- [{p.segment}] จุดยืน {p.stance:+.2f}: {p.content}" for p in ok_last)

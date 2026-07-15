@@ -8,7 +8,13 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from core.runstore import RunStore, new_run_id
-from simulation.debate import DebatePost, _compute_metrics, run_debate
+from simulation.debate import (
+    DebatePost,
+    DebateUnavailableError,
+    _compute_metrics,
+    _failure_reason,
+    run_debate,
+)
 from simulation.engines import ENGINES, get_engine
 from simulation.persona import PersonaFactory
 from simulation.sources import ingest_sources, retrieve_context, retrieve_evidence
@@ -108,6 +114,26 @@ def test_debate_failed_posts_flagged_and_excluded():
     assert all(p.content == "" for p in r.posts if p.failed)
     assert r.protocol["failure_taxonomy"]["json_parse_error"] == 2
     assert r.synthesis["confidence"] == pytest.approx(0.8 * (1 - 2 / 6), abs=0.01)
+
+
+def test_debate_fails_closed_when_every_agent_call_fails():
+    adapter = _FakeAdapter(fail_on=set(range(1, 7)))
+
+    with pytest.raises(DebateUnavailableError, match="agent LLM ล้มเหลวทุกคำตอบ"):
+        run_debate(_personas(), subject="ทดสอบ", rounds=1, seed=3, adapter=adapter)
+
+
+def test_debate_classifies_llm_transport_failures():
+    expected = {
+        "APIConnectionError": "llm_connection_error",
+        "APITimeoutError": "llm_timeout",
+        "RateLimitError": "llm_rate_limit",
+        "AuthenticationError": "llm_auth_error",
+    }
+
+    for exception_name, reason in expected.items():
+        exception_type = type(exception_name, (Exception,), {})
+        assert _failure_reason(exception_type()) == reason
 
 
 def test_debate_cap_enforced():
