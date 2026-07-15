@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Save } from "lucide-react";
 import {
   AppSettings,
   DeepHealth,
@@ -15,6 +16,9 @@ import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 
 // Settings (P6-M4) — ค่า default + จัดการ persona packs + สถานะระบบ (secrets อยู่ .env เท่านั้น)
 
+const usd = (value: number) =>
+  value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
 export default function Settings() {
   const { t } = useLang();
   const [data, setData] = useState<AppSettings | null>(null);
@@ -28,6 +32,8 @@ export default function Settings() {
   const [newModel, setNewModel] = useState("");
   const [tavilyDraft, setTavilyDraft] = useState("");
   const [tavilyBusy, setTavilyBusy] = useState(false);
+  const [budgetDraft, setBudgetDraft] = useState({ run: "", monthly: "" });
+  const [budgetBusy, setBudgetBusy] = useState(false);
   // ล้าง key ที่เก็บใน DB — ยืนยันผ่าน dialog ของเราเองก่อนเสมอ (มติผู้ใช้ 13 ก.ค.)
   const [keyToClear, setKeyToClear] = useState<"llm" | "tavily" | null>(null);
 
@@ -35,6 +41,10 @@ export default function Settings() {
     fetchSettings()
       .then((d) => {
         setData(d);
+        setBudgetDraft({
+          run: String(d.run_budget_usd_cap),
+          monthly: String(d.monthly_budget_usd_cap),
+        });
         // ราคาที่แสดง = yaml (มาตรฐาน) ทับด้วยที่ผู้ใช้แก้ไว้
         setPrices({ ...(d.llm?.yaml_prices ?? {}), ...(d.llm_prices ?? {}) });
       })
@@ -66,14 +76,68 @@ export default function Settings() {
     if (!data) return;
     setError("");
     try {
-      await saveSettings(p);
-      setData({ ...data, ...p });
+      const saved = await saveSettings(p);
+      setData(saved);
       setMsg(t("set_saved"));
       setTimeout(() => setMsg(""), 1500);
     } catch (e: any) {
       setError(String(e.message ?? e));
     }
   }
+
+  async function saveBudget() {
+    const run = Number(budgetDraft.run);
+    const monthly = Number(budgetDraft.monthly);
+    if (
+      budgetDraft.run.trim() === "" ||
+      budgetDraft.monthly.trim() === "" ||
+      !Number.isFinite(run) ||
+      !Number.isFinite(monthly) ||
+      run < 0 ||
+      monthly < 0 ||
+      run > 100000 ||
+      monthly > 100000
+    ) {
+      setError(t("set_budget_invalid"));
+      return;
+    }
+
+    setBudgetBusy(true);
+    setError("");
+    try {
+      const saved = await saveSettings({
+        run_budget_usd_cap: run,
+        monthly_budget_usd_cap: monthly,
+      });
+      setData(saved);
+      setBudgetDraft({
+        run: String(saved.run_budget_usd_cap),
+        monthly: String(saved.monthly_budget_usd_cap),
+      });
+      setMsg(t("set_budget_saved"));
+      setTimeout(() => setMsg(""), 2000);
+    } catch (e: any) {
+      setError(String(e.message ?? e));
+    } finally {
+      setBudgetBusy(false);
+    }
+  }
+
+  const draftRun = Number(budgetDraft.run);
+  const draftMonthly = Number(budgetDraft.monthly);
+  const budgetDraftValid =
+    budgetDraft.run.trim() !== "" &&
+    budgetDraft.monthly.trim() !== "" &&
+    Number.isFinite(draftRun) &&
+    Number.isFinite(draftMonthly) &&
+    draftRun >= 0 &&
+    draftMonthly >= 0 &&
+    draftRun <= 100000 &&
+    draftMonthly <= 100000;
+  const budgetChanged = Boolean(
+    data &&
+      (draftRun !== data.run_budget_usd_cap || draftMonthly !== data.monthly_budget_usd_cap),
+  );
 
   return (
     <div className="space-y-6">
@@ -310,57 +374,78 @@ export default function Settings() {
 
           {/* งบประมาณ (P6-M5) */}
           {data.budget && (
-          <section className={card + " space-y-3"}>
-            <h2 className="font-semibold">💰 {t("set_budget_title")}</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("set_budget_run")}
-                </span>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={data.run_budget_usd_cap}
-                  onChange={(e) => setData({ ...data, run_budget_usd_cap: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => patch({ run_budget_usd_cap: data.run_budget_usd_cap })}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2"
-                />
-                <span className="text-[11px] text-muted-foreground">
-                  {t("set_budget_active")}: ${data.budget.run_cap_effective} {data.run_budget_usd_cap === 0 ? `(${t("set_budget_from_env")})` : ""}
-                </span>
-              </label>
-              <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("set_budget_month")}
-                </span>
-                <input
-                  type="number"
-                  step="5"
-                  value={data.monthly_budget_usd_cap}
-                  onChange={(e) => setData({ ...data, monthly_budget_usd_cap: parseFloat(e.target.value) || 0 })}
-                  onBlur={() => patch({ monthly_budget_usd_cap: data.monthly_budget_usd_cap })}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2"
-                />
-                <span className="text-[11px] text-muted-foreground">
-                  {t("set_budget_active")}: ${data.budget.monthly_cap_effective}
-                </span>
-              </label>
-            </div>
-            <div className="rounded-xl border border-border bg-background p-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{t("set_budget_spent")}</span>
-                <span className="tabular-nums font-medium">
-                  ${data.budget.spent_this_month} / ${data.budget.monthly_cap_effective}
-                </span>
+            <section className={card + " space-y-4"}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-semibold">💰 {t("set_budget_title")}</h2>
+                <button
+                  type="button"
+                  onClick={saveBudget}
+                  disabled={budgetBusy || !budgetDraftValid || !budgetChanged}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Save size={15} aria-hidden="true" />
+                  {budgetBusy ? t("set_budget_saving") : t("set_budget_save")}
+                </button>
               </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-                <div
-                  className={`h-full ${data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective) > 0.9 ? "bg-red-400" : "bg-primary"}`}
-                  style={{ width: `${Math.min(100, (data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective)) * 100)}%` }}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("set_budget_run")}
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="0.5"
+                    value={budgetDraft.run}
+                    onChange={(e) => setBudgetDraft({ ...budgetDraft, run: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 tabular-nums"
+                  />
+                  <span className="mt-1 block text-[11px] text-muted-foreground">
+                    {t("set_budget_active")}: ${usd(data.budget.run_cap_effective)} · {t("set_budget_env_default")}: ${usd(data.budget.env_run_cap)}
+                  </span>
+                </label>
+                <label className="text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("set_budget_month")}
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="5"
+                    value={budgetDraft.monthly}
+                    onChange={(e) => setBudgetDraft({ ...budgetDraft, monthly: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 tabular-nums"
+                  />
+                  <span className="mt-1 block text-[11px] text-muted-foreground">
+                    {t("set_budget_active")}: ${usd(data.budget.monthly_cap_effective)} · {t("set_budget_env_default")}: ${usd(data.budget.env_monthly_cap)}
+                  </span>
+                </label>
               </div>
-            </div>
-          </section>
+              <div className="border-t border-border pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">{t("set_budget_spent")}</span>
+                  <span className="tabular-nums font-medium">
+                    ${usd(data.budget.spent_this_month)} / ${usd(data.budget.monthly_cap_effective)}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className={`h-full ${data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective) > 0.9 ? "bg-red-500" : "bg-primary"}`}
+                    style={{ width: `${Math.min(100, (data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective)) * 100)}%` }}
+                  />
+                </div>
+                <div className={`mt-2 text-xs font-medium ${data.budget.spent_this_month > data.budget.monthly_cap_effective ? "text-red-600" : "text-emerald-700"}`}>
+                  {data.budget.spent_this_month > data.budget.monthly_cap_effective
+                    ? `${t("set_budget_over")}: $${usd(data.budget.spent_this_month - data.budget.monthly_cap_effective)}`
+                    : `${t("set_budget_remaining")}: $${usd(data.budget.monthly_cap_effective - data.budget.spent_this_month)}`}
+                </div>
+                {(data.run_budget_usd_cap === 0 || data.monthly_budget_usd_cap === 0) && (
+                  <div className="mt-2 text-[11px] text-muted-foreground">0 = {t("set_budget_from_env")}</div>
+                )}
+              </div>
+            </section>
           )}
 
           {/* News Desk (P7) — feeds + Tavily key ตั้งจากหน้านี้ (DB ทับ .env) */}

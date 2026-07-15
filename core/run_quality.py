@@ -10,9 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.config import Settings, get_settings
+from core.llm.budget import spent_this_month
 from core.llm.cost import CostEstimator, TierLoad
 from core.llm.pricing import UnknownModelPricingError
-from core.llm.userconfig import effective_llm_settings, effective_pricing
+from core.llm.userconfig import (
+    effective_llm_settings,
+    effective_monthly_cap,
+    effective_pricing,
+)
 from governance.election import ElectionPolicy, classify_scenario
 from governance.pii import PIIDetector, load_allowlist
 from simulation.engines import get_engine
@@ -57,7 +62,7 @@ def estimate_run_cost(body: dict, settings: Settings | None = None) -> dict:
         "estimated_usd": round(estimate.total_usd, 6),
         "currency": "USD",
         "calls": agents * rounds + 1,
-        "run_cap_usd": settings.run_budget_usd_cap,
+        "run_cap_usd": llm_settings.run_budget_usd_cap,
         "note": "preflight_estimate",
     }
 
@@ -130,20 +135,41 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
         checks.append(ReadinessCheck("news", "News Desk", "warn", "disabled"))
     try:
         cost = estimate_run_cost(body, settings)
+        run_cap = float(cost.get("run_cap_usd", settings.run_budget_usd_cap))
         checks.append(
             ReadinessCheck(
                 "budget",
-                "Budget",
-                "block" if cost["estimated_usd"] > settings.run_budget_usd_cap else "pass",
-                f"${cost['estimated_usd']:.4f} / cap ${settings.run_budget_usd_cap:.2f}",
+                "Run budget",
+                "block" if cost["estimated_usd"] > run_cap else "pass",
+                f"${cost['estimated_usd']:.4f} / cap ${run_cap:.2f}",
             )
         )
+        if engine.key == "debate":
+            monthly_spent = spent_this_month(settings.postgres_url)
+            monthly_cap = effective_monthly_cap()
+            monthly_projected = monthly_spent + cost["estimated_usd"]
+            monthly_blocked = monthly_cap > 0 and monthly_projected > monthly_cap
+            cost.update(
+                {
+                    "monthly_spent_usd": round(monthly_spent, 6),
+                    "monthly_cap_usd": monthly_cap,
+                    "monthly_projected_usd": round(monthly_projected, 6),
+                }
+            )
+            checks.append(
+                ReadinessCheck(
+                    "monthly_budget",
+                    "Monthly budget",
+                    "block" if monthly_blocked else "pass",
+                    f"${monthly_spent:.2f} + ${cost['estimated_usd']:.4f} / cap ${monthly_cap:.2f}",
+                )
+            )
     except UnknownModelPricingError as exc:
         cost = {"estimated_usd": 0.0, "error": str(exc)}
         checks.append(ReadinessCheck("budget", "Budget", "block", str(exc)))
     except Exception as exc:
         cost = {"estimated_usd": 0.0, "error": str(exc)}
-        checks.append(ReadinessCheck("budget", "Budget", "warn", str(exc)))
+        checks.append(ReadinessCheck("budget", "Budget", "block", str(exc)))
     can_run = all(_status_score(c.status) >= 0 for c in checks) and not any(
         c.status == "block" for c in checks
     )

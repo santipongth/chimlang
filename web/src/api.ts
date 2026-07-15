@@ -392,13 +392,14 @@ export async function fetchDeepHealth(): Promise<DeepHealth> {
   return r.json();
 }
 
-export async function saveSettings(patch: Partial<AppSettings>): Promise<void> {
+export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const r = await fetch("/settings.json", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
 }
 
 // ---- Persona packs (P5-M7) ----

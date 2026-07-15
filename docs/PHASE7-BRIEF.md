@@ -95,3 +95,15 @@
 - [x] All-failure gate: `run_debate()` raise `DebateUnavailableError` เมื่อไม่มี agent post ที่ใช้ได้ ห้ามสร้าง mechanical false-success
 - [x] Failure observability: จำแนก connection, timeout, rate-limit, auth, permission, model-not-found, bad-request และ provider error
 - [x] Verification: real run `debate-20260715-134130-116660` สำเร็จใน 48 วินาที cost `$0.005746`; `uv run pytest -q` ผ่าน 347 tests; ruff check/format ผ่าน
+
+## Post-phase hardening addendum #5 (15 ก.ค. 2026) ✅
+
+งานนี้แก้ BudgetGuard/Settings จากเหตุ prediction error ที่ 55% และป้องกัน test ปนเปื้อนข้อมูล dev:
+
+- [x] Budget persistence: `PUT /settings.json` คืน stored override และ effective limits ที่ server ยืนยัน
+- [x] Budget UI: ใช้ draft แยกจากค่าจริง, บันทึกด้วยปุ่มชัดเจน, แสดง active limit, `.env` fallback, spent และ remaining/over
+- [x] Preflight monthly guard: readiness block ก่อน queue เมื่อ projected monthly spend เกิน cap
+- [x] Early worker guard: สร้าง Debate adapter/ตรวจงบก่อน source และ News Desk external I/O
+- [x] Test isolation: snapshot/restore `app_settings`; test spend ใช้ unique run id และลบใน `finally`
+- [x] Ledger recovery: ลบเฉพาะ 34 แถว `run_id=test-budget` มูลค่า `$102`; ยอดงานจริงคงอยู่ `$0.015036`
+- [x] Verification: `uv run pytest -q` ผ่าน 348 tests, ruff check/format และ web build ผ่าน; real Debate smoke 10/10 posts สำเร็จ

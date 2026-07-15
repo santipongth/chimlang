@@ -529,7 +529,9 @@ def settings_put(patch: dict, principal: Principal = Depends(get_principal)) -> 
 
     settings = get_settings()
     try:
-        return put_app_settings(settings.postgres_url, patch)
+        put_app_settings(settings.postgres_url, patch)
+        # Return the stored overrides together with the effective server values.
+        return settings_json(principal)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
@@ -759,6 +761,9 @@ def _run_create_impl(
             from simulation.redteam_population import inject_red_team
             from simulation.sources import retrieve_evidence
 
+            # Budget/model readiness must fail before source or News Desk I/O.
+            rstore.update_progress(run_id, 10, "กำลังตรวจงบและโมเดล")
+            debate_adapter = make_debate_adapter(n, rounds)
             personas = (factory or PersonaFactory()).sample(
                 n, seed=settings.default_seed, max_agents=n
             )
@@ -829,7 +834,7 @@ def _run_create_impl(
                 subject=subject,
                 rounds=rounds,
                 seed=settings.default_seed,
-                adapter=make_debate_adapter(n, rounds),
+                adapter=debate_adapter,
                 context_chunks=context,
                 segment_news=segment_news,
                 news_fetcher=news_fetcher,

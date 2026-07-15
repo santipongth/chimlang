@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import dataclass
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,7 +38,28 @@ needs_pg = pytest.mark.skipif(not _pg_ok(), reason="PostgreSQL ไม่พร�
 
 @pytest.fixture()
 def client() -> TestClient:
-    return TestClient(app)
+    """Keep API tests from changing the developer's persistent UI settings."""
+    snapshot = None
+    if _pg_ok():
+        import psycopg
+
+        from core.appsettings import get_app_settings
+
+        get_app_settings(DSN)
+        with psycopg.connect(DSN) as conn:
+            row = conn.execute("SELECT data FROM app_settings WHERE id = 1").fetchone()
+            snapshot = row[0] if row else {}
+    try:
+        yield TestClient(app)
+    finally:
+        if snapshot is not None:
+            import psycopg
+
+            with psycopg.connect(DSN) as conn:
+                conn.execute(
+                    "UPDATE app_settings SET data = %s WHERE id = 1",
+                    (json.dumps(snapshot, ensure_ascii=False),),
+                )
 
 
 # ---- engine registry ----
@@ -575,6 +597,8 @@ def test_protected_key_cannot_be_set_via_plain_put(client):
 
 @needs_pg
 def test_monthly_budget_blocks_when_exceeded():
+    import psycopg
+
     from core.llm.budget import (
         MonthlyBudgetExceededError,
         check_monthly_budget,
@@ -583,28 +607,36 @@ def test_monthly_budget_blocks_when_exceeded():
     )
 
     before = spent_this_month(DSN)
-    record_spend(DSN, 3.0, run_id="test-budget")
-    assert spent_this_month(DSN) == pytest.approx(before + 3.0)
-    # cap ต่ำกว่ายอดสะสม → block
-    with pytest.raises(MonthlyBudgetExceededError):
-        check_monthly_budget(DSN, 0.0, cap=before + 1.0)
-    # cap 0 = ปิด (ไม่ block)
-    check_monthly_budget(DSN, 999.0, cap=0.0)
+    run_id = f"test-budget-{uuid4()}"
+    try:
+        record_spend(DSN, 3.0, run_id=run_id)
+        assert spent_this_month(DSN) == pytest.approx(before + 3.0)
+        # cap ต่ำกว่ายอดสะสม → block
+        with pytest.raises(MonthlyBudgetExceededError):
+            check_monthly_budget(DSN, 0.0, cap=before + 1.0)
+        # cap 0 = ปิด (ไม่ block)
+        check_monthly_budget(DSN, 999.0, cap=0.0)
+    finally:
+        with psycopg.connect(DSN) as conn:
+            conn.execute("DELETE FROM llm_spend WHERE run_id = %s", (run_id,))
 
 
 @needs_pg
 def test_budget_override_from_settings(client):
-    client.put("/settings.json", json={"run_budget_usd_cap": 2.5, "monthly_budget_usd_cap": 20.0})
+    response = client.put(
+        "/settings.json",
+        json={"run_budget_usd_cap": 2.5, "monthly_budget_usd_cap": 20.0},
+    )
+    assert response.status_code == 200
     from core.llm.userconfig import effective_llm_settings, effective_monthly_cap
 
     assert effective_llm_settings().run_budget_usd_cap == 2.5
     assert effective_monthly_cap() == 20.0
-    data = client.get("/settings.json").json()
+    data = response.json()
     assert (
         data["budget"]["run_cap_effective"] == 2.5
         and data["budget"]["monthly_cap_effective"] == 20.0
     )
-    client.put("/settings.json", json={"run_budget_usd_cap": 0.0, "monthly_budget_usd_cap": 0.0})
 
 
 # ---- P6-M6: persona pool + view toggles ----

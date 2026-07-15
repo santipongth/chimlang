@@ -76,6 +76,24 @@ def test_run_readiness_preflight_for_fabric(client):
     assert any(c["id"] == "pii" and c["status"] == "pass" for c in body["checks"])
 
 
+def test_run_readiness_blocks_exceeded_monthly_budget(client, monkeypatch):
+    import core.run_quality as quality
+
+    monkeypatch.setattr(quality, "spent_this_month", lambda dsn: 10.0)
+    monkeypatch.setattr(quality, "effective_monthly_cap", lambda: 5.0)
+    r = client.post(
+        "/runs/readiness",
+        json={"engine": "debate", "subject": "monthly budget readiness", "agents": 10},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["can_run"] is False
+    monthly = next(c for c in body["checks"] if c["id"] == "monthly_budget")
+    assert monthly["status"] == "block"
+    assert body["cost"]["monthly_spent_usd"] == 10.0
+
+
 def test_task_itself_enforces_governance():
     """ยิง task ตรง (ข้าม API) — require_aggregate ใน _run_dashboard ต้องยังกันได้"""
     from core.tasks import whatif_dashboard_task

@@ -343,6 +343,13 @@ const DICT: Record<string, { th: string; en: string }> = {
   set_budget_active: { th: "ใช้จริง", en: "active" },
   set_budget_from_env: { th: "จากไฟล์ .env", en: "from .env" },
   set_budget_spent: { th: "ใช้ไปเดือนนี้", en: "Spent this month" },
+  set_budget_env_default: { th: "ค่าเริ่มต้น .env", en: ".env default" },
+  set_budget_save: { th: "บันทึกวงเงิน", en: "Save limits" },
+  set_budget_saving: { th: "กำลังบันทึก...", en: "Saving..." },
+  set_budget_saved: { th: "บันทึกวงเงินและเริ่มใช้งานแล้ว", en: "Budget limits saved and active" },
+  set_budget_remaining: { th: "วงเงินคงเหลือ", en: "Remaining" },
+  set_budget_over: { th: "เกินวงเงิน", en: "Over budget" },
+  set_budget_invalid: { th: "วงเงินต้องเป็นตัวเลขระหว่าง 0 ถึง 100,000", en: "Limits must be numbers from 0 to 100,000" },
   set_news_title: { th: "โต๊ะข่าวสด (Live News Desk)", en: "Live News Desk" },
   set_news_desc: {
     th: "แหล่งข่าวที่โต๊ะข่าวกลางใช้ดึงให้ตัวแทนจำลองตอนเปิดโหมดข่าวสด — ตั้งจากหน้านี้ได้เลย (ค่าที่ตั้งที่นี่จะทับค่าในไฟล์ .env)",
