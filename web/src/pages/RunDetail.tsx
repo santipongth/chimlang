@@ -504,7 +504,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
           {tab === "debate" && isDebate && (
             <section className={card}>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-semibold">🗣 {t("rd_feed")} — {t("rd_round")} {shownRound}</h2>
+                <h2 className="font-semibold">🗣 {t("rd_feed")} — {t("rd_round")} {shownRound + 1}</h2>
                 {/* Replay slider ทีละรอบ */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>▶ Replay</span>

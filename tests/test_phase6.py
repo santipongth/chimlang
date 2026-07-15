@@ -208,6 +208,30 @@ def test_sources_pii_blocked_and_lexical_retrieval():
     assert retrieve_context(DSN, "ไม่มี-run-นี้", "x") == ()
 
 
+@needs_pg
+def test_source_pii_is_never_written_to_external_cache(monkeypatch):
+    import psycopg
+
+    import simulation.sources as src
+
+    url = f"https://cache-pii.example/{uuid4()}"
+    monkeypatch.setattr(src, "_fetch_text", lambda *args: "ติดต่อ 081-234-5678")
+    result = ingest_sources(
+        DSN,
+        new_run_id("debate"),
+        [{"kind": "url", "label": "PII cache guard", "url": url}],
+    )
+    assert result[0]["status"] == "blocked"
+    assert "081-234-5678" not in result[0]["error"]
+
+    cache_key = src.hashlib.sha256(f"url:{url}".encode()).hexdigest()
+    with psycopg.connect(DSN) as conn:
+        cached = conn.execute(
+            "SELECT 1 FROM external_fetch_cache WHERE url_hash = %s", (cache_key,)
+        ).fetchone()
+    assert cached is None
+
+
 def test_sources_detector_disabled_fails_closed(monkeypatch):
     import simulation.sources as src
     from core.config import Settings

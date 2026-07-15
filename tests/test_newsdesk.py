@@ -69,15 +69,26 @@ def test_gather_blocks_pii_item(monkeypatch):
             ("ข่าวมี PII", "ข่าวมี PII\nติดต่อคุณสมชายที่เบอร์ 081-234-5678 ด่วน"),
         ],
     )
+    feed = f"https://mock.feed/{uuid4()}.rss"
     ctx = RunContext(run_id="news-pii-item", seed=1)
-    items = gather(DSN, ctx, feeds=["https://mock.feed/rss"], queries=[])
+    items = gather(DSN, ctx, feeds=[feed], queries=[])
     ready = [it for it in items if it.status == "ready"]
     blocked = [it for it in items if it.status == "blocked"]
     assert len(ready) == 1 and len(blocked) == 1
     assert blocked[0].content == ""  # เนื้อหาที่มี PII ไม่ถูกเก็บ
+    assert "081-234-5678" not in blocked[0].error
     # snapshot ใน DB ก็ต้องไม่เก็บเนื้อหา PII
     stored = [it for it in load_items(DSN, "news-pii-item") if it.status == "blocked"]
     assert stored and all(it.content == "" for it in stored)
+    # Raw provider payload containing PII must never be persisted in the fetch cache.
+    import psycopg
+
+    with psycopg.connect(DSN) as conn:
+        cached = conn.execute(
+            "SELECT 1 FROM news_fetch_cache WHERE cache_key = %s",
+            (nd._cache_key("rss", feed, feed),),
+        ).fetchone()
+    assert cached is None
 
 
 @needs_pg

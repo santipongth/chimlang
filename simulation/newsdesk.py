@@ -134,6 +134,7 @@ def _cached_fetch(
     query: str,
     url: str,
     fetcher,
+    detector: PIIDetector,
 ) -> list:
     key = _cache_key(provider, query, url)
     with psycopg.connect(dsn) as conn:
@@ -145,6 +146,8 @@ def _cached_fetch(
         if row and row[1] > datetime.now(UTC) - timedelta(hours=NEWS_CACHE_TTL_HOURS):
             return list(row[0])
     payload = fetcher()
+    if detector.check(json.dumps(payload, ensure_ascii=False)).blocked:
+        return list(payload)
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
         conn.execute(
@@ -209,6 +212,7 @@ def gather(
                     query=q,
                     url="https://api.tavily.com/search",
                     fetcher=lambda q=q: _tavily_search(q, tavily_key),
+                    detector=detector,
                 )
                 for title, url, content in results:
                     raw.append(("search", q, url, title, content))
@@ -225,6 +229,7 @@ def gather(
                 query=feed,
                 url=feed,
                 fetcher=lambda feed=feed: _fetch_rss_items(feed),
+                detector=detector,
             )
             for title, content in results[:10]:
                 raw.append(("rss", feed, feed, title, content))
@@ -273,7 +278,9 @@ def gather(
             stored_content = content
             if report.blocked:
                 status = "blocked"
-                error = "พบ PII (GOV-01): " + "; ".join(report.block_reasons[:3])
+                error = "พบ PII (GOV-01): " + ", ".join(
+                    sorted({f.kind for f in report.findings if not f.allowlisted})
+                )
                 stored_content = ""  # ไม่เก็บเนื้อหาที่มี PII
             tags = CHANNEL_TAGS[provider]
             conn.execute(

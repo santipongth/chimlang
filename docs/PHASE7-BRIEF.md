@@ -107,3 +107,12 @@
 - [x] Test isolation: snapshot/restore `app_settings`; test spend ใช้ unique run id และลบใน `finally`
 - [x] Ledger recovery: ลบเฉพาะ 34 แถว `run_id=test-budget` มูลค่า `$102`; ยอดงานจริงคงอยู่ `$0.015036`
 - [x] Verification: `uv run pytest -q` ผ่าน 348 tests, ruff check/format และ web build ผ่าน; real Debate smoke 10/10 posts สำเร็จ
+
+## Post-phase hardening addendum #6 (15 ก.ค. 2026)
+
+- [x] Debate replay presentation แสดงเลขรอบเริ่มที่ 1 โดยไม่เปลี่ยน internal `round_no` 0-based
+- [x] ปิด pre-gate persistence: payload ที่ PII detector block ไม่ถูกเขียนลง external/news fetch cache
+- [x] ลบเฉพาะ legacy `news_fetch_cache` ที่มี PII 5 แถว และไม่เก็บ raw PII value ใน source/news status error
+- [x] เพิ่ม regression test ว่า external source ที่มี PII ไม่ทิ้ง raw cache
+- [ ] **รอมติผู้ใช้:** ADR-0010 เสนอ redact→re-scan→process สำหรับ external evidence แทน block ทั้งชิ้น
+- [x] Verification: `uv run pytest -q` ผ่าน 349 tests, ruff check/format และ web build ผ่าน

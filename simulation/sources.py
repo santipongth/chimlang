@@ -150,7 +150,14 @@ def _fetch_text(kind: str, label: str, url: str | None, text: str | None) -> str
     return _parse_rss(raw) if kind == "rss" else _strip_html(raw)
 
 
-def _fetch_text_cached(conn, kind: str, label: str, url: str | None, text: str | None) -> str:
+def _fetch_text_cached(
+    conn,
+    kind: str,
+    label: str,
+    url: str | None,
+    text: str | None,
+    detector: PIIDetector,
+) -> str:
     if kind == "text":
         return _fetch_text(kind, label, url, text)
     safe_url = validate_external_url(url or "")
@@ -163,6 +170,8 @@ def _fetch_text_cached(conn, kind: str, label: str, url: str | None, text: str |
     if row:
         return row[0]
     content = _fetch_text(kind, label, safe_url, text)
+    if detector.check(content).blocked:
+        return content
     conn.execute(
         "INSERT INTO external_fetch_cache (url_hash, url, kind, content, fetched_at) "
         "VALUES (%s, %s, %s, %s, now()) "
@@ -204,13 +213,16 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
             status, error, n_chunks = "ready", "", 0
             content_hash, duplicate_of, quality_score = "", "", 0.0
             try:
-                text = _fetch_text_cached(conn, kind, label, src.get("url"), src.get("text"))
+                text = _fetch_text_cached(
+                    conn, kind, label, src.get("url"), src.get("text"), detector
+                )
                 content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
                 report = detector.check(text)
                 if report.blocked:
                     status, error = (
                         "blocked",
-                        "พบ PII (GOV-01): " + "; ".join(report.block_reasons[:5]),
+                        "พบ PII (GOV-01): "
+                        + ", ".join(sorted({f.kind for f in report.findings if not f.allowlisted})),
                     )
                 elif content_hash in seen_hashes:
                     status, duplicate_of = "duplicate", seen_hashes[content_hash]
