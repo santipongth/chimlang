@@ -178,6 +178,8 @@ def test_cancel_queued_run_updates_status(client, monkeypatch):
     store = RunStore(DSN)
     store.setup()
     assert store.get(rid)["status"] == "canceled"
+    assert store.mark_running(rid, "worker received stale task") is False
+    assert store.get(rid)["status"] == "canceled"
     client.delete(f"/runs/{rid}")
 
 

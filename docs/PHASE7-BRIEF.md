@@ -74,3 +74,14 @@
 - [x] Frontend Polish: เพิ่ม readiness panel, validation target, evidence highlights, debate protocol panel, stacked 24h run trend
 - [x] API Structure: เริ่มแยก router package โดยย้าย endpoint ใหม่กลุ่ม runs/preflight ออกจาก `api/app.py`
 - [x] Tests/verification: `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`, `web npm.cmd run build` ผ่าน
+
+## Post-phase hardening addendum #3 (15 ก.ค. 2026) ✅
+
+งานนี้เป็น production hardening จากเหตุ prediction ค้าง queued และ PostgreSQL deadlock:
+
+- [x] แก้ schema setup contention: `RunStore.setup()` ทำครั้งเดียวต่อ process และ serialize ข้าม API/worker ด้วย PostgreSQL advisory lock
+- [x] ลด AccessExclusiveLock: ไม่ `DROP/ADD sim_runs_status_check` เมื่อ constraint ปัจจุบันรองรับ lifecycle ครบแล้ว
+- [x] Cancellation safety: worker เปลี่ยน run เป็น running ได้เฉพาะสถานะ queued ไม่ปลุก stale canceled task จาก Redis
+- [x] Operational recovery: ล้าง retry ซ้ำ 2 งาน, เปิด Celery worker, ตรวจ ping ผ่าน และยืนยันคิวถูกดึง
+- [x] Verification: concurrent endpoint stress 100/100 ได้ HTTP 200; `uv run pytest -q` ผ่าน 345 tests; ruff check/format ผ่าน
+- [x] Governance: งานจริงถูก BudgetGuard block ที่ยอดเดือน `$96.01/$50.00`; ไม่ปรับเพดานโดยไม่มีมติผู้ใช้

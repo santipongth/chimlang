@@ -7,8 +7,13 @@ POST /runs ต้อง register prediction ≥ 1 (กฎเหล็กข้�
 
 import json
 from datetime import UTC, datetime
+from threading import Lock
 
 import psycopg
+
+_SETUP_DONE: set[str] = set()
+_SETUP_LOCK = Lock()
+_SCHEMA_ADVISORY_LOCK = "chimlang:runstore-schema:v1"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sim_runs (
@@ -69,47 +74,68 @@ class RunStore:
         return psycopg.connect(self._dsn)
 
     def setup(self) -> None:
-        with self._conn() as conn:
-            conn.execute(_SCHEMA)
-            conn.execute("ALTER TABLE sim_runs DROP CONSTRAINT IF EXISTS sim_runs_status_check")
-            conn.execute(
-                "ALTER TABLE sim_runs ADD CONSTRAINT sim_runs_status_check "
-                "CHECK (status IN ('queued', 'running', 'complete', 'error', 'canceled'))"
-            )
-            conn.execute(
-                "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS job_id TEXT NOT NULL DEFAULT ''"
-            )
-            conn.execute(
-                "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS queued_at "
-                "TIMESTAMPTZ NOT NULL DEFAULT now()"
-            )
-            conn.execute("ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ")
-            conn.execute("ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ")
-            conn.execute(
-                "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS progress INT NOT NULL DEFAULT 0"
-            )
-            conn.execute(
-                "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS progress_message "
-                "TEXT NOT NULL DEFAULT ''"
-            )
-            conn.execute(
-                "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS parent_run_id "
-                "TEXT NOT NULL DEFAULT ''"
-            )
-            conn.execute(
-                "ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS failure_reason "
-                "TEXT NOT NULL DEFAULT ''"
-            )
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS run_events ("
-                "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, "
-                "created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
-                "event_type TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system', "
-                "message TEXT NOT NULL DEFAULT '', payload JSONB NOT NULL DEFAULT '{}')"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS run_events_run ON run_events (run_id, created_at)"
-            )
+        if self._dsn in _SETUP_DONE:
+            return
+        with _SETUP_LOCK:
+            if self._dsn in _SETUP_DONE:
+                return
+            with self._conn() as conn:
+                # API and Celery are separate processes and may initialize together.
+                conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                    (_SCHEMA_ADVISORY_LOCK,),
+                )
+                conn.execute(_SCHEMA)
+                status_constraint = conn.execute(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE conrelid = 'sim_runs'::regclass "
+                    "AND conname = 'sim_runs_status_check'"
+                ).fetchone()
+                if status_constraint is None or "canceled" not in status_constraint[0]:
+                    conn.execute(
+                        "ALTER TABLE sim_runs DROP CONSTRAINT IF EXISTS sim_runs_status_check"
+                    )
+                    conn.execute(
+                        "ALTER TABLE sim_runs ADD CONSTRAINT sim_runs_status_check "
+                        "CHECK (status IN ('queued', 'running', 'complete', 'error', 'canceled'))"
+                    )
+                conn.execute(
+                    "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS job_id TEXT NOT NULL DEFAULT ''"
+                )
+                conn.execute(
+                    "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS queued_at "
+                    "TIMESTAMPTZ NOT NULL DEFAULT now()"
+                )
+                conn.execute("ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ")
+                conn.execute(
+                    "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ"
+                )
+                conn.execute(
+                    "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS progress INT NOT NULL DEFAULT 0"
+                )
+                conn.execute(
+                    "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS progress_message "
+                    "TEXT NOT NULL DEFAULT ''"
+                )
+                conn.execute(
+                    "ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS parent_run_id "
+                    "TEXT NOT NULL DEFAULT ''"
+                )
+                conn.execute(
+                    "ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS failure_reason "
+                    "TEXT NOT NULL DEFAULT ''"
+                )
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS run_events ("
+                    "id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL, "
+                    "created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+                    "event_type TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system', "
+                    "message TEXT NOT NULL DEFAULT '', payload JSONB NOT NULL DEFAULT '{}')"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS run_events_run ON run_events (run_id, created_at)"
+                )
+            _SETUP_DONE.add(self._dsn)
 
     def create(
         self,
@@ -174,17 +200,21 @@ class RunStore:
                 (run_id, job_id, json.dumps({"job_id": job_id}, ensure_ascii=False)),
             )
 
-    def mark_running(self, run_id: str, message: str = "running") -> None:
+    def mark_running(self, run_id: str, message: str = "running") -> bool:
         with self._conn() as conn:
-            conn.execute(
+            updated = conn.execute(
                 "UPDATE sim_runs SET status = 'running', started_at = COALESCE(started_at, now()), "
-                "progress = GREATEST(progress, 5), progress_message = %s WHERE run_id = %s",
+                "progress = GREATEST(progress, 5), progress_message = %s "
+                "WHERE run_id = %s AND status = 'queued' RETURNING run_id",
                 (message, run_id),
-            )
+            ).fetchone()
+            if updated is None:
+                return False
             conn.execute(
                 "INSERT INTO run_events (run_id, event_type, message) VALUES (%s, 'running', %s)",
                 (run_id, message[:200]),
             )
+        return True
 
     def update_progress(self, run_id: str, progress: int, message: str) -> None:
         with self._conn() as conn:

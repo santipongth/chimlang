@@ -723,7 +723,11 @@ def _run_create_impl(
     config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
     if precreated:
-        rstore.mark_running(run_id, "เริ่มรันใน worker")
+        if not rstore.mark_running(run_id, "เริ่มรันใน worker"):
+            raise HTTPException(
+                status_code=409,
+                detail="run ไม่ได้อยู่ในสถานะ queued (อาจถูกยกเลิกแล้ว)",
+            )
     else:
         rstore.create(
             run_id=run_id,
