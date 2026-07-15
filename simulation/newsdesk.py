@@ -14,7 +14,7 @@ import json
 import random
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import psycopg
@@ -27,6 +27,7 @@ from simulation.sources import _parse_rss, _strip_html, _trigrams, validate_exte
 MAX_ITEMS_PER_RUN = 30
 MAX_SEARCH_QUERIES_PER_RUN = 8
 MAX_CONTENT_CHARS = 4_000
+NEWS_CACHE_TTL_HOURS = 6
 
 # heuristic การกระจายข่าวเข้าช่องทาง (บันทึกตรงๆ ว่าเป็น heuristic จาก provider —
 # ไม่ใช่ข้อมูลจริงว่าข่าวชิ้นนั้นแพร่ช่องไหน; refine ภายหลังได้โดยแก้ mapping นี้จุดเดียว)
@@ -56,6 +57,15 @@ CREATE TABLE IF NOT EXISTS news_items (
     error TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS news_items_run ON news_items (run_id);
+CREATE TABLE IF NOT EXISTS news_fetch_cache (
+    cache_key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL CHECK (provider IN ('rss', 'search')),
+    query TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    payload JSONB NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS news_fetch_cache_fetched ON news_fetch_cache (fetched_at);
 """
 
 
@@ -108,6 +118,45 @@ def _tavily_search(query: str, api_key: str, *, max_results: int = 3) -> list[tu
     ]
 
 
+def setup_newsdesk(dsn: str) -> None:
+    with psycopg.connect(dsn) as conn:
+        conn.execute(_SCHEMA)
+
+
+def _cache_key(provider: str, query: str, url: str) -> str:
+    return _hash(f"{provider}\n{query}\n{url}")
+
+
+def _cached_fetch(
+    dsn: str,
+    *,
+    provider: str,
+    query: str,
+    url: str,
+    fetcher,
+) -> list:
+    key = _cache_key(provider, query, url)
+    with psycopg.connect(dsn) as conn:
+        conn.execute(_SCHEMA)
+        row = conn.execute(
+            "SELECT payload, fetched_at FROM news_fetch_cache WHERE cache_key = %s",
+            (key,),
+        ).fetchone()
+        if row and row[1] > datetime.now(UTC) - timedelta(hours=NEWS_CACHE_TTL_HOURS):
+            return list(row[0])
+    payload = fetcher()
+    with psycopg.connect(dsn) as conn:
+        conn.execute(_SCHEMA)
+        conn.execute(
+            "INSERT INTO news_fetch_cache (cache_key, provider, query, url, payload, fetched_at) "
+            "VALUES (%s, %s, %s, %s, %s::jsonb, now()) "
+            "ON CONFLICT (cache_key) DO UPDATE SET payload = EXCLUDED.payload, "
+            "fetched_at = now()",
+            (key, provider, query, url, json.dumps(payload, ensure_ascii=False)),
+        )
+    return list(payload)
+
+
 def effective_news_config(settings) -> tuple[list[str], str]:
     """feeds + Tavily key ที่ใช้จริง — ค่าจากหน้า Settings (DB) ทับ .env; DB ไม่พร้อม = .env"""
     feeds = settings.news_rss_feeds_list()
@@ -154,7 +203,14 @@ def gather(
     if queries and tavily_key:
         for q in queries:
             try:
-                for title, url, content in _tavily_search(q, tavily_key):
+                results = _cached_fetch(
+                    dsn,
+                    provider="search",
+                    query=q,
+                    url="https://api.tavily.com/search",
+                    fetcher=lambda q=q: _tavily_search(q, tavily_key),
+                )
+                for title, url, content in results:
                     raw.append(("search", q, url, title, content))
             except Exception as e:
                 failures.append(("search", q, "", f"Tavily search failed: {type(e).__name__}: {e}"))
@@ -163,7 +219,14 @@ def gather(
             failures.append(("search", q, "", "Tavily skipped: TAVILY_API_KEY ยังไม่ได้ตั้งค่า"))
     for feed in feeds[:10]:
         try:
-            for title, content in _fetch_rss_items(feed)[:10]:
+            results = _cached_fetch(
+                dsn,
+                provider="rss",
+                query=feed,
+                url=feed,
+                fetcher=lambda feed=feed: _fetch_rss_items(feed),
+            )
+            for title, content in results[:10]:
                 raw.append(("rss", feed, feed, title, content))
         except Exception as e:
             failures.append(("rss", feed, feed, f"RSS fetch failed: {type(e).__name__}: {e}"))

@@ -214,6 +214,16 @@ export async function retryRun(runId: string): Promise<RunJobStatus> {
   return r.json();
 }
 
+export async function refreshRunNews(runId: string): Promise<void> {
+  const r = await fetch(`/runs/${runId}/refresh-news`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
+export async function resynthesizeRun(runId: string): Promise<void> {
+  const r = await fetch(`/runs/${runId}/resynthesize`, { method: "POST" });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+}
+
 export interface RunMetrics {
   by_status: Record<string, { count: number; avg_runtime_s: number }>;
   avg_queue_wait_s: number;
@@ -221,6 +231,15 @@ export interface RunMetrics {
   errors_24h: number;
   sources_by_status: Record<string, number>;
   news_by_status: Record<string, number>;
+  recent: {
+    run_id: string;
+    created_at: string;
+    engine: string;
+    status: string;
+    progress: number;
+    progress_message: string;
+  }[];
+  runs_24h: { hour: string; status: string; count: number }[];
   spent_this_month: number;
 }
 

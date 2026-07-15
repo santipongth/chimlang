@@ -173,6 +173,37 @@ def _mechanical_synthesis(posts: list[DebatePost], subject: str, rounds: int) ->
     }
 
 
+def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict:
+    """Rebuild debate metrics/synthesis from stored posts only.
+
+    This is the safe partial-retry path for UI/API repair: it never calls an LLM and
+    therefore preserves replay reproducibility and budget guarantees.
+    """
+    debate_posts = [
+        DebatePost(
+            round_no=int(p["round_no"]),
+            agent_idx=int(p["agent_idx"]),
+            segment=str(p["segment"]),
+            content=str(p.get("content", "")),
+            stance=float(p.get("stance", 0.0)),
+            sentiment=float(p.get("sentiment", 0.0)),
+            failed=bool(p.get("failed", False)),
+        )
+        for p in posts
+    ]
+    effective_rounds = max(1, rounds or (max((p.round_no for p in debate_posts), default=0) + 1))
+    agent_count = len({p.agent_idx for p in debate_posts})
+    metrics = _compute_metrics(debate_posts, effective_rounds, agent_count)
+    synthesis = _mechanical_synthesis(debate_posts, subject, effective_rounds)
+    failed = metrics["posts_failed"]
+    total = len(debate_posts) or 1
+    synthesis["confidence"] = round(
+        float(synthesis.get("confidence", 0.5)) * (1 - failed / total), 2
+    )
+    synthesis["resynthesized_from_snapshot"] = True
+    return {"synthesis": synthesis, "metrics": metrics}
+
+
 def run_debate(
     personas: list[Persona],
     *,

@@ -1,5 +1,7 @@
 """tests P4-M3: queue endpoint (eager mode), election guard ก่อน enqueue, cap agents"""
 
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -163,3 +165,106 @@ def test_cancel_queued_run_updates_status(client, monkeypatch):
     store.setup()
     assert store.get(rid)["status"] == "canceled"
     client.delete(f"/runs/{rid}")
+
+
+@needs_pg
+def test_resynthesize_run_rebuilds_payload_from_posts(client):
+    from core.runstore import RunStore
+
+    rid = f"resynth-{uuid4()}"
+    store = RunStore(DSN)
+    store.setup()
+    store.create(
+        run_id=rid,
+        engine="debate",
+        subject="ทดสอบสรุปใหม่",
+        domain="ทั่วไป",
+        agents=2,
+        rounds=2,
+        seed=1,
+        config={"live_news": False},
+    )
+    store.add_posts(
+        rid,
+        [
+            {
+                "round_no": 0,
+                "agent_idx": 0,
+                "segment": "a",
+                "content": "เห็นด้วย",
+                "stance": 0.4,
+                "sentiment": 0.1,
+            },
+            {
+                "round_no": 0,
+                "agent_idx": 1,
+                "segment": "b",
+                "content": "ยังลังเล",
+                "stance": 0.0,
+                "sentiment": 0.0,
+            },
+            {
+                "round_no": 1,
+                "agent_idx": 0,
+                "segment": "a",
+                "content": "เห็นด้วยมากขึ้น",
+                "stance": 0.6,
+                "sentiment": 0.2,
+            },
+            {
+                "round_no": 1,
+                "agent_idx": 1,
+                "segment": "b",
+                "content": "เริ่มเห็นด้วย",
+                "stance": 0.3,
+                "sentiment": 0.1,
+            },
+        ],
+    )
+    store.finish(rid, {"synthesis": {"summary": "old"}, "metrics": {}})
+    try:
+        r = client.post(f"/runs/{rid}/resynthesize")
+        assert r.status_code == 200
+        detail = client.get(f"/runs/{rid}.json").json()
+        assert detail["payload"]["synthesis"]["resynthesized_from_snapshot"] is True
+        assert detail["payload"]["metrics"]["posts_ok"] == 4
+        assert detail["payload"]["resynthesized_at"]
+    finally:
+        client.delete(f"/runs/{rid}")
+
+
+@needs_pg
+def test_refresh_news_updates_debate_payload(client, monkeypatch):
+    import simulation.newsdesk as nd
+    from core.runstore import RunStore
+
+    monkeypatch.setattr(nd, "effective_news_config", lambda settings: ([], ""))
+    rid = f"refresh-news-{uuid4()}"
+    store = RunStore(DSN)
+    store.setup()
+    store.create(
+        run_id=rid,
+        engine="debate",
+        subject="ทดสอบ refresh news",
+        domain="ทั่วไป",
+        agents=2,
+        rounds=1,
+        seed=1,
+        config={"live_news": True},
+    )
+    store.finish(
+        rid,
+        {"synthesis": {"summary": "old"}, "metrics": {}, "news": {"enabled": True, "items": []}},
+    )
+    try:
+        r = client.post(f"/runs/{rid}/refresh-news")
+        assert r.status_code == 200
+        detail = client.get(f"/runs/{rid}.json").json()
+        news = detail["payload"]["news"]
+        assert news["enabled"] is True
+        assert news["refreshed_at"]
+        assert any(
+            item["provider"] == "search" and item["status"] == "skipped" for item in news["items"]
+        )
+    finally:
+        client.delete(f"/runs/{rid}")

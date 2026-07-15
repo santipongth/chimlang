@@ -148,6 +148,13 @@ class RunStore:
                 (json.dumps(payload, ensure_ascii=False), run_id),
             )
 
+    def update_payload(self, run_id: str, payload: dict, message: str = "updated") -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE sim_runs SET payload = %s, progress_message = %s WHERE run_id = %s",
+                (json.dumps(payload, ensure_ascii=False), message[:200], run_id),
+            )
+
     def fail(self, run_id: str, error: str) -> None:
         with self._conn() as conn:
             conn.execute(
@@ -330,6 +337,15 @@ class RunStore:
                 ).fetchall()
             except Exception:
                 news_rows = []
+            recent_rows = conn.execute(
+                "SELECT run_id, created_at, engine, status, progress, progress_message "
+                "FROM sim_runs ORDER BY created_at DESC LIMIT 12"
+            ).fetchall()
+            hourly_rows = conn.execute(
+                "SELECT date_trunc('hour', created_at) AS h, status, count(*) "
+                "FROM sim_runs WHERE created_at > now() - interval '24 hours' "
+                "GROUP BY h, status ORDER BY h"
+            ).fetchall()
         return {
             "by_status": {
                 r[0]: {"count": int(r[1]), "avg_runtime_s": float(r[2] or 0)} for r in rows
@@ -339,6 +355,20 @@ class RunStore:
             "errors_24h": int(failures),
             "sources_by_status": {r[0]: int(r[1]) for r in source_rows},
             "news_by_status": {r[0]: int(r[1]) for r in news_rows},
+            "recent": [
+                {
+                    "run_id": r[0],
+                    "created_at": r[1].isoformat(),
+                    "engine": r[2],
+                    "status": r[3],
+                    "progress": r[4],
+                    "progress_message": r[5],
+                }
+                for r in recent_rows
+            ],
+            "runs_24h": [
+                {"hour": r[0].isoformat(), "status": r[1], "count": int(r[2])} for r in hourly_rows
+            ],
         }
 
     def delete(self, run_id: str) -> None:

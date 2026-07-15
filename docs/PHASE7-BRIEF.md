@@ -48,3 +48,15 @@
 - Tavily คุณภาพภาษาไทยยังไม่ benchmark อย่างเป็นระบบ (ใช้ query ไทยได้ แต่ผล mixed) — ต้อง
   ทดสอบจริงเมื่อผู้ใช้ใส่ key; ไม่มี key ระบบทำงานโหมด RSS ได้เต็ม
 - ข่าวจริงมีชื่อบุคคลสาธารณะ — PII allowlist บริบทข่าวครอบอยู่ (GOV-01 ข้อยกเว้นเดิม)
+
+## Post-phase hardening addendum (15 ก.ค. 2026) ✅
+
+งานนี้เป็น hardening ต่อจาก Phase 7 ที่ปิดแล้ว ไม่ใช่ milestone ใหม่ แต่บันทึกเป็น checklist เพื่อให้ protocol ส่งมอบข้ามโมเดลครบ:
+
+- [x] News Desk provider success cache: เพิ่ม `news_fetch_cache` TTL 6 ชั่วโมง สำหรับ RSS/Tavily success โดยยัง snapshot failure/skipped ลง `news_items`
+- [x] Migration ledger: `scripts/db_migrations.py` มี `schema_migrations` และ version `2026-07-15-run-lifecycle-newsdesk-cache`
+- [x] Partial repair API: `POST /runs/{run_id}/refresh-news` และ `POST /runs/{run_id}/resynthesize` พร้อม audit และ guard queued/running
+- [x] Deterministic resynthesis: rebuild synthesis/metrics จาก stored `debate_posts` โดยไม่เรียก LLM
+- [x] Job Center observability: เพิ่ม `runs_24h/recent` metrics, loading skeleton, 24h run trend
+- [x] Run Detail repair UX: เพิ่มปุ่ม Refresh news/Resynthesize และ reload payload หลัง repair
+- [x] Tests/verification: เพิ่ม coverage cache/refresh/resynthesis; `uv run pytest -q`, ruff, format check, และ web build ผ่าน

@@ -2,6 +2,7 @@
 
 import os
 from datetime import date
+from uuid import uuid4
 
 import pytest
 
@@ -103,6 +104,29 @@ def test_gather_snapshots_provider_failures(monkeypatch):
     stored = load_items(DSN, "news-provider-fail")
     assert any(it.provider == "rss" and "feed down" in it.error for it in stored)
     assert any(it.provider == "search" and "TAVILY_API_KEY" in it.error for it in stored)
+
+
+@needs_pg
+def test_gather_reuses_successful_provider_cache(monkeypatch):
+    import simulation.newsdesk as nd
+
+    calls = {"rss": 0}
+    feed = f"https://cache.feed/{uuid4()}.rss"
+
+    def _rss(url):
+        calls["rss"] += 1
+        return [("ข่าว cache", "ข่าว cache\nเนื้อหาข่าวทั่วไป")]
+
+    monkeypatch.setattr(nd, "_fetch_rss_items", _rss)
+    first = gather(
+        DSN, RunContext(run_id=f"news-cache-a-{uuid4()}", seed=1), feeds=[feed], queries=[]
+    )
+    second = gather(
+        DSN, RunContext(run_id=f"news-cache-b-{uuid4()}", seed=1), feeds=[feed], queries=[]
+    )
+    assert calls["rss"] == 1
+    assert [x.status for x in first] == ["ready"]
+    assert [x.status for x in second] == ["ready"]
 
 
 # ---- NFR-07: replay จาก snapshot ไม่แตะเน็ต + deterministic ----

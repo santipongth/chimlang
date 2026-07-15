@@ -1036,6 +1036,105 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
     return run_create_async(body, principal=principal)
 
 
+def _news_payload_items(items) -> list[dict]:
+    return [
+        {
+            "provider": it.provider,
+            "title": it.title,
+            "url": it.url,
+            "fetched_at": it.fetched_at,
+            "channel_tags": it.channel_tags,
+            "status": it.status,
+            "error": it.error,
+        }
+        for it in items
+    ]
+
+
+@app.post("/runs/{run_id}/refresh-news")
+def run_refresh_news(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """Partial repair: refresh News Desk snapshot without rerunning debate agents."""
+    require(principal, Permission.RUN)
+    from core.run_context import RunContext
+    from core.runstore import RunStore
+    from governance.store import GovernanceStore
+    from simulation.newsdesk import gather, load_items
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        detail = store.get(run_id)
+        if detail["engine"] != "debate":
+            raise HTTPException(status_code=422, detail="refresh-news ใช้ได้กับ debate run เท่านั้น")
+        if detail["status"] in {"queued", "running"}:
+            raise HTTPException(status_code=409, detail="run ยังทำงานอยู่")
+        if not bool(detail["config"].get("live_news")):
+            raise HTTPException(status_code=422, detail="run นี้ไม่ได้เปิด live_news")
+        ctx = RunContext(run_id=run_id, seed=detail["seed"])
+        gather(settings.postgres_url, ctx, queries=[detail["subject"]])
+        items = load_items(settings.postgres_url, run_id)
+        payload = dict(detail.get("payload") or {})
+        payload["news"] = {
+            "enabled": True,
+            "refreshed_at": datetime.now().isoformat(),
+            "items": _news_payload_items(items),
+        }
+        store.update_payload(run_id, payload, "news refreshed")
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id, action="run_news_refreshed", run_id=run_id, config_hash="-"
+        )
+        return {"run_id": run_id, "news": payload["news"]}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"รีเฟรชข่าวไม่สำเร็จ: {e}") from e
+
+
+@app.post("/runs/{run_id}/resynthesize")
+def run_resynthesize(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    """Partial repair: rebuild synthesis and metrics from stored debate posts."""
+    require(principal, Permission.RUN)
+    from core.runstore import RunStore
+    from governance.store import GovernanceStore
+    from simulation.debate import synthesize_snapshot
+
+    settings = get_settings()
+    try:
+        store = RunStore(settings.postgres_url)
+        store.setup()
+        detail = store.get(run_id)
+        if detail["engine"] != "debate":
+            raise HTTPException(status_code=422, detail="resynthesize ใช้ได้กับ debate run เท่านั้น")
+        if detail["status"] in {"queued", "running"}:
+            raise HTTPException(status_code=409, detail="run ยังทำงานอยู่")
+        if not detail["posts"]:
+            raise HTTPException(status_code=422, detail="ไม่มี debate posts สำหรับสรุปใหม่")
+        rebuilt = synthesize_snapshot(
+            detail["posts"], subject=detail["subject"], rounds=int(detail["rounds"])
+        )
+        payload = dict(detail.get("payload") or {})
+        payload.update(rebuilt)
+        payload["resynthesized_at"] = datetime.now().isoformat()
+        store.update_payload(run_id, payload, "resynthesized from snapshot")
+        gov = GovernanceStore(settings.postgres_url)
+        gov.setup()
+        gov.append_audit(
+            actor=principal.user_id, action="run_resynthesized", run_id=run_id, config_hash="-"
+        )
+        return {"run_id": run_id, **rebuilt}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"resynthesize ไม่สำเร็จ: {e}") from e
+
+
 @app.get("/run-metrics.json")
 def run_metrics(principal: Principal = Depends(get_principal)) -> dict:
     require(principal, Permission.RUN)

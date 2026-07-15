@@ -53,14 +53,16 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
   const [error, setError] = useState("");
   const [runToDelete, setRunToDelete] = useState<string | null>(null);
   const [busyRun, setBusyRun] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const activeCount = useMemo(
     () => runs.filter((r) => r.status === "queued" || r.status === "running").length,
     [runs],
   );
 
-  const load = () =>
-    Promise.all([
+  const load = () => {
+    setLoading(true);
+    return Promise.all([
       fetchSimRuns(search, engine, status),
       fetchRunMetrics().catch(() => null),
     ])
@@ -69,7 +71,9 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
         setMetrics(m);
         setError("");
       })
-      .catch((e) => setError(String(e.message ?? e)));
+      .catch((e) => setError(String(e.message ?? e)))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -169,7 +173,17 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
         </div>
       </div>
 
-      {runs.length === 0 ? (
+      {loading && runs.length === 0 ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className={card + " !p-4 animate-pulse"}>
+              <div className="h-4 w-52 rounded bg-muted" />
+              <div className="mt-3 h-5 w-2/3 rounded bg-muted" />
+              <div className="mt-3 h-2 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      ) : runs.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">{t("hist_empty")}</p>
       ) : (
         <div className="space-y-2">
@@ -236,6 +250,21 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
       {metrics && (
         <section className={card + " space-y-3"}>
           <h2 className="font-semibold">{t("runs_evidence_health")}</h2>
+          {(metrics.runs_24h ?? []).length > 0 && (
+            <div>
+              <div className="mb-2 text-xs text-muted-foreground">24h run trend</div>
+              <div className="flex h-16 items-end gap-1 rounded-xl border border-border bg-background p-2">
+                {metrics.runs_24h.slice(-24).map((x, i) => (
+                  <div
+                    key={`${x.hour}-${x.status}-${i}`}
+                    className={`min-w-2 flex-1 rounded-t ${x.status === "error" ? "bg-red-400" : x.status === "complete" ? "bg-primary" : "bg-amber-400"}`}
+                    style={{ height: `${Math.max(8, Math.min(100, x.count * 18))}%` }}
+                    title={`${x.hour.slice(11, 16)} ${x.status}: ${x.count}`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <div className="text-xs text-muted-foreground">{t("runs_sources")}</div>

@@ -6,11 +6,20 @@ import {
   FileSearch,
   Info,
   Radio,
+  RefreshCw,
   ShieldAlert,
   SkipForward,
   X,
 } from "lucide-react";
-import { SimRunDetail, fetchRunDetail, pct, shareRun, unshareRun } from "../api";
+import {
+  SimRunDetail,
+  fetchRunDetail,
+  pct,
+  refreshRunNews,
+  resynthesizeRun,
+  shareRun,
+  unshareRun,
+} from "../api";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader, Tabs } from "../ui";
 
@@ -186,12 +195,33 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   const [shareErr, setShareErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
+  const [repairBusy, setRepairBusy] = useState("");
+  const [repairErr, setRepairErr] = useState("");
 
   useEffect(() => {
     fetchRunDetail(runId)
       .then(setData)
       .catch((e) => setError(String(e.message ?? e)));
   }, [runId]);
+
+  async function reload() {
+    const fresh = await fetchRunDetail(runId);
+    setData(fresh);
+  }
+
+  async function repair(kind: "news" | "synthesis") {
+    setRepairBusy(kind);
+    setRepairErr("");
+    try {
+      if (kind === "news") await refreshRunNews(runId);
+      else await resynthesizeRun(runId);
+      await reload();
+    } catch (e: any) {
+      setRepairErr(String(e.message ?? e));
+    } finally {
+      setRepairBusy("");
+    }
+  }
 
   const card = "bg-card border border-border rounded-2xl p-6";
   const isDebate = data?.engine === "debate";
@@ -219,6 +249,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
     {},
   );
   const shownRound = replayRound ?? (rounds.length ? rounds[rounds.length - 1] : 0);
+  const canRepair = Boolean(data && isDebate && data.status !== "queued" && data.status !== "running");
 
   return (
     <div className="space-y-6">
@@ -233,15 +264,49 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
       />
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 text-sm">{error}</div>}
+      {!data && !error && (
+        <section className={card + " animate-pulse"}>
+          <div className="h-4 w-40 rounded bg-muted" />
+          <div className="mt-4 h-8 w-2/3 rounded bg-muted" />
+          <div className="mt-3 h-3 w-1/2 rounded bg-muted" />
+        </section>
+      )}
       {data?.status === "error" && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 text-sm">
           {t("rd_failed")}: {data.error}
         </div>
       )}
 
-      {data && data.status === "complete" && (
+      {data && (data.status === "complete" || data.status === "error") && (
         <>
           <ExecutiveReadout data={data} p={p} isDebate={isDebate} t={t} />
+          {canRepair && (
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+              <div>
+                <div className="text-sm font-semibold">Run repair</div>
+                <p className="text-xs text-muted-foreground">Refresh evidence or rebuild synthesis from the stored snapshot.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {data.config?.live_news && (
+                  <button
+                    disabled={!!repairBusy}
+                    onClick={() => repair("news")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${repairBusy === "news" ? "animate-spin" : ""}`} /> Refresh news
+                  </button>
+                )}
+                <button
+                  disabled={!!repairBusy}
+                  onClick={() => repair("synthesis")}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong disabled:opacity-50"
+                >
+                  <FileSearch className="h-4 w-4" /> Resynthesize
+                </button>
+              </div>
+              {repairErr && <div className="basis-full rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{repairErr}</div>}
+            </section>
+          )}
           <Tabs<Tab>
             tabs={[
               { id: "overview" as Tab, label: t("rd_tab_overview") },
