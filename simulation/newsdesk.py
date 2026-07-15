@@ -2,7 +2,8 @@
 
 หลักออกแบบ (PHASE7-BRIEF):
 - ทุก fetch ผ่าน gate hindcast (`ensure_external_retrieval_allowed`) — กฎเหล็กข้อ 2
-- PII gate ทุกชิ้นแบบ fail-closed (GOV-01) — item ที่พบ PII ถูก block ทั้งชิ้น
+- PII gate ทุกชิ้นแบบ fail-closed (GOV-01/ADR-0010) — body/title redact+ตรวจซ้ำก่อน persist;
+  URL PII หรือ verification failure ถูก block
 - snapshot-first (NFR-07): เก็บลง DB ก่อนใช้ — replay อ่านจาก `load_items` เท่านั้น ไม่แตะเน็ต
 - media diet (M2): แต่ละ segment เห็นข่าวถ่วงด้วย channel_mix ของกลุ่มตัวเอง = selective exposure
 - Tavily search: key จาก .env/Settings (`TAVILY_API_KEY`) — ไม่มี key =
@@ -13,7 +14,7 @@ import hashlib
 import json
 import random
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -21,7 +22,7 @@ import psycopg
 
 from core.config import get_settings
 from core.run_context import RunContext, ensure_external_retrieval_allowed
-from governance.pii import PIIDetector, load_allowlist
+from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 from simulation.sources import _parse_rss, _strip_html, _trigrams, validate_external_url
 
 MAX_ITEMS_PER_RUN = 30
@@ -54,9 +55,11 @@ CREATE TABLE IF NOT EXISTS news_items (
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     channel_tags JSONB NOT NULL DEFAULT '{}',
     status TEXT NOT NULL,
-    error TEXT NOT NULL DEFAULT ''
+    error TEXT NOT NULL DEFAULT '',
+    pii_redactions JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS news_items_run ON news_items (run_id);
+ALTER TABLE news_items ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE TABLE IF NOT EXISTS news_fetch_cache (
     cache_key TEXT PRIMARY KEY,
     provider TEXT NOT NULL CHECK (provider IN ('rss', 'search')),
@@ -77,8 +80,9 @@ class NewsItem:
     content: str
     fetched_at: str
     channel_tags: dict[str, float]
-    status: str  # ready | blocked | error | skipped
+    status: str  # ready | redacted | blocked | error | skipped
     error: str = ""
+    pii_redactions: dict[str, int] = field(default_factory=dict)
 
 
 def _hash(text: str) -> str:
@@ -127,6 +131,70 @@ def _cache_key(provider: str, query: str, url: str) -> str:
     return _hash(f"{provider}\n{query}\n{url}")
 
 
+def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -> list[dict]:
+    prepared: list[dict] = []
+    for raw in payload:
+        if isinstance(raw, dict):
+            title = str(raw.get("title", ""))[:200]
+            url = str(raw.get("url", ""))
+            content = str(raw.get("content", ""))[:MAX_CONTENT_CHARS]
+            prior_counts = {str(k): int(v) for k, v in (raw.get("pii_redactions") or {}).items()}
+            prior_status = str(raw.get("status", "ready"))
+        elif provider == "search":
+            title, url, content = (str(x) for x in raw[:3])
+            prior_counts, prior_status = {}, "ready"
+        else:
+            title, content = (str(x) for x in raw[:2])
+            url, prior_counts, prior_status = "", {}, "ready"
+
+        if url and detector.check(url).blocked:
+            prepared.append(
+                {
+                    "title": "ข่าวถูกระงับจาก PII",
+                    "url": "",
+                    "content": "",
+                    "status": "blocked",
+                    "error": "พบ PII ใน URL (GOV-01)",
+                    "pii_redactions": {},
+                }
+            )
+            continue
+
+        try:
+            redaction = detector.redact_and_verify(f"{title}\n{content}")
+        except PIIRedactionError:
+            prepared.append(
+                {
+                    "title": "ข่าวถูกระงับจาก PII",
+                    "url": url,
+                    "content": "",
+                    "status": "blocked",
+                    "error": "พบ PII ที่ redact อย่างปลอดภัยไม่ได้ (GOV-01)",
+                    "pii_redactions": {},
+                }
+            )
+            continue
+
+        safe_title, _, safe_content = redaction.text.partition("\n")
+        counts = dict(prior_counts)
+        for kind, count in redaction.counts.items():
+            counts[kind] = counts.get(kind, 0) + count
+        status = prior_status
+        if status not in ("blocked", "error", "skipped"):
+            status = "redacted" if counts else "ready"
+        prepared.append(
+            {
+                "title": safe_title[:200],
+                "url": url,
+                "content": safe_content[:MAX_CONTENT_CHARS],
+                "status": status,
+                "error": str(raw.get("error", ""))[:500] if isinstance(raw, dict) else "",
+                "pii_redactions": counts,
+            }
+        )
+    return prepared
+
+
 def _cached_fetch(
     dsn: str,
     *,
@@ -136,6 +204,8 @@ def _cached_fetch(
     fetcher,
     detector: PIIDetector,
 ) -> list:
+    if detector.check(f"{query}\n{url}").blocked:
+        raise PIIRedactionError("news query or URL contains PII")
     key = _cache_key(provider, query, url)
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
@@ -144,10 +214,8 @@ def _cached_fetch(
             (key,),
         ).fetchone()
         if row and row[1] > datetime.now(UTC) - timedelta(hours=NEWS_CACHE_TTL_HOURS):
-            return list(row[0])
-    payload = fetcher()
-    if detector.check(json.dumps(payload, ensure_ascii=False)).blocked:
-        return list(payload)
+            return _prepare_news_payload(provider, list(row[0]), detector)
+    payload = _prepare_news_payload(provider, list(fetcher()), detector)
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
         conn.execute(
@@ -188,7 +256,7 @@ def gather(
 ) -> list[NewsItem]:
     """ดึงข่าวเข้าโต๊ะ + snapshot ลง DB — จุดเดียวที่แตะเน็ต (gate + PII ทุกชิ้น)
 
-    fail-closed: hindcast = raise ก่อนแตะเน็ต; detector ปิด = ปฏิเสธ; item มี PII = block ทั้งชิ้น
+    Body/title redact-and-verify ก่อน persist; URL PII หรือ verification fail = block.
     """
     ensure_external_retrieval_allowed(ctx)  # กฎเหล็กข้อ 2 — ก่อน I/O ใดๆ
     settings = get_settings()
@@ -199,7 +267,7 @@ def gather(
     feeds = feeds if feeds is not None else eff_feeds
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
 
-    raw: list[tuple[str, str, str, str, str]] = []  # (provider, query, url, title, content)
+    raw: list[dict] = []
     failures: list[tuple[str, str, str, str]] = []  # (provider, query, url, error)
     # ผลค้น (ตรงหัวข้อ) เข้าคิวก่อน RSS (ข่าวแวดล้อม) — กัน RSS ท่วมจนชน cap แล้วผลค้นตกขบวน
     # (บั๊กที่ smoke จริงจับได้ 12 ก.ค.: 3 feeds × 10 = 30 ชน MAX_ITEMS ก่อนถึงคิว search)
@@ -214,8 +282,10 @@ def gather(
                     fetcher=lambda q=q: _tavily_search(q, tavily_key),
                     detector=detector,
                 )
-                for title, url, content in results:
-                    raw.append(("search", q, url, title, content))
+                for item in results:
+                    raw.append({"provider": "search", "query": q, **item})
+            except PIIRedactionError:
+                failures.append(("search", "", "", "พบ PII ในคำค้นหรือ URL (GOV-01)"))
             except Exception as e:
                 failures.append(("search", q, "", f"Tavily search failed: {type(e).__name__}: {e}"))
     elif queries and not tavily_key:
@@ -231,8 +301,10 @@ def gather(
                 fetcher=lambda feed=feed: _fetch_rss_items(feed),
                 detector=detector,
             )
-            for title, content in results[:10]:
-                raw.append(("rss", feed, feed, title, content))
+            for item in results[:10]:
+                raw.append({**item, "provider": "rss", "query": feed, "url": feed})
+        except PIIRedactionError:
+            failures.append(("rss", "", "", "พบ PII ใน RSS URL (GOV-01)"))
         except Exception as e:
             failures.append(("rss", feed, feed, f"RSS fetch failed: {type(e).__name__}: {e}"))
 
@@ -241,17 +313,32 @@ def gather(
     now = datetime.now(UTC).isoformat()
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
+        conn.execute(
+            "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS pii_redactions "
+            "JSONB NOT NULL DEFAULT '{}'::jsonb"
+        )
         for provider, query, url, error in failures:
             if len(items) >= MAX_ITEMS_PER_RUN:
                 break
+            try:
+                safe_error = detector.redact_and_verify(error[:500])
+                error = safe_error.text
+                pii_redactions = safe_error.counts
+            except PIIRedactionError:
+                error = "เกิดข้อผิดพลาดที่มี PII และไม่สามารถบันทึกรายละเอียดได้"
+                pii_redactions = {}
             tags = CHANNEL_TAGS[provider]
             title = "ค้นหาข่าวไม่สำเร็จ" if provider == "search" else "อ่าน RSS ไม่สำเร็จ"
             h = _hash(provider + query + url + error)
-            status = "skipped" if "skipped" in error.lower() else "error"
+            status = (
+                "blocked"
+                if "GOV-01" in error
+                else ("skipped" if "skipped" in error.lower() else "error")
+            )
             conn.execute(
                 "INSERT INTO news_items (run_id, provider, query, url, title, content, "
-                "content_hash, channel_tags, status, error) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)",
+                "content_hash, channel_tags, status, error, pii_redactions) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)",
                 (
                     ctx.run_id,
                     provider,
@@ -263,44 +350,49 @@ def gather(
                     json.dumps(tags),
                     status,
                     error[:500],
+                    json.dumps(pii_redactions),
                 ),
             )
-            items.append(NewsItem(provider, url, title, "", now, tags, status, error[:500]))
-        for provider, query, url, title, content in raw:
+            items.append(
+                NewsItem(provider, url, title, "", now, tags, status, error[:500], pii_redactions)
+            )
+        for raw_item in raw:
             if len(items) >= MAX_ITEMS_PER_RUN:
                 break
+            provider = raw_item["provider"]
+            query = raw_item["query"]
+            url = raw_item["url"]
+            title = raw_item["title"]
+            content = raw_item["content"]
+            status = raw_item["status"]
+            error = raw_item["error"]
+            pii_redactions = raw_item["pii_redactions"]
             h = _hash(title + content)
-            if h in seen or not content.strip():
+            if h in seen or (status in ("ready", "redacted") and not content.strip()):
                 continue
             seen.add(h)
-            report = detector.check(f"{title}\n{content}")
-            status, error = ("ready", "")
-            stored_content = content
-            if report.blocked:
-                status = "blocked"
-                error = "พบ PII (GOV-01): " + ", ".join(
-                    sorted({f.kind for f in report.findings if not f.allowlisted})
-                )
-                stored_content = ""  # ไม่เก็บเนื้อหาที่มี PII
             tags = CHANNEL_TAGS[provider]
             conn.execute(
                 "INSERT INTO news_items (run_id, provider, query, url, title, content, "
-                "content_hash, channel_tags, status, error) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)",
+                "content_hash, channel_tags, status, error, pii_redactions) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)",
                 (
                     ctx.run_id,
                     provider,
                     query,
                     url,
                     title,
-                    stored_content,
+                    content,
                     h,
                     json.dumps(tags),
                     status,
                     error,
+                    json.dumps(pii_redactions),
                 ),
             )
-            items.append(NewsItem(provider, url, title, stored_content, now, tags, status, error))
+            items.append(
+                NewsItem(provider, url, title, content, now, tags, status, error, pii_redactions)
+            )
     return items
 
 
@@ -309,11 +401,14 @@ def load_items(dsn: str, run_id: str) -> list[NewsItem]:
     with psycopg.connect(dsn) as conn:
         conn.execute(_SCHEMA)
         rows = conn.execute(
-            "SELECT provider, url, title, content, fetched_at::text, channel_tags, status, error "
+            "SELECT provider, url, title, content, fetched_at::text, channel_tags, status, error, "
+            "pii_redactions "
             "FROM news_items WHERE run_id = %s ORDER BY id",
             (run_id,),
         ).fetchall()
-    return [NewsItem(r[0], r[1], r[2], r[3], r[4], dict(r[5]), r[6], r[7]) for r in rows]
+    return [
+        NewsItem(r[0], r[1], r[2], r[3], r[4], dict(r[5]), r[6], r[7], dict(r[8])) for r in rows
+    ]
 
 
 def segment_feed(
@@ -328,7 +423,7 @@ def segment_feed(
 
     deterministic ต่อ (items, mix, subject, seed) — ไม่มีเน็ต ไม่มี I/O
     """
-    ready = [it for it in items if it.status == "ready" and it.content]
+    ready = [it for it in items if it.status in ("ready", "redacted") and it.content]
     if not ready:
         return []
     q = _trigrams(subject)

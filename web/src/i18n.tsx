@@ -39,8 +39,8 @@ const DICT: Record<string, { th: string; en: string }> = {
   },
   feat3_t: { th: "ธรรมาภิบาลในโค้ด", en: "Governance by architecture" },
   feat3_d: {
-    th: "PII ถูก block, election mode บังคับ aggregate, ทุก export มี watermark — บังคับที่ระดับโค้ด ไม่ใช่นโยบายกระดาษ",
-    en: "PII blocked, election mode aggregate-only, every export watermarked — enforced in code, not on paper.",
+    th: "PII ในหลักฐานภายนอกถูกลบและตรวจซ้ำ, election mode บังคับ aggregate, ทุก export มี watermark",
+    en: "PII in external evidence is removed and re-verified; election mode is aggregate-only and every export is watermarked.",
   },
   // Wizard
   wiz_eyebrow: { th: "รันใหม่", en: "NEW RUN" },
@@ -184,8 +184,8 @@ const DICT: Record<string, { th: string; en: string }> = {
   wiz_src_need_url: { th: "ต้องเป็นลิงก์ http(s)", en: "Must be an http(s) URL" },
   wiz_src_unit: { th: "รายการ", en: "items" },
   wiz_src_pii_note: {
-    th: "ทุกเอกสารผ่าน PII detector ก่อนเข้าระบบ — พบข้อมูลส่วนบุคคล = block ทั้งชิ้น (GOV-01)",
-    en: "Every source passes the PII detector — any personal data blocks the whole document (GOV-01)",
+    th: "ลิงก์เว็บ/RSS จะลบ PII และตรวจซ้ำก่อนใช้; ข้อความที่วางตรงและ URL ที่มี PII ยังถูก block (GOV-01)",
+    en: "Web/RSS evidence is redacted and re-verified; pasted text and URLs containing PII remain blocked (GOV-01)",
   },
   wiz_rounds: { th: "จำนวนรอบดีเบต", en: "Debate rounds" },
   wiz_rounds_unit: { th: "รอบ", en: "rounds" },
@@ -236,9 +236,10 @@ const DICT: Record<string, { th: string; en: string }> = {
   rd_scatter_support: { th: "เห็นด้วย", en: "support" },
   rd_scatter_agents: { th: "ตัวแทนจำลอง (จุดยืนรอบสุดท้าย)", en: "agents (final-round stance)" },
   rd_evidence_debate: {
-    th: "เอกสารที่ป้อนให้ตัวแทนจำลองใช้อ้างอิงระหว่างถกเถียง — ทุกชิ้นผ่านการตรวจข้อมูลส่วนบุคคล (PII) แล้ว",
-    en: "Documents fed to agents to cite during the debate — all passed the PII check",
+    th: "เอกสารที่ป้อนให้ตัวแทนจำลองใช้อ้างอิงระหว่างถกเถียง — PII ในเว็บภายนอกถูกลบและตรวจซ้ำก่อนใช้งาน",
+    en: "Documents fed to agents during the debate — PII in external evidence is removed and re-verified before use",
   },
+  rd_pii_removed: { th: "ลบ PII ก่อนใช้งาน", en: "PII removed before use" },
   rd_evidence_chunks: { th: "ท่อน", en: "chunks" },
   rd_news_head: {
     th: "ข่าวสดจากโต๊ะข่าวกลางที่ตัวแทนจำลองเห็น (แช่แข็งเป็น snapshot — ตรวจย้อนได้)",
@@ -246,8 +247,8 @@ const DICT: Record<string, { th: string; en: string }> = {
   },
   wiz_news_title: { th: "โต๊ะข่าวสด (Live News Desk)", en: "Live News Desk" },
   wiz_news_desc: {
-    th: "ระบบดึงข่าวล่าสุดจากอินเทอร์เน็ต (RSS + ค้นหา) ให้ตัวแทนจำลองใช้ระหว่างถกเถียง — แต่ละกลุ่มเห็นข่าวต่างกันตามพฤติกรรมสื่อของกลุ่ม ทุกชิ้นผ่านตัวกรองข้อมูลส่วนบุคคลและถูกบันทึกถาวรเพื่อตรวจย้อน",
-    en: "Fetch the latest news (RSS + search) for agents during the debate — each group sees different news per its media diet; every item is PII-screened and snapshotted for audit",
+    th: "ระบบดึงข่าวล่าสุดจากอินเทอร์เน็ต (RSS + ค้นหา) ให้ตัวแทนจำลองใช้ระหว่างถกเถียง — แต่ละกลุ่มเห็นข่าวต่างกันตามพฤติกรรมสื่อ และ PII ถูกลบพร้อมตรวจซ้ำก่อนบันทึก",
+    en: "Fetch live news for agents based on each segment's media diet; PII is removed and re-verified before snapshotting",
   },
   rd_evidence_used: { th: "ท่อนที่ดึงมาใช้จริง", en: "chunks retrieved" },
   rd_evidence_none: { th: "รันนี้ไม่ได้แนบเอกสารอ้างอิง — ตัวแทนจำลองใช้มุมมองของกลุ่มล้วนๆ", en: "No sources attached — agents argued from persona priors" },

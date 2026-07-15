@@ -14,7 +14,7 @@
 ## หลักออกแบบที่ยึดร่วมกัน (อย่าเบี่ยง — ถ้าคิดว่าควรเปลี่ยน ให้เขียน ADR แล้วถามผู้ใช้ก่อน)
 
 1. **Trust ก่อน feature**: ความสามารถพิสูจน์ความแม่น (hindcast, leak test, calibration) มาก่อนความสามารถจำลอง — M1 คือ gate ของทั้งโครงการด้วยเหตุนี้
-2. **Fail-closed ทุกด่าน governance**: สงสัย = block (PII detector, retrieval filter, judge นับ parse-fail เป็น leak, model ไม่มีราคา = รันไม่ได้)
+2. **Fail-closed ทุกด่าน governance**: external evidence ที่ detector ระบุชนิดได้ให้ redact+ตรวจซ้ำตาม ADR-0010; ถ้าสงสัย/redact ไม่ผ่าน/detector ปิด = block (retrieval filter, judge นับ parse-fail เป็น leak, model ไม่มีราคา = รันไม่ได้)
 3. **LLM ผ่าน adapter เดียว** (`core/llm/`): business logic รู้จักแค่ tier (crowd/analyst) ไม่รู้จักชื่อ model; ทุก call ถูกคิดเงินผ่าน `BudgetGuard` — เกิน cap = abort
 4. **Provenance + reproducibility**: ทุก node/edge/ผลลัพธ์ย้อนถึงไฟล์ต้นทาง+วันที่ได้; ทุก run มี seed + model version (ยอมรับว่า OpenRouter pin seed แบบ best-effort — ตัว freeze จริงคือ snapshot)
 5. **วัดอย่างซื่อสัตย์**: ห้ามแก้เกณฑ์/แก้โจทย์ test เพื่อให้ผ่าน — ตัวเลขดิบบันทึกตามจริงเสมอ ข้อยกเว้นต้องผ่าน human review + มติผู้ใช้ (ดูวิธีที่ M1 ปิด gate ใน `docs/reports/M1-hindcast-poc-final.md`)

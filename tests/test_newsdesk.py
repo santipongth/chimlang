@@ -57,8 +57,8 @@ def test_gather_fail_closed_when_pii_detector_off(monkeypatch):
 
 
 @needs_pg
-def test_gather_blocks_pii_item(monkeypatch):
-    """item ที่มี PII ถูก block ทั้งชิ้น + ไม่เก็บเนื้อหา"""
+def test_gather_redacts_pii_before_cache_and_snapshot(monkeypatch):
+    """PII ใน body ถูก redact ก่อน cache/snapshot และชิ้นข่าวยังใช้งานได้"""
     import simulation.newsdesk as nd
 
     monkeypatch.setattr(
@@ -73,22 +73,23 @@ def test_gather_blocks_pii_item(monkeypatch):
     ctx = RunContext(run_id="news-pii-item", seed=1)
     items = gather(DSN, ctx, feeds=[feed], queries=[])
     ready = [it for it in items if it.status == "ready"]
-    blocked = [it for it in items if it.status == "blocked"]
-    assert len(ready) == 1 and len(blocked) == 1
-    assert blocked[0].content == ""  # เนื้อหาที่มี PII ไม่ถูกเก็บ
-    assert "081-234-5678" not in blocked[0].error
-    # snapshot ใน DB ก็ต้องไม่เก็บเนื้อหา PII
-    stored = [it for it in load_items(DSN, "news-pii-item") if it.status == "blocked"]
-    assert stored and all(it.content == "" for it in stored)
-    # Raw provider payload containing PII must never be persisted in the fetch cache.
+    redacted = [it for it in items if it.status == "redacted"]
+    assert len(ready) == 1 and len(redacted) == 1
+    assert "[PHONE_REDACTED]" in redacted[0].content
+    assert redacted[0].pii_redactions == {"phone": 1}
+    assert "081-234-5678" not in redacted[0].content
+
+    stored = [it for it in load_items(DSN, "news-pii-item") if it.status == "redacted"]
+    assert stored and stored[-1].pii_redactions == {"phone": 1}
     import psycopg
 
     with psycopg.connect(DSN) as conn:
         cached = conn.execute(
-            "SELECT 1 FROM news_fetch_cache WHERE cache_key = %s",
+            "SELECT payload::text FROM news_fetch_cache WHERE cache_key = %s",
             (nd._cache_key("rss", feed, feed),),
         ).fetchone()
-    assert cached is None
+    assert cached and "[PHONE_REDACTED]" in cached[0]
+    assert "081-234-5678" not in cached[0]
 
 
 @needs_pg
@@ -186,6 +187,98 @@ def test_segment_feed_excludes_blocked():
     mix = {"public_feed": 1.0}
     out = segment_feed(items, mix, "นโยบาย", k=5, seed=1)
     assert [x.title for x in out] == ["ปกติ"]
+
+
+def test_segment_feed_includes_redacted_items():
+    items = [_item("rss", "ผ่านการลบ PII", "ติดต่อ [PHONE_REDACTED]", status="redacted")]
+    out = segment_feed(items, {"public_feed": 1.0}, "ติดต่อ", k=5, seed=1)
+    assert out == items
+
+
+def test_news_url_containing_pii_is_blocked_without_persistable_raw_value():
+    import json
+
+    import simulation.newsdesk as nd
+    from governance.pii import PIIDetector
+
+    raw_url = "https://example.com/?owner=somchai@example.com"
+    prepared = nd._prepare_news_payload(
+        "search",
+        [("ข่าว", raw_url, "เนื้อหาที่ไม่พบข้อมูลส่วนบุคคล")],
+        PIIDetector(),
+    )
+    assert prepared[0]["status"] == "blocked"
+    assert prepared[0]["url"] == ""
+    assert "somchai@example.com" not in json.dumps(prepared, ensure_ascii=False)
+
+
+@needs_pg
+def test_news_query_with_pii_is_not_persisted(monkeypatch):
+    import json
+
+    import simulation.newsdesk as nd
+
+    monkeypatch.setattr(nd, "effective_news_config", lambda settings: ([], "test-key"))
+    monkeypatch.setattr(
+        nd,
+        "_tavily_search",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("PII query must not reach provider")
+        ),
+    )
+    run_id = f"news-query-pii-{uuid4()}"
+    items = gather(
+        DSN,
+        RunContext(run_id=run_id, seed=1),
+        feeds=[],
+        queries=["ติดต่อ somchai@example.com"],
+    )
+    serialized = json.dumps([item.__dict__ for item in items], ensure_ascii=False)
+    assert items and items[0].status == "blocked"
+    assert "somchai@example.com" not in serialized
+    assert "somchai@example.com" not in json.dumps(
+        [item.__dict__ for item in load_items(DSN, run_id)], ensure_ascii=False
+    )
+
+
+@needs_pg
+def test_legacy_pii_error_metadata_migration_scrubs_values():
+    import psycopg
+
+    from scripts.db_migrations import _scrub_legacy_pii_error_metadata
+    from simulation.newsdesk import setup_newsdesk
+    from simulation.sources import setup_sources
+
+    setup_newsdesk(DSN)
+    setup_sources(DSN)
+    run_id = f"legacy-pii-{uuid4()}"
+    with psycopg.connect(DSN) as conn:
+        news_id = conn.execute(
+            "INSERT INTO news_items "
+            "(run_id, provider, content_hash, status, error) "
+            "VALUES (%s, 'rss', %s, 'blocked', %s) RETURNING id",
+            (run_id, run_id, "พบ phone: 081-234-5678"),
+        ).fetchone()[0]
+        source_id = conn.execute(
+            "INSERT INTO run_sources (run_id, kind, label, status, error) "
+            "VALUES (%s, 'text', 'legacy', 'blocked', %s) RETURNING id",
+            (run_id, "พบ email: somchai@example.com"),
+        ).fetchone()[0]
+    try:
+        _scrub_legacy_pii_error_metadata(DSN)
+        with psycopg.connect(DSN) as conn:
+            news_error = conn.execute(
+                "SELECT error FROM news_items WHERE id = %s", (news_id,)
+            ).fetchone()[0]
+            source_error = conn.execute(
+                "SELECT error FROM run_sources WHERE id = %s", (source_id,)
+            ).fetchone()[0]
+        assert "081-234-5678" not in news_error
+        assert "somchai@example.com" not in source_error
+    finally:
+        with psycopg.connect(DSN) as conn:
+            conn.execute("DELETE FROM news_items WHERE id = %s", (news_id,))
+            conn.execute("DELETE FROM run_sources WHERE id = %s", (source_id,))
 
 
 def test_dedupe_intents_caps_and_merges():

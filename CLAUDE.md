@@ -32,7 +32,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 
 กฎเหล่านี้มาจาก PRD Module G และ Trust Layer ถ้างานใดขัดกับกฎเหล่านี้ ให้หยุดและแจ้งผู้ใช้ ห้ามหาทางอ้อม:
 
-1. **ห้ามเขียนโค้ดที่ ingest หรือจัดเก็บข้อมูลส่วนบุคคล (PII)** — pipeline นำเข้าข้อมูลทุกตัวต้องผ่าน PII detector และ block เมื่อพบรายชื่อบุคคล เบอร์โทร อีเมล เลขบัตร (ยกเว้นบุคคลสาธารณะในบริบทข่าว) (GOV-01)
+1. **ห้าม ingest หรือจัดเก็บ PII ดิบ** — external URL/RSS/News Desk ต้อง redact typed identifiers แล้วสแกนซ้ำก่อน cache/chunk/snapshot/LLM (ADR-0010); URL ที่มี PII, direct input, detector ปิด/พัง หรือ re-scan ไม่ผ่าน = block. บุคคลสาธารณะใน allowlist คงไว้ได้ในบริบทข่าว (GOV-01)
 2. **Agent external retrieval (SIM-11) ต้องปิดใน Hindcast Mode เสมอ** — ทุก code path ที่ agent ดึงข้อมูลภายนอก ต้องตรวจ flag `hindcast_mode` ก่อน และมี leak test กำกับ (TRUST-03)
 3. **Prediction Registry เป็น append-only** — ห้ามมี code path สำหรับแก้ไขหรือลบ prediction record ทุก simulation run ต้องเขียน record อย่างน้อย 1 รายการ (TRUST-01)
 4. **ทุก export (PDF/ภาพ/ตาราง) ต้องผ่าน watermark module** ก่อนถึงมือผู้ใช้ (GOV-03)

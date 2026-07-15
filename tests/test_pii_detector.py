@@ -66,3 +66,29 @@ def test_clean_corpus_files_pass():
 def test_allowlist_file_loads():
     names = load_allowlist()
     assert "ชัชชาติ สิทธิพันธุ์" in names
+
+
+def test_redact_and_verify_replaces_all_supported_pii_types():
+    thai_id = _valid_thai_id()
+    text = (
+        "นายสมชาย ใจดี ติดต่อ somchai@example.com โทร 081-234-5678 "
+        f"เลขบัตร {thai_id} และนายสมชาย ใจดี จะตอบกลับ"
+    )
+    result = PIIDetector().redact_and_verify(text)
+
+    assert result.counts == {"thai_id": 1, "email": 1, "phone": 1, "person_name": 2}
+    assert result.text.count("[PERSON_1]") == 2
+    assert "[PHONE_REDACTED]" in result.text
+    assert "[EMAIL_REDACTED]" in result.text
+    assert "[THAI_ID_REDACTED]" in result.text
+    assert "สมชาย ใจดี" not in result.text
+    assert "081-234-5678" not in result.text
+    assert not PIIDetector().check(result.text).blocked
+
+
+def test_redaction_preserves_allowlisted_public_figure():
+    detector = PIIDetector(allowlist={"ชัชชาติ สิทธิพันธุ์"})
+    result = detector.redact_and_verify("นายชัชชาติ สิทธิพันธุ์ แถลงข่าว")
+
+    assert result.text == "นายชัชชาติ สิทธิพันธุ์ แถลงข่าว"
+    assert result.counts == {}

@@ -209,27 +209,78 @@ def test_sources_pii_blocked_and_lexical_retrieval():
 
 
 @needs_pg
-def test_source_pii_is_never_written_to_external_cache(monkeypatch):
+def test_source_pii_is_redacted_before_cache_chunks_and_snapshot(monkeypatch):
     import psycopg
 
     import simulation.sources as src
 
     url = f"https://cache-pii.example/{uuid4()}"
+    result_run_id = new_run_id("debate")
     monkeypatch.setattr(src, "_fetch_text", lambda *args: "ติดต่อ 081-234-5678")
     result = ingest_sources(
         DSN,
-        new_run_id("debate"),
+        result_run_id,
         [{"kind": "url", "label": "PII cache guard", "url": url}],
     )
-    assert result[0]["status"] == "blocked"
-    assert "081-234-5678" not in result[0]["error"]
+    assert result[0]["status"] == "redacted"
+    assert result[0]["pii_redactions"] == {"phone": 1}
 
     cache_key = src.hashlib.sha256(f"url:{url}".encode()).hexdigest()
     with psycopg.connect(DSN) as conn:
         cached = conn.execute(
-            "SELECT 1 FROM external_fetch_cache WHERE url_hash = %s", (cache_key,)
+            "SELECT content, pii_redactions FROM external_fetch_cache WHERE url_hash = %s",
+            (cache_key,),
         ).fetchone()
-    assert cached is None
+        chunks = conn.execute(
+            "SELECT content FROM run_chunks WHERE run_id = %s ORDER BY seq",
+            (result_run_id,),
+        ).fetchall()
+    assert cached and cached[1] == {"phone": 1}
+    assert "[PHONE_REDACTED]" in cached[0] and "081-234-5678" not in cached[0]
+    assert chunks and all("081-234-5678" not in row[0] for row in chunks)
+
+
+@needs_pg
+def test_source_url_containing_pii_remains_blocked(monkeypatch):
+    import simulation.sources as src
+
+    monkeypatch.setattr(
+        src,
+        "_fetch_text",
+        lambda *args: (_ for _ in ()).throw(AssertionError("PII URL must not be fetched")),
+    )
+    result = ingest_sources(
+        DSN,
+        new_run_id("debate"),
+        [
+            {
+                "kind": "url",
+                "label": "PII URL",
+                "url": "https://example.com/?owner=somchai@example.com",
+            }
+        ],
+    )
+    assert result[0]["status"] == "blocked"
+
+
+@needs_pg
+def test_source_label_with_pii_is_not_persisted():
+    import psycopg
+
+    run_id = new_run_id("debate")
+    result = ingest_sources(
+        DSN,
+        run_id,
+        [{"kind": "text", "label": "โทร 081-234-5678", "text": "เนื้อหาปกติ"}],
+    )
+    assert result[0]["status"] == "blocked"
+    assert result[0]["label"] == "text-source"
+    with psycopg.connect(DSN) as conn:
+        row = conn.execute(
+            "SELECT label, error FROM run_sources WHERE run_id = %s ORDER BY id DESC LIMIT 1",
+            (run_id,),
+        ).fetchone()
+    assert "081-234-5678" not in "\n".join(row)
 
 
 def test_sources_detector_disabled_fails_closed(monkeypatch):

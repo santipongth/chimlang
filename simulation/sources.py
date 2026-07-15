@@ -1,8 +1,8 @@
 """Sources ต่อ run (P6-M3) — เอกสารอ้างอิงจริงป้อนเข้า debate engine (แนว GraphRAG Swarm)
 
 ต่างจาก SwarmSight ต้นแบบ:
-- **PII gate ทุกเอกสารก่อนเข้าระบบ** (GOV-01 fail-closed) — เอกสารที่พบ PII ถูก block
-  ทั้งชิ้นพร้อมบันทึกเหตุผล (ต้นแบบรับตรงๆ)
+- **PII gate ทุกเอกสารก่อนเข้าระบบ** (GOV-01/ADR-0010) — URL/RSS redact และสแกนซ้ำ
+  ก่อน persist; direct text, PII URL หรือ verification failure ถูก block
 - retrieval เป็น **lexical 3-gram overlap** (เหมาะกับไทยที่ไม่มีวรรคคำ ไม่ต้องพึ่ง tokenizer) —
   ยังไม่ใช่ vector search เพราะ stack ยังไม่มี embedding model (บันทึกใน PHASE6-BRIEF
   เป็นงานอนาคต — เปลี่ยนภายในฟังก์ชันเดียวโดยไม่แตะผู้เรียก)
@@ -11,6 +11,7 @@
 
 import hashlib
 import ipaddress
+import json
 import math
 import re
 from urllib.parse import urlparse
@@ -19,7 +20,7 @@ import httpx
 import psycopg
 
 from core.config import get_settings
-from governance.pii import PIIDetector, load_allowlist
+from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 
 MAX_SOURCES = 10
 MAX_TEXT_CHARS = 2_000_000
@@ -39,7 +40,8 @@ CREATE TABLE IF NOT EXISTS run_sources (
     chunks INT NOT NULL DEFAULT 0,
     content_hash TEXT NOT NULL DEFAULT '',
     duplicate_of TEXT NOT NULL DEFAULT '',
-    quality_score DOUBLE PRECISION NOT NULL DEFAULT 0
+    quality_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+    pii_redactions JSONB NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS run_chunks (
     id BIGSERIAL PRIMARY KEY,
@@ -54,6 +56,7 @@ CREATE TABLE IF NOT EXISTS external_fetch_cache (
     url TEXT NOT NULL,
     kind TEXT NOT NULL,
     content TEXT NOT NULL,
+    pii_redactions JSONB NOT NULL DEFAULT '{}',
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
@@ -71,6 +74,14 @@ def setup_sources(dsn: str) -> None:
         conn.execute(
             "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
             "DOUBLE PRECISION NOT NULL DEFAULT 0"
+        )
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS pii_redactions "
+            "JSONB NOT NULL DEFAULT '{}'::jsonb"
+        )
+        conn.execute(
+            "ALTER TABLE external_fetch_cache ADD COLUMN IF NOT EXISTS pii_redactions "
+            "JSONB NOT NULL DEFAULT '{}'::jsonb"
         )
 
 
@@ -157,35 +168,49 @@ def _fetch_text_cached(
     url: str | None,
     text: str | None,
     detector: PIIDetector,
-) -> str:
+) -> tuple[str, dict[str, int]]:
     if kind == "text":
-        return _fetch_text(kind, label, url, text)
+        content = _fetch_text(kind, label, url, text)
+        report = detector.check(content)
+        if report.blocked:
+            raise PIIRedactionError("direct text evidence contains PII")
+        return content, {}
     safe_url = validate_external_url(url or "")
+    if detector.check(safe_url).blocked:
+        raise PIIRedactionError("external evidence URL contains PII")
     url_hash = hashlib.sha256(f"{kind}:{safe_url}".encode()).hexdigest()
     row = conn.execute(
-        "SELECT content FROM external_fetch_cache "
+        "SELECT content, pii_redactions FROM external_fetch_cache "
         "WHERE url_hash = %s AND fetched_at > now() - (%s || ' hours')::interval",
         (url_hash, CACHE_TTL_HOURS),
     ).fetchone()
     if row:
-        return row[0]
-    content = _fetch_text(kind, label, safe_url, text)
-    if detector.check(content).blocked:
-        return content
+        verified = detector.redact_and_verify(row[0])
+        return verified.text, dict(row[1])
+    raw_content = _fetch_text(kind, label, safe_url, text)
+    redaction = detector.redact_and_verify(raw_content)
     conn.execute(
-        "INSERT INTO external_fetch_cache (url_hash, url, kind, content, fetched_at) "
-        "VALUES (%s, %s, %s, %s, now()) "
+        "INSERT INTO external_fetch_cache "
+        "(url_hash, url, kind, content, pii_redactions, fetched_at) "
+        "VALUES (%s, %s, %s, %s, %s::jsonb, now()) "
         "ON CONFLICT (url_hash) DO UPDATE SET content = EXCLUDED.content, "
-        "fetched_at = now(), url = EXCLUDED.url, kind = EXCLUDED.kind",
-        (url_hash, safe_url, kind, content),
+        "pii_redactions = EXCLUDED.pii_redactions, fetched_at = now(), "
+        "url = EXCLUDED.url, kind = EXCLUDED.kind",
+        (
+            url_hash,
+            safe_url,
+            kind,
+            redaction.text,
+            json.dumps(redaction.counts),
+        ),
     )
-    return content
+    return redaction.text, redaction.counts
 
 
 def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
-    """นำเข้าเอกสารทั้งชุดของ run — คืนสถานะราย source (ready/blocked/error/empty)
+    """นำเข้าเอกสารทั้งชุดของ run — คืนสถานะราย source
 
-    fail-closed: detector ปิด = ปฏิเสธทั้งชุด; เอกสารที่พบ PII = block ทั้งชิ้น
+    URL/RSS redact-and-verify ก่อน persist; direct text ที่พบ PII ยัง block ตาม ADR-0010.
     """
     settings = get_settings()
     if not settings.pii_detector_enabled:
@@ -206,25 +231,33 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
             "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS quality_score "
             "DOUBLE PRECISION NOT NULL DEFAULT 0"
         )
+        conn.execute(
+            "ALTER TABLE run_sources ADD COLUMN IF NOT EXISTS pii_redactions "
+            "JSONB NOT NULL DEFAULT '{}'::jsonb"
+        )
+        conn.execute(
+            "ALTER TABLE external_fetch_cache ADD COLUMN IF NOT EXISTS pii_redactions "
+            "JSONB NOT NULL DEFAULT '{}'::jsonb"
+        )
         seen_hashes: dict[str, str] = {}
         for src in sources:
             kind = str(src.get("kind", "text"))
-            label = str(src.get("label", ""))[:200] or kind
+            requested_label = str(src.get("label", ""))[:200] or kind
+            label_has_pii = detector.check(requested_label).blocked
+            label = f"{kind}-source" if label_has_pii else requested_label
             status, error, n_chunks = "ready", "", 0
             content_hash, duplicate_of, quality_score = "", "", 0.0
+            pii_redactions: dict[str, int] = {}
             try:
-                text = _fetch_text_cached(
+                if label_has_pii:
+                    raise PIIRedactionError("source label contains PII")
+                text, pii_redactions = _fetch_text_cached(
                     conn, kind, label, src.get("url"), src.get("text"), detector
                 )
+                if pii_redactions:
+                    status = "redacted"
                 content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-                report = detector.check(text)
-                if report.blocked:
-                    status, error = (
-                        "blocked",
-                        "พบ PII (GOV-01): "
-                        + ", ".join(sorted({f.kind for f in report.findings if not f.allowlisted})),
-                    )
-                elif content_hash in seen_hashes:
+                if content_hash in seen_hashes:
                     status, duplicate_of = "duplicate", seen_hashes[content_hash]
                 else:
                     chunks = _chunk(text)
@@ -239,13 +272,22 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
                         n_chunks = len(chunks)
                         seen_hashes[content_hash] = label
                 quality_score = _quality_score(kind, text, n_chunks)
+            except PIIRedactionError:
+                status, error = "blocked", "พบ PII ที่ redact อย่างปลอดภัยไม่ได้ (GOV-01)"
             except Exception as e:
-                status, error = "error", str(e)[:300]
+                status = "error"
+                try:
+                    safe_error = detector.redact_and_verify(str(e)[:300])
+                    error = safe_error.text
+                    for pii_kind, count in safe_error.counts.items():
+                        pii_redactions[pii_kind] = pii_redactions.get(pii_kind, 0) + count
+                except PIIRedactionError:
+                    error = "เกิดข้อผิดพลาดที่มี PII และไม่สามารถบันทึกรายละเอียดได้"
             conn.execute(
                 "INSERT INTO run_sources "
                 "(run_id, kind, label, status, error, chunks, content_hash, "
-                "duplicate_of, quality_score) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "duplicate_of, quality_score, pii_redactions) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
                 (
                     run_id,
                     kind,
@@ -256,6 +298,7 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
                     content_hash,
                     duplicate_of,
                     quality_score,
+                    json.dumps(pii_redactions),
                 ),
             )
             results.append(
@@ -268,6 +311,7 @@ def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
                     "content_hash": content_hash[:12],
                     "duplicate_of": duplicate_of,
                     "quality_score": quality_score,
+                    "pii_redactions": pii_redactions,
                 }
             )
     return results

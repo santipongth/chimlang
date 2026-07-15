@@ -13,7 +13,8 @@
 2. **Snapshot-first (NFR-07)**: ทุกชิ้นที่ดึงมา freeze ลง DB (url+เวลา+hash+เนื้อหา) **ก่อนใช้** —
    replay อ่านจาก DB เท่านั้น ไม่ยิงเน็ตซ้ำ
 3. **Gate hindcast ทุก code path ที่แตะเน็ต** (`ensure_external_retrieval_allowed`) + leak test (กฎเหล็กข้อ 2)
-4. **PII gate ทุกชิ้นแบบ fail-closed** (GOV-01) — pattern เดียวกับ sources.py (block ทั้งชิ้น + บันทึกเหตุผล)
+4. **PII gate ทุกชิ้นแบบ fail-closed** (GOV-01/ADR-0010) — body/title redact+ตรวจซ้ำก่อน persist;
+   URL PII, detector ปิด/พัง หรือ verify ไม่ผ่าน = block
 5. Search key อยู่ `.env` (`TAVILY_API_KEY`) — ไม่มี key = โหมด RSS อย่างเดียว (degrade ไม่ใช่พัง)
 
 ## Milestones
@@ -36,7 +37,7 @@
 - [x] UI: toggle "🌐 โต๊ะข่าวสด" ในขั้นแหล่งข้อมูล; tab เส้นทางหลักฐาน แสดงชิ้นข่าว (ที่มา+เวลา+สถานะ PII)
 
 ### P7-M4 — Governance + วัดผล + ADR-0008 ✅ (12 ก.ค. 2569)
-- [x] leak test: hindcast ctx → gather ต้อง raise (ทุก provider); PII item → block
+- [x] leak test: hindcast ctx → gather ต้อง raise (ทุก provider); PII item → redact+re-scan โดย raw ไม่เข้า DB/LLM
 - [x] reproducibility test: replay จาก snapshot + seed เดิม = feed เดิมเป๊ะ ไม่แตะเน็ต
 - [x] budget: ประเมิน token เพิ่มจาก news block เข้า estimate เดิม; search cap กันยิงรัว
 - [x] ADR-0008 (สถาปัตยกรรม news desk + ข้อจำกัด heuristic channel) + STATE/security note
@@ -108,11 +109,16 @@
 - [x] Ledger recovery: ลบเฉพาะ 34 แถว `run_id=test-budget` มูลค่า `$102`; ยอดงานจริงคงอยู่ `$0.015036`
 - [x] Verification: `uv run pytest -q` ผ่าน 348 tests, ruff check/format และ web build ผ่าน; real Debate smoke 10/10 posts สำเร็จ
 
-## Post-phase hardening addendum #6 (15 ก.ค. 2026)
+## Post-phase hardening addendum #6 (15 ก.ค. 2026) ✅
 
 - [x] Debate replay presentation แสดงเลขรอบเริ่มที่ 1 โดยไม่เปลี่ยน internal `round_no` 0-based
 - [x] ปิด pre-gate persistence: payload ที่ PII detector block ไม่ถูกเขียนลง external/news fetch cache
 - [x] ลบเฉพาะ legacy `news_fetch_cache` ที่มี PII 5 แถว และไม่เก็บ raw PII value ใน source/news status error
 - [x] เพิ่ม regression test ว่า external source ที่มี PII ไม่ทิ้ง raw cache
-- [ ] **รอมติผู้ใช้:** ADR-0010 เสนอ redact→re-scan→process สำหรับ external evidence แทน block ทั้งชิ้น
-- [x] Verification: `uv run pytest -q` ผ่าน 349 tests, ruff check/format และ web build ผ่าน
+- [x] **ผู้ใช้ยืนยัน:** ADR-0010 ใช้ redact→re-scan→process สำหรับ external evidence แทน block ทั้งชิ้น
+- [x] Typed redaction: phone/email/Thai ID/person name; public-figure allowlist คงเดิม; provenance เก็บ counts เท่านั้น
+- [x] Persistence boundary: raw PII ไม่ผ่าน cache/chunk/snapshot/payload/LLM; redacted item เข้า retrieval/media diet ได้
+- [x] Fail-closed scope: direct text/label, PII URL/query, detector ปิด/พัง หรือ re-scan ไม่ผ่านยัง block
+- [x] Schema/UI: เพิ่ม `pii_redactions`, status `redacted`, Evidence UI แสดงชนิด+จำนวนที่ลบ
+- [x] Legacy scrub: migration purge unsafe cache และลบ raw PII จาก error metadata เก่า
+- [x] Final verification: 357 tests, ruff check/format, web build และ live worker reload ผ่าน

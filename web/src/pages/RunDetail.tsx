@@ -8,6 +8,7 @@ import {
   Radio,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   SkipForward,
   X,
 } from "lucide-react";
@@ -43,10 +44,27 @@ function StanceBar({ v }: { v: number }) {
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "ready") return <CheckCircle2 className="inline h-3.5 w-3.5 text-primary" />;
+  if (status === "redacted") return <ShieldCheck className="inline h-3.5 w-3.5 text-amber-600" />;
   if (status === "blocked") return <ShieldAlert className="inline h-3.5 w-3.5 text-red-600" />;
   if (status === "skipped") return <SkipForward className="inline h-3.5 w-3.5 text-amber-600" />;
   if (status === "empty") return <CircleSlash className="inline h-3.5 w-3.5 text-muted-foreground" />;
   return <AlertTriangle className="inline h-3.5 w-3.5 text-amber-600" />;
+}
+
+function RedactionSummary({ counts, t }: { counts?: Record<string, number>; t: (k: string) => string }) {
+  const entries = Object.entries(counts ?? {}).filter(([, count]) => count > 0);
+  if (!entries.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-amber-700">
+      <ShieldCheck className="h-3.5 w-3.5" />
+      <span>{t("rd_pii_removed")}:</span>
+      {entries.map(([kind, count]) => (
+        <span key={kind} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5">
+          {kind} {count}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function ExecutiveReadout({ data, p, isDebate, t }: { data: SimRunDetail; p: any; isDebate: boolean; t: (k: string) => string }) {
@@ -153,7 +171,7 @@ function TrustScorecard({ scorecard }: { scorecard: SimRunDetail["trust_scorecar
   );
 }
 
-function EvidenceDrawer({ item, onClose }: { item: any | null; onClose: () => void }) {
+function EvidenceDrawer({ item, onClose, t }: { item: any | null; onClose: () => void; t: (k: string) => string }) {
   if (!item) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-[2px]" onClick={onClose}>
@@ -175,6 +193,7 @@ function EvidenceDrawer({ item, onClose }: { item: any | null; onClose: () => vo
           {item.fetched_at && <><span className="text-muted-foreground">fetched</span><span>{String(item.fetched_at).slice(0, 16).replace("T", " ")}</span></>}
         </div>
         {item.error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{item.error}</div>}
+        <RedactionSummary counts={item.pii_redactions} t={t} />
         {item.content && <p className="mt-4 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>}
       </aside>
     </div>
@@ -573,7 +592,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <div className="space-y-1.5">
                   <p className="text-xs text-muted-foreground">🌐 {t("rd_news_head")} ({(p.news.items ?? []).length})</p>
                   <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
-                    {["ready", "blocked", "error", "skipped"].map((s) => (
+                    {["ready", "redacted", "blocked", "error", "skipped"].map((s) => (
                       <span key={s} className="rounded-full border border-border bg-background px-2 py-0.5">
                         <StatusIcon status={s} /> {s}: {newsCounts[s] ?? 0}
                       </span>
@@ -595,6 +614,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                           <a href={n.url} target="_blank" rel="noreferrer" className="text-xs text-primary-strong hover:underline">{n.url}</a>
                         )}
                         {n.error && <div className="mt-1 text-xs text-red-700">{n.error}</div>}
+                        <RedactionSummary counts={n.pii_redactions} t={t} />
                         </div>
                       </li>
                     ))}
@@ -625,7 +645,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   <>
                     <p className="text-xs text-muted-foreground">{t("rd_evidence_debate")}</p>
                     <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
-                      {["ready", "blocked", "error", "empty"].map((s) => (
+                      {["ready", "redacted", "blocked", "error", "empty"].map((s) => (
                         <span key={s} className="rounded-full border border-border bg-background px-2 py-0.5">
                           <StatusIcon status={s} /> {s}: {sourceCounts[s] ?? 0}
                         </span>
@@ -640,6 +660,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                             <span className="text-xs text-muted-foreground">{s.chunks} {t("rd_evidence_chunks")}</span>
                           </div>
                           {s.error && <div className="mt-1 text-xs text-red-700">{s.error}</div>}
+                          <RedactionSummary counts={s.pii_redactions} t={t} />
                           </div>
                         </li>
                       ))}
@@ -732,7 +753,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
         </>
       )}
 
-      <EvidenceDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
+      <EvidenceDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)} t={t} />
 
       {/* Share dialog (แบบ studio): toggle เปิด/ปิด + copy link — governance ADR-0004 อยู่ฝั่ง API */}
       {shareOpen && data && (

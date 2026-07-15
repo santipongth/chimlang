@@ -1,7 +1,7 @@
 # ADR-0010 — Redact PII ก่อน cache และประมวลผล
 
 - วันที่: 15 ก.ค. 2569
-- สถานะ: **เสนอ — รอมติผู้ใช้ก่อน implement**
+- สถานะ: **ใช้งาน — ผู้ใช้ยืนยัน 15 ก.ค. 2569**
 - ขอบเขต: เนื้อหาจากเว็บ, RSS และ News Desk เท่านั้น
 
 ## บริบท
@@ -14,7 +14,7 @@ GOV-01 ปัจจุบัน block เอกสารหรือข่าว
 อาจอยู่ใน cache แม้ snapshot ปลายทางถูก block แล้ว ช่องว่างนี้ต้องปิดไม่ว่าจะรับข้อเสนอ redaction
 หรือคงนโยบาย block เดิม
 
-## การตัดสินใจที่เสนอ
+## การตัดสินใจ
 
 1. ใช้ **redact → re-scan → process** สำหรับ body/title ของ external URL, RSS และ News Desk:
    - phone → `[PHONE_REDACTED]`
@@ -50,10 +50,15 @@ GOV-01 ปัจจุบัน block เอกสารหรือข่าว
 - **เก็บ raw แล้ว redact ตอนส่ง LLM:** ปฏิเสธ เพราะขัด data minimization และ raw PII อยู่ในฐานข้อมูล
 - **Pseudonym ข้ามเอกสารด้วย hash:** ปฏิเสธ เพราะ hash ของ identifier ยังเสี่ยง re-identification
 
-## ผลกระทบเมื่ออนุมัติ
+## ผลกระทบและ implementation
 
-- ต้องแก้ `governance/pii.py` ให้มี redactor แบบ deterministic และรายงาน counts โดยไม่คืน raw values
-- ต้องย้าย PII boundary ให้อยู่ก่อน cache ใน `simulation/sources.py` และ `simulation/newsdesk.py`
-- ต้องแก้ status/schema/UI evidence ให้รองรับ `redacted` และเพิ่ม tests ว่า raw PII ไม่อยู่ใน DB/prompt
-- ADR-0008 ข้อ 4 และข้อความ GOV-01 ใน `CLAUDE.md` ต้องอัปเดตจาก “พบแล้ว block เสมอ” เป็น
-  “redact-and-verify สำหรับ external evidence; failure ทุกชนิด block” หลังผู้ใช้อนุมัติเท่านั้น
+- `governance/pii.py`: `redact_and_verify()` ใช้ typed placeholders และ document-local person ids;
+  รายงานเฉพาะ counts ไม่มี raw values
+- `simulation/sources.py`: URL/RSS redact ก่อน external cache/chunks; direct text/label และ PII URL block
+- `simulation/newsdesk.py`: provider payload ถูก normalize+redact ก่อน cache/snapshot; `redacted` เข้า media diet ได้
+- `news_items`, `run_sources`, `external_fetch_cache` เก็บ `pii_redactions` เป็น JSON counts
+- Evidence UI แสดงสถานะ `redacted` และจำนวนที่ลบตามชนิด
+- migration `2026-07-15-pii-redaction-before-processing` purge unsafe cache และ migration
+  `2026-07-15-scrub-legacy-pii-error-metadata` ลบ raw values จาก legacy error fields
+- อัปเดต ADR-0008, `AGENTS.md` และ `CLAUDE.md` ให้ external evidence ใช้ redact-and-verify
+  โดย failure ทุกชนิดยัง block

@@ -17,8 +17,8 @@
 3. **Snapshot-first (NFR-07)**: ทุกชิ้น freeze ลง `news_items` ก่อนใช้ — replay/แสดงผลอ่านจาก
    `load_items()` เท่านั้น (มี test mock httpx ระเบิดถ้าแตะเน็ต)
 4. **Governance เดิมครอบเต็ม**: `gather()` เรียก `ensure_external_retrieval_allowed()` ก่อน I/O
-   (hindcast = ตาย — กฎเหล็กข้อ 2 + leak test), PII gate ทุกชิ้นแบบ fail-closed
-   (item มี PII = block + **ไม่เก็บเนื้อหา**), detector ปิด = ปฏิเสธทั้งหมด
+   (hindcast = ตาย — กฎเหล็กข้อ 2 + leak test). PII policy เดิมถูก ADR-0010 แทนที่เมื่อ
+   15 ก.ค. 2569: body/title redact+ตรวจซ้ำก่อน persist; URL PII, detector ปิด หรือ verify ไม่ผ่าน = block
 5. **Search = Tavily** (key `.env` `TAVILY_API_KEY`) — ไม่มี key = โหมด RSS อย่างเดียว (degrade ไม่พัง);
    caps: ≤30 items/run, ≤8 queries/run, intent ≤3/รอบ
 

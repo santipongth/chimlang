@@ -56,6 +56,20 @@ class PIIReport:
         return [f"{f.kind}: {f.value}" for f in self.findings if not f.allowlisted]
 
 
+@dataclass(frozen=True)
+class PIIRedaction:
+    text: str
+    counts: dict[str, int]
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.counts)
+
+
+class PIIRedactionError(RuntimeError):
+    """Redacted output still contains non-allowlisted PII."""
+
+
 def load_allowlist(path: Path | str = DEFAULT_ALLOWLIST_PATH) -> set[str]:
     if not Path(path).exists():
         return set()
@@ -96,3 +110,48 @@ class PIIDetector:
 
     def check(self, text: str) -> PIIReport:
         return PIIReport(findings=tuple(self.scan(text)))
+
+    def redact(self, text: str) -> PIIRedaction:
+        """Replace detected PII without retaining raw values in the result metadata."""
+        counts: dict[str, int] = {}
+        person_ids: dict[str, int] = {}
+
+        def bump(kind: str) -> None:
+            counts[kind] = counts.get(kind, 0) + 1
+
+        def redact_thai_id(match: re.Match) -> str:
+            digits = re.sub(r"[- ]", "", match.group(1))
+            if not thai_id_checksum_ok(digits):
+                return match.group(0)
+            bump("thai_id")
+            return "[THAI_ID_REDACTED]"
+
+        def redact_email(match: re.Match) -> str:
+            bump("email")
+            return "[EMAIL_REDACTED]"
+
+        def redact_phone(match: re.Match) -> str:
+            bump("phone")
+            return "[PHONE_REDACTED]"
+
+        def redact_person(match: re.Match) -> str:
+            full_name = _normalize_name(f"{match.group(1)} {match.group(2)}")
+            if full_name in self._allowlist:
+                return match.group(0)
+            person_id = person_ids.setdefault(full_name, len(person_ids) + 1)
+            bump("person_name")
+            return f"[PERSON_{person_id}]"
+
+        redacted = _THAI_ID_RE.sub(redact_thai_id, text)
+        redacted = _EMAIL_RE.sub(redact_email, redacted)
+        redacted = _PHONE_RE.sub(redact_phone, redacted)
+        redacted = _NAME_RE.sub(redact_person, redacted)
+        return PIIRedaction(text=redacted, counts=counts)
+
+    def redact_and_verify(self, text: str) -> PIIRedaction:
+        result = self.redact(text)
+        remaining = self.check(result.text)
+        if remaining.blocked:
+            kinds = sorted({f.kind for f in remaining.findings if not f.allowlisted})
+            raise PIIRedactionError("PII redaction verification failed: " + ", ".join(kinds))
+        return result
