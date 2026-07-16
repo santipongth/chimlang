@@ -162,7 +162,14 @@ class DebateResult:
         return [p for p in self.posts if not p.failed]
 
 
-def make_debate_adapter(agents: int, rounds: int, *, reflection_calls: int = 0) -> LLMAdapter:
+def make_debate_adapter(
+    agents: int,
+    rounds: int,
+    *,
+    reflection_calls: int = 0,
+    monthly_reservation_id: str = "",
+    include_embedding: bool = True,
+) -> LLMAdapter:
     """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap (ต่อรัน/รวมเดือน) = ไม่เริ่ม
 
     ใช้ค่าจากหน้าตั้งค่า (provider/model/ราคา/key/งบ) ถ้าผู้ใช้ตั้งไว้ (ADR-0006/0007)
@@ -180,12 +187,17 @@ def make_debate_adapter(agents: int, rounds: int, *, reflection_calls: int = 0) 
         TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
         TierLoad(settings.llm_model_analyst, 1 + max(0, reflection_calls), 1500, 800),
     ]
-    if settings.llm_model_embedding.strip():
+    if include_embedding and settings.llm_model_embedding.strip():
         # One bounded document batch plus one query. Conservative Thai char/token estimate.
         loads.append(TierLoad(settings.llm_model_embedding, 1, 12_000, 0))
     estimate = CostEstimator(pricing).estimate(loads)
     # งบรวมเดือน (P6-M5) ก่อน — ยอดสะสม + estimate เกิน = block
-    check_monthly_budget(settings.postgres_url, estimate.total_usd, effective_monthly_cap())
+    check_monthly_budget(
+        settings.postgres_url,
+        estimate.total_usd,
+        effective_monthly_cap(),
+        reservation_id=monthly_reservation_id,
+    )
     guard = BudgetGuard(cap_usd=settings.run_budget_usd_cap)
     guard.check_estimate(estimate)  # งบต่อรัน
     return LLMAdapter(
@@ -193,6 +205,7 @@ def make_debate_adapter(agents: int, rounds: int, *, reflection_calls: int = 0) 
         pricing,
         guard,
         monthly_cap_usd=effective_monthly_cap(),
+        monthly_reservation_id=monthly_reservation_id,
     )
 
 

@@ -30,6 +30,7 @@ from api.render import render_dashboard_html
 from api.routers.experiments import router as experiments_router
 from api.routers.ops import router as ops_router
 from api.routers.runs import router as runs_router
+from api.routers.settings import router as settings_router
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
 from governance.rbac import Permission, Principal
@@ -60,6 +61,7 @@ app = FastAPI(title="ชิมลาง API", version="0.2.0", lifespan=lifespan
 app.include_router(runs_router)
 app.include_router(experiments_router)
 app.include_router(ops_router)
+app.include_router(settings_router)
 
 _WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 if _WEB_DIST.exists():
@@ -438,149 +440,6 @@ def runs_json(principal: Principal = Depends(get_principal)) -> dict:
     return {"runs": runs, "due": due}
 
 
-# ---- App settings (P6-M4) ----
-
-
-@app.get("/settings.json")
-def settings_json(principal: Principal = Depends(get_principal)) -> dict:
-    from core.appsettings import get_app_settings
-
-    settings = get_settings()
-    try:
-        data = get_app_settings(settings.postgres_url)
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    from core.llm.budget import spent_this_month
-    from core.llm.pricing import PricingRegistry
-    from core.llm.userconfig import (
-        LLM_PROVIDERS,
-        effective_llm_settings,
-        effective_monthly_cap,
-    )
-    from core.secretbox import mask, master_key_present
-
-    eff = effective_llm_settings()
-    # key ที่ active จริง (DB > .env) — แสดงแบบมาสก์เท่านั้น ไม่เคยส่งเต็ม
-    key_from_db = bool(data.get("llm_api_key_enc"))
-    active_key = eff.llm_api_key.strip()
-    yaml_prices = {
-        m: {"input_usd_per_m": p.input_usd_per_m, "output_usd_per_m": p.output_usd_per_m}
-        for m, p in PricingRegistry.from_yaml()._table.items()
-    }
-    try:
-        spent = round(spent_this_month(settings.postgres_url), 4)
-    except Exception:
-        spent = 0.0
-    # News Desk (P7): ค่าที่ใช้จริง (DB ทับ .env) — Tavily key มาสก์เท่านั้น
-    from simulation.newsdesk import effective_news_config
-
-    eff_feeds, eff_tavily = effective_news_config(settings)
-    news_cfg = {
-        "feeds": eff_feeds,
-        "feeds_source": "db"
-        if str(data.get("news_rss_feeds", "")).strip()
-        else ("env" if settings.news_rss_feeds_list() else "none"),
-        "tavily_present": bool(eff_tavily),
-        "tavily_masked": mask(eff_tavily) if eff_tavily else "",
-        "tavily_source": "db"
-        if data.get("tavily_api_key_enc")
-        else ("env" if settings.tavily_api_key.strip() else "none"),
-    }
-    # อย่าคืน ciphertext ของ key ออกไป
-    safe = {k: v for k, v in data.items() if k not in ("llm_api_key_enc", "tavily_api_key_enc")}
-    return {
-        **safe,
-        "webhook_configured": bool(settings.alert_webhook_url.strip()),
-        "auth_enabled": settings.auth_enabled,
-        "caps": {
-            "fabric": settings.max_agents_per_run,
-            "debate": settings.max_agents_per_debate,
-        },
-        # LLM ปรับเองได้ (ADR-0006/0007) — key ไม่เคยออกเต็ม (มาสก์เท่านั้น)
-        "llm": {
-            "providers": [{"key": k, **v} for k, v in LLM_PROVIDERS.items()],
-            "key_present": bool(active_key),
-            "key_masked": mask(active_key) if active_key else "",
-            "key_source": "db" if key_from_db else ("env" if active_key else "none"),
-            "master_key_present": master_key_present(),
-            "active_base_url": eff.llm_base_url,
-            "active_model_crowd": eff.llm_model_crowd,
-            "active_model_analyst": eff.llm_model_analyst,
-            "active_model_embedding": eff.llm_model_embedding,
-            "embedding_dimension": eff.llm_embedding_dimension,
-            "env_model_crowd": settings.llm_model_crowd,
-            "env_model_analyst": settings.llm_model_analyst,
-            "env_model_embedding": settings.llm_model_embedding,
-            "yaml_prices": yaml_prices,
-        },
-        "budget": {
-            "run_cap_effective": eff.run_budget_usd_cap,
-            "monthly_cap_effective": effective_monthly_cap(),
-            "spent_this_month": spent,
-            "env_run_cap": settings.run_budget_usd_cap,
-            "env_monthly_cap": settings.monthly_budget_usd_cap,
-        },
-        "news": news_cfg,
-    }
-
-
-@app.put("/settings.json")
-def settings_put(patch: dict, principal: Principal = Depends(get_principal)) -> dict:
-    require(principal, Permission.RUN)
-    from core.appsettings import put_app_settings
-
-    settings = get_settings()
-    try:
-        put_app_settings(settings.postgres_url, patch)
-        # Return the stored overrides together with the effective server values.
-        return settings_json(principal)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-
-
-class LlmKeyBody(BaseModel):
-    api_key: str  # ว่าง = ลบ key ที่เก็บ (กลับไปใช้ .env)
-
-
-@app.put("/settings/llm-key")
-def settings_llm_key(body: LlmKeyBody, principal: Principal = Depends(get_principal)) -> dict:
-    """ตั้ง/ลบ LLM API key แบบเข้ารหัส (ADR-0007) — endpoint แยกเพื่อไม่ให้ key ปน PUT ปกติ
-
-    ต้องสิทธิ์ ADMIN (จัดการ secret) + ต้องมี master key (CHIMLANG_SECRET_KEY) ก่อน
-    """
-    require(principal, Permission.ADMIN)
-    from core.appsettings import set_llm_api_key
-    from core.secretbox import MasterKeyMissingError
-
-    settings = get_settings()
-    try:
-        set_llm_api_key(settings.postgres_url, body.api_key)
-    except MasterKeyMissingError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    return {"ok": True, "set": bool(body.api_key.strip())}
-
-
-@app.put("/settings/tavily-key")
-def settings_tavily_key(body: LlmKeyBody, principal: Principal = Depends(get_principal)) -> dict:
-    """ตั้ง/ลบ Tavily search key แบบเข้ารหัส (P7 News Desk) — เงื่อนไขเดียวกับ llm-key"""
-    require(principal, Permission.ADMIN)
-    from core.appsettings import set_tavily_api_key
-    from core.secretbox import MasterKeyMissingError
-
-    settings = get_settings()
-    try:
-        set_tavily_api_key(settings.postgres_url, body.api_key)
-    except MasterKeyMissingError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    return {"ok": True, "set": bool(body.api_key.strip())}
-
-
 # ---- Persistent runs (P6-M1/M2): เลือก engine → รัน → เก็บถาวร → History/Replay ----
 
 
@@ -772,9 +631,20 @@ def _run_create_impl(
             # Budget/model readiness must fail before source or News Desk I/O.
             rstore.update_progress(run_id, 10, "กำลังตรวจงบและโมเดล")
             if body.reflection:
-                debate_adapter = make_debate_adapter(n, rounds, reflection_calls=min(2, rounds - 1))
+                debate_adapter = make_debate_adapter(
+                    n,
+                    rounds,
+                    reflection_calls=min(2, rounds - 1),
+                    monthly_reservation_id=run_id,
+                    include_embedding=body.retrieval_mode in {"hybrid", "vector"},
+                )
             else:
-                debate_adapter = make_debate_adapter(n, rounds)
+                debate_adapter = make_debate_adapter(
+                    n,
+                    rounds,
+                    monthly_reservation_id=run_id,
+                    include_embedding=body.retrieval_mode in {"hybrid", "vector"},
+                )
             if hasattr(debate_adapter, "bind_run"):
                 debate_adapter.bind_run(run_id)
             personas = (factory or PersonaFactory()).sample(n, seed=run_seed, max_agents=n)
@@ -938,11 +808,20 @@ def _run_create_impl(
     except Exception as e:
         rstore.fail(run_id, str(e))
         raise HTTPException(status_code=502, detail=f"รันไม่สำเร็จ: {e}") from e
+    finally:
+        if body.engine == "debate":
+            from core.llm.budget import release_budget_reservation
+
+            release_budget_reservation(settings.postgres_url, run_id)
     return {"run_id": run_id, "engine": body.engine, "agents": n}
 
 
-@app.post("/runs/async")
-def run_create_async(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+def _enqueue_persistent_run(
+    body: RunBody,
+    principal: Principal,
+    *,
+    preallocated_run_id: str | None = None,
+) -> dict:
     """ส่ง persistent run เข้า queue — ใช้ code path เดียวกับ /runs ใน worker แล้ว poll ด้วย job id"""
     require(principal, Permission.RUN)
     from core.runstore import RunStore, new_run_id
@@ -974,7 +853,7 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
     rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
     valid_views = {"overview", "debate", "canvas", "evidence"}
     views = [v for v in body.views if v in valid_views] or list(valid_views)
-    run_id = new_run_id(body.engine)
+    run_id = preallocated_run_id or new_run_id(body.engine)
     run_seed = body.seed if body.seed is not None else settings.default_seed
     rstore = RunStore(settings.postgres_url)
     try:
@@ -1027,6 +906,13 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
         rstore.fail(run_id, f"queue ไม่พร้อม (redis?): {e}")
         raise HTTPException(status_code=503, detail=f"queue ไม่พร้อม (redis?): {e}") from e
     return {"job_id": res.id, "run_id": run_id, "status": res.status}
+
+
+@app.post("/runs/async")
+def run_create_async(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+    """Queue one persistent run after governance checks."""
+
+    return _enqueue_persistent_run(body, principal)
 
 
 @app.get("/run-jobs/{job_id}")
@@ -1192,10 +1078,10 @@ def _validation_report(parent_run_id: str, children: list[dict]) -> dict:
 def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
     """Queue exactly three child seeds after a fresh aggregate BudgetGuard check."""
     require(principal, Permission.RUN)
-    from core.llm.budget import check_monthly_budget
-    from core.llm.cost import BudgetGuard, CostEstimator, TierLoad
-    from core.llm.userconfig import effective_llm_settings, effective_monthly_cap, effective_pricing
-    from core.runstore import RunStore
+    from core.llm.budget import release_budget_reservation, reserve_monthly_budget
+    from core.llm.userconfig import effective_monthly_cap
+    from core.run_quality import estimate_run_cost
+    from core.runstore import RunStore, new_run_id
 
     settings = get_settings()
     store = RunStore(settings.postgres_url)
@@ -1208,25 +1094,9 @@ def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> 
     existing = store.children(run_id)
     if existing:
         return _validation_report(run_id, existing)
-    if parent["engine"] == "debate":
-        llm = effective_llm_settings()
-        estimate = CostEstimator(effective_pricing()).estimate(
-            [
-                TierLoad(
-                    llm.llm_model_crowd,
-                    parent["agents"] * parent["rounds"] * 3,
-                    900,
-                    160,
-                ),
-                TierLoad(llm.llm_model_analyst, 3, 1500, 800),
-            ]
-        )
-        BudgetGuard(cap_usd=llm.run_budget_usd_cap).check_estimate(estimate)
-        check_monthly_budget(settings.postgres_url, estimate.total_usd, effective_monthly_cap())
-    jobs = []
     base_seed = int(parent["seed"])
-    for offset in (1, 2, 3):
-        body = RunBody(
+    bodies = [
+        RunBody(
             engine=parent["engine"],
             subject=parent["subject"],
             domain=parent["domain"],
@@ -1240,7 +1110,43 @@ def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> 
             parent_run_id=run_id,
             seed=base_seed + offset,
         )
-        jobs.append(run_create_async(body, principal=principal))
+        for offset in (1, 2, 3)
+    ]
+    estimates = [estimate_run_cost(body.model_dump()) for body in bodies]
+    for estimate in estimates:
+        if estimate.get("error"):
+            raise HTTPException(status_code=422, detail=str(estimate["error"]))
+        if float(estimate.get("estimated_usd", 0)) > float(estimate.get("run_cap_usd", 0)):
+            raise HTTPException(status_code=422, detail="validation child เกินเพดานต่อ run")
+    child_ids = [new_run_id(parent["engine"]) for _ in bodies]
+    reservations = {
+        child_id: float(estimate.get("estimated_usd", 0))
+        for child_id, estimate in zip(child_ids, estimates, strict=True)
+        if float(estimate.get("estimated_usd", 0)) > 0
+    }
+    try:
+        reserve_monthly_budget(
+            settings.postgres_url,
+            reservations,
+            effective_monthly_cap(),
+            context="three_seed_validation",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    jobs = []
+    for index, body in enumerate(bodies):
+        try:
+            jobs.append(
+                _enqueue_persistent_run(
+                    body,
+                    principal,
+                    preallocated_run_id=child_ids[index],
+                )
+            )
+        except Exception:
+            for pending_id in child_ids[index:]:
+                release_budget_reservation(settings.postgres_url, pending_id)
+            raise
     return {"parent_run_id": run_id, "status": "queued", "jobs": jobs}
 
 

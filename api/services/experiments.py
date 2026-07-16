@@ -72,6 +72,9 @@ def preflight_sweep(variants: list[tuple[RunBody, dict]], monthly_cap: float) ->
     return {
         "variants": len(variants),
         "estimated_usd": round(total, 6),
+        "variant_estimates_usd": [
+            round(float(item.get("estimated_usd", 0)), 6) for item in estimates
+        ],
         "monthly_spent_usd": round(spent, 6),
         "monthly_cap_usd": monthly_cap,
     }

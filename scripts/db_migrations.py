@@ -260,6 +260,12 @@ def _apply_experiment_workspaces(conn: Connection) -> None:
     conn.execute(experiment_schema)
 
 
+def _apply_monthly_budget_reservations(conn: Connection) -> None:
+    from core.llm.budget import _SCHEMA as budget_schema
+
+    conn.execute(budget_schema)
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -312,6 +318,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-16-experiment-workspaces-v1",
         "operational sweep/comparison workspaces with run membership",
         _apply_experiment_workspaces,
+    ),
+    (
+        "2026-07-16-monthly-budget-reservations-v1",
+        "transactional monthly budget reservations before sweep enqueue",
+        _apply_monthly_budget_reservations,
     ),
 ]
 

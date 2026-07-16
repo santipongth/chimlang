@@ -55,6 +55,7 @@ class LLMAdapter:
         client: OpenAI | None = None,
         run_id: str = "",
         monthly_cap_usd: float = 0.0,
+        monthly_reservation_id: str = "",
     ):
         self._models = {
             ModelTier.CROWD: settings.llm_model_crowd,
@@ -74,6 +75,7 @@ class LLMAdapter:
         self._dsn = settings.postgres_url
         self._run_id = run_id
         self._monthly_cap_usd = max(0.0, monthly_cap_usd)
+        self._monthly_reservation_id = monthly_reservation_id[:160]
         self._provider = provider_name(self._base_url)
         self._client = client or OpenAI(
             base_url=settings.llm_base_url or None,
@@ -204,7 +206,12 @@ class LLMAdapter:
         )
         if self._run_id:
             # Per-call ledger includes failed runs and calls that exhaust the runtime cap.
-            record_spend(self._dsn, cost_usd, run_id=self._run_id)
+            record_spend(
+                self._dsn,
+                cost_usd,
+                run_id=self._run_id,
+                reservation_id=self._monthly_reservation_id,
+            )
         # คิดเงินก่อน return — ถ้าแตะ cap จะ raise BudgetExceededError = abort run
         self._guard.add_actual(cost_usd)
 
@@ -230,7 +237,12 @@ class LLMAdapter:
         estimated_cost = self._pricing.cost_usd(self._embedding_model, estimated_tokens, 0)
         self._guard.check_additional(estimated_cost)
         if self._run_id and self._monthly_cap_usd > 0:
-            check_monthly_budget(self._dsn, estimated_cost, self._monthly_cap_usd)
+            check_monthly_budget(
+                self._dsn,
+                estimated_cost,
+                self._monthly_cap_usd,
+                reservation_id=self._monthly_reservation_id,
+            )
         started = time.monotonic()
         try:
             with traced(
@@ -284,7 +296,12 @@ class LLMAdapter:
             model_version=model_version,
         )
         if self._run_id:
-            record_spend(self._dsn, cost_usd, run_id=self._run_id)
+            record_spend(
+                self._dsn,
+                cost_usd,
+                run_id=self._run_id,
+                reservation_id=self._monthly_reservation_id,
+            )
         self._guard.add_actual(cost_usd)
         return EmbeddingResult(vectors, model_version, dimension, input_tokens, cost_usd)
 

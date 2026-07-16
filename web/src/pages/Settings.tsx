@@ -457,19 +457,19 @@ export default function Settings() {
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="text-muted-foreground">{t("set_budget_spent")}</span>
                   <span className="tabular-nums font-medium">
-                    ${usd(data.budget.spent_this_month)} / ${usd(data.budget.monthly_cap_effective)}
+                    ${usd(data.budget.spent_this_month)} spent + ${usd(data.budget.reserved_this_month)} reserved / ${usd(data.budget.monthly_cap_effective)}
                   </span>
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
                   <div
-                    className={`h-full ${data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective) > 0.9 ? "bg-red-500" : "bg-primary"}`}
-                    style={{ width: `${Math.min(100, (data.budget.spent_this_month / Math.max(1, data.budget.monthly_cap_effective)) * 100)}%` }}
+                    className={`h-full ${(data.budget.spent_this_month + data.budget.reserved_this_month) / Math.max(1, data.budget.monthly_cap_effective) > 0.9 ? "bg-red-500" : "bg-primary"}`}
+                    style={{ width: `${Math.min(100, ((data.budget.spent_this_month + data.budget.reserved_this_month) / Math.max(1, data.budget.monthly_cap_effective)) * 100)}%` }}
                   />
                 </div>
-                <div className={`mt-2 text-xs font-medium ${data.budget.spent_this_month > data.budget.monthly_cap_effective ? "text-red-600" : "text-emerald-700"}`}>
-                  {data.budget.spent_this_month > data.budget.monthly_cap_effective
-                    ? `${t("set_budget_over")}: $${usd(data.budget.spent_this_month - data.budget.monthly_cap_effective)}`
-                    : `${t("set_budget_remaining")}: $${usd(data.budget.monthly_cap_effective - data.budget.spent_this_month)}`}
+                <div className={`mt-2 text-xs font-medium ${data.budget.available_this_month <= 0 ? "text-red-600" : "text-emerald-700"}`}>
+                  {data.budget.available_this_month <= 0
+                    ? `${t("set_budget_over")}: committed budget reached cap`
+                    : `${t("set_budget_remaining")}: $${usd(data.budget.available_this_month)}`}
                 </div>
                 {(data.run_budget_usd_cap === 0 || data.monthly_budget_usd_cap === 0) && (
                   <div className="mt-2 text-[11px] text-muted-foreground">0 = {t("set_budget_from_env")}</div>

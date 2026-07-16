@@ -17,7 +17,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          charts: ["echarts/core", "echarts/charts", "echarts/components", "echarts/renderers", "cytoscape"],
+          charts: ["echarts/core", "echarts/charts", "echarts/components", "echarts/renderers"],
+          graph: ["cytoscape"],
           query: ["@tanstack/react-query", "openapi-fetch"],
           vendor: ["react", "react-dom", "lucide-react"],
         },
@@ -26,7 +27,12 @@ export default defineConfig({
   },
   server: {
     proxy: Object.fromEntries(
-      ["/dashboard.json", "/signal.json", "/citizen", "/graph", "/health"].map((p) => [
+      [
+        "/dashboard.json", "/signal.json", "/citizen", "/graph", "/health",
+        "/runs", "/run-jobs", "/run-metrics.json", "/simruns.json", "/settings",
+        "/experiments", "/engines.json", "/personas", "/gallery", "/watchlists",
+        "/alerts", "/calibration.json", "/predictions", "/observability.json", "/compare.json",
+      ].map((p) => [
         p,
         { target: "http://localhost:8000", changeOrigin: true },
       ]),

@@ -53,6 +53,15 @@
 - [x] frontend typed discriminated run payloads แทน `Record<string, any>` ใน contract หลัก
 - [x] virtualized Debate list + frontend test payload 1,000 posts และ experiment workspace e2e
 
+## P8-M7 — Production hardening ✅ (public-GA architecture ยังรอมติ ADR-0012)
+
+- [x] transactional monthly-budget reservation สำหรับ sweep/3-seed validation; actual spend settle และ release เมื่อจบ/ล้มเหลว
+- [x] แยก endpoint กลุ่ม Settings ออกจาก `api/app.py` โดยคง API contract เดิม
+- [x] ย้าย main frontend request paths ไป typed OpenAPI client และลด raw fetch ที่ซ้ำกัน
+- [x] lazy-load visualization/experiment routes เพื่อลด initial bundle โดยไม่ทำให้ deep link พัง
+- [x] เพิ่ม security/external-validation readiness report; ระบุ TLS/OIDC/multi-tenant gates ที่ต้องมี deployment input
+- [x] regression: backend, migration, OpenAPI, Vitest/build, Playwright desktop/mobile
+
 ## เกณฑ์ตรวจชุดที่ปิดแล้ว
 
 - runtime path ไม่มี DDL; migration version mismatch ทำให้ startup fail-closed
@@ -72,5 +81,8 @@
 - M6: sweep สูงสุด 12 variants และตรวจ per-run+monthly aggregate budget ก่อน enqueue; workspace
   วิเคราะห์ snapshot ของ stored runs เท่านั้นและ `public_votes_used=false`; contention graph จำกัด 24 segment
   เพื่อไม่ให้ layout O(n²) บล็อกหน้า แต่ Debate feed เก็บครบและ virtualize 1,000 posts
-- verification ล่าสุด: 383 backend tests, ruff check/format, web OpenAPI generate/Vitest/build,
+- M7: sweep/validation reservation batch ใช้ transaction advisory lock ก่อน enqueue และ settle/release ตาม actual spend;
+  readiness `public-ga` block เมื่อ TLS/pen-test/OIDC/RLS ไม่พร้อม; ADR-0012 ยัง Proposed จึงไม่มี
+  fake multi-tenant หรือ TLS vendor choice ใน production code
+- verification ล่าสุด: 387 backend tests, ruff check/format, web OpenAPI generate/Vitest/build,
   Playwright 8 tests desktop+mobile, migration no-op ผ่าน

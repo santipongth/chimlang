@@ -1,5 +1,14 @@
 // ตัวช่วยเรียก API ของชิมลาง — type ตรงกับ response ฝั่ง FastAPI
 
+import { apiClient } from "./openapi-client";
+
+function openApiError(error: unknown, status: number): Error {
+  if (error && typeof error === "object" && "detail" in error) {
+    return new Error(String((error as { detail: unknown }).detail));
+  }
+  return new Error(`HTTP ${status}`);
+}
+
 export interface BriefLine {
   kind: "opportunity" | "risk";
   text: string;
@@ -53,9 +62,9 @@ export interface EngineInfo {
 }
 
 export async function fetchEngines(): Promise<EngineInfo[]> {
-  const r = await fetch("/engines.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).engines;
+  const { data, error, response } = await apiClient.GET("/engines.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { engines: EngineInfo[] }).engines;
 }
 
 export interface RunReadiness {
@@ -78,13 +87,11 @@ export interface CreateRunBody {
 }
 
 export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadiness> {
-  const r = await fetch("/runs/readiness", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const { data, error, response } = await apiClient.POST("/runs/readiness", {
+    body: toRunRequest(body),
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as RunReadiness;
 }
 
 export interface SourceInput {
@@ -107,8 +114,34 @@ export interface CreateRunBody {
   claim?: string;
   measurement?: string;
   due_days?: number;
+  probability?: number | null;
+  seed?: number | null;
   views?: string[]; // มุมมองที่จะเปิดใช้ (P6-M6)
   live_news?: boolean; // โต๊ะข่าวสด (P7, debate เท่านั้น)
+}
+
+function toRunRequest(body: CreateRunBody) {
+  return {
+    engine: body.engine,
+    subject: body.subject,
+    domain: body.domain,
+    agents: body.agents,
+    rounds: body.rounds ?? 3,
+    pack_id: body.pack_id ?? null,
+    red_team: body.red_team ?? false,
+    sources: (body.sources ?? []).map((source) => ({ ...source })),
+    claim: body.claim ?? "",
+    measurement: body.measurement ?? "",
+    due_days: body.due_days ?? 30,
+    probability: body.probability ?? null,
+    seed: body.seed ?? null,
+    views: body.views ?? [],
+    live_news: body.live_news ?? false,
+    retrieval_mode: body.retrieval_mode ?? "hybrid",
+    parent_run_id: body.parent_run_id ?? "",
+    reflection: body.reflection ?? false,
+    experiment_id: "",
+  };
 }
 
 // พูลของ persona (P6-M6)
@@ -140,13 +173,11 @@ export async function fetchPool(
 }
 
 export async function createRun(body: CreateRunBody): Promise<string> {
-  const r = await fetch("/runs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const { data, error, response } = await apiClient.POST("/runs", {
+    body: toRunRequest(body),
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).run_id;
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return String((data as { run_id: string }).run_id);
 }
 
 export interface RunJobResult {
@@ -166,19 +197,19 @@ export interface RunJobStatus {
 }
 
 export async function createRunAsync(body: CreateRunBody): Promise<RunJobStatus> {
-  const r = await fetch("/runs/async", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const { data, error, response } = await apiClient.POST("/runs/async", {
+    body: toRunRequest(body),
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as RunJobStatus;
 }
 
 export async function fetchRunJob(jobId: string): Promise<RunJobStatus> {
-  const r = await fetch(`/run-jobs/${jobId}`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/run-jobs/{job_id}", {
+    params: { path: { job_id: jobId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as RunJobStatus;
 }
 
 export interface SimRunSummary {
@@ -199,13 +230,11 @@ export interface SimRunSummary {
 }
 
 export async function fetchSimRuns(search = "", engine = "", status = ""): Promise<SimRunSummary[]> {
-  const q = new URLSearchParams();
-  if (search) q.set("search", search);
-  if (engine) q.set("engine", engine);
-  if (status) q.set("status", status);
-  const r = await fetch(`/simruns.json?${q}`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).runs;
+  const { data, error, response } = await apiClient.GET("/simruns.json", {
+    params: { query: { search, engine, status } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { runs: SimRunSummary[] }).runs;
 }
 
 export interface DebatePostItem {
@@ -522,6 +551,8 @@ export interface AppSettings {
     run_cap_effective: number;
     monthly_cap_effective: number;
     spent_this_month: number;
+    reserved_this_month: number;
+    available_this_month: number;
     env_run_cap: number;
     env_monthly_cap: number;
   };
@@ -536,27 +567,23 @@ export interface AppSettings {
 }
 
 export async function saveTavilyKey(apiKey: string): Promise<void> {
-  const r = await fetch("/settings/tavily-key", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: apiKey }),
+  const { error, response } = await apiClient.PUT("/settings/tavily-key", {
+    body: { api_key: apiKey },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function saveLlmKey(apiKey: string): Promise<void> {
-  const r = await fetch("/settings/llm-key", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: apiKey }),
+  const { error, response } = await apiClient.PUT("/settings/llm-key", {
+    body: { api_key: apiKey },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function fetchSettings(): Promise<AppSettings> {
-  const r = await fetch("/settings.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/settings.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as AppSettings;
 }
 
 export interface DeepHealth {
@@ -571,13 +598,11 @@ export async function fetchDeepHealth(): Promise<DeepHealth> {
 }
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const r = await fetch("/settings.json", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
+  const { data, error, response } = await apiClient.PUT("/settings.json", {
+    body: patch,
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as AppSettings;
 }
 
 export interface ObservabilityData {
@@ -991,31 +1016,26 @@ export interface ExperimentDetail {
   };
 }
 
-async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail ?? `HTTP ${response.status}`);
-  }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
-}
-
 export async function fetchExperiments(): Promise<ExperimentSummary[]> {
-  const data = await jsonRequest<{ experiments: ExperimentSummary[] }>("/experiments");
-  return data.experiments;
+  const { data, error, response } = await apiClient.GET("/experiments");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { experiments: ExperimentSummary[] }).experiments;
 }
 
 export async function fetchExperiment(experimentId: string): Promise<ExperimentDetail> {
-  return jsonRequest<ExperimentDetail>(`/experiments/${encodeURIComponent(experimentId)}`);
+  const { data, error, response } = await apiClient.GET("/experiments/{experiment_id}", {
+    params: { path: { experiment_id: experimentId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as ExperimentDetail;
 }
 
 export async function createExperimentComparison(name: string, runIds: string[]): Promise<ExperimentDetail> {
-  return jsonRequest<ExperimentDetail>("/experiments/compare", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, run_ids: runIds }),
+  const { data, error, response } = await apiClient.POST("/experiments/compare", {
+    body: { name, run_ids: runIds },
   });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as ExperimentDetail;
 }
 
 export interface SweepCreated {
@@ -1030,11 +1050,35 @@ export async function createExperimentSweep(
   baseRun: CreateRunBody,
   parameters: Record<string, unknown[]>,
 ): Promise<SweepCreated> {
-  return jsonRequest<SweepCreated>("/experiments/sweep", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, base_run: baseRun, parameters }),
+  const { data, error, response } = await apiClient.POST("/experiments/sweep", {
+    body: {
+      name,
+      base_run: {
+        engine: baseRun.engine,
+        subject: baseRun.subject,
+        domain: baseRun.domain,
+        agents: baseRun.agents,
+        rounds: baseRun.rounds ?? 3,
+        pack_id: baseRun.pack_id ?? null,
+        red_team: baseRun.red_team ?? false,
+        sources: (baseRun.sources ?? []).map((source) => ({ ...source })),
+        claim: baseRun.claim ?? "",
+        measurement: baseRun.measurement ?? "",
+        due_days: baseRun.due_days ?? 30,
+        probability: baseRun.probability ?? null,
+        seed: baseRun.seed ?? null,
+        views: baseRun.views ?? [],
+        live_news: baseRun.live_news ?? false,
+        retrieval_mode: baseRun.retrieval_mode ?? "hybrid",
+        parent_run_id: baseRun.parent_run_id ?? "",
+        reflection: baseRun.reflection ?? false,
+        experiment_id: "",
+      },
+      parameters,
+    },
   });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as SweepCreated;
 }
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`;

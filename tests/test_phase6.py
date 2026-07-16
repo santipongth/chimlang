@@ -450,7 +450,7 @@ def test_post_runs_debate_uses_mocked_engine(client, monkeypatch):
     import api.app as app_mod  # noqa: F401
     import simulation.debate as dbt
 
-    monkeypatch.setattr(dbt, "make_debate_adapter", lambda a, r: _FakeAdapter())
+    monkeypatch.setattr(dbt, "make_debate_adapter", lambda a, r, **kwargs: _FakeAdapter())
     r = client.post(
         "/runs",
         json={"engine": "debate", "subject": "ทดสอบดีเบตผ่าน api", "agents": 6, "rounds": 2},

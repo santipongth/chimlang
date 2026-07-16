@@ -147,6 +147,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings Json */
+        get: operations["settings_json_settings_json_get"];
+        /** Settings Put */
+        put: operations["settings_put_settings_json_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/llm-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Settings Llm Key */
+        put: operations["settings_llm_key_settings_llm_key_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/tavily-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Settings Tavily Key */
+        put: operations["settings_tavily_key_settings_tavily_key_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/graph/indirect.json": {
         parameters: {
             query?: never;
@@ -303,66 +355,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settings.json": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Settings Json */
-        get: operations["settings_json_settings_json_get"];
-        /** Settings Put */
-        put: operations["settings_put_settings_json_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings/llm-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Settings Llm Key
-         * @description ตั้ง/ลบ LLM API key แบบเข้ารหัส (ADR-0007) — endpoint แยกเพื่อไม่ให้ key ปน PUT ปกติ
-         *
-         *     ต้องสิทธิ์ ADMIN (จัดการ secret) + ต้องมี master key (CHIMLANG_SECRET_KEY) ก่อน
-         */
-        put: operations["settings_llm_key_settings_llm_key_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings/tavily-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Settings Tavily Key
-         * @description ตั้ง/ลบ Tavily search key แบบเข้ารหัส (P7 News Desk) — เงื่อนไขเดียวกับ llm-key
-         */
-        put: operations["settings_tavily_key_settings_tavily_key_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/engines.json": {
         parameters: {
             query?: never;
@@ -408,7 +400,7 @@ export interface paths {
         put?: never;
         /**
          * Run Create Async
-         * @description ส่ง persistent run เข้า queue — ใช้ code path เดียวกับ /runs ใน worker แล้ว poll ด้วย job id
+         * @description Queue one persistent run after governance checks.
          */
         post: operations["run_create_async_runs_async_post"];
         delete?: never;
@@ -1285,11 +1277,6 @@ export interface components {
              */
             agents: number;
         };
-        /** LlmKeyBody */
-        LlmKeyBody: {
-            /** Api Key */
-            api_key: string;
-        };
         /** OOSRequest */
         OOSRequest: {
             /** Feature Series */
@@ -1393,11 +1380,8 @@ export interface components {
              * @default false
              */
             red_team: boolean;
-            /**
-             * Sources
-             * @default []
-             */
-            sources: {
+            /** Sources */
+            sources?: {
                 [key: string]: unknown;
             }[];
             /**
@@ -1419,11 +1403,8 @@ export interface components {
             probability?: number | null;
             /** Seed */
             seed?: number | null;
-            /**
-             * Views
-             * @default []
-             */
-            views: string[];
+            /** Views */
+            views?: string[];
             /**
              * Live News
              * @default false
@@ -1530,6 +1511,11 @@ export interface components {
              * @default false
              */
             reflection: boolean;
+        };
+        /** SecretKeyBody */
+        SecretKeyBody: {
+            /** Api Key */
+            api_key: string;
         };
         /** ShareBody */
         ShareBody: {
@@ -1899,6 +1885,152 @@ export interface operations {
             };
         };
     };
+    settings_json_settings_json_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_put_settings_json_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_llm_key_settings_llm_key_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretKeyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_tavily_key_settings_tavily_key_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretKeyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     graph_indirect_graph_indirect_json_get: {
         parameters: {
             query: {
@@ -2160,152 +2292,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    settings_json_settings_json_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    settings_put_settings_json_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    settings_llm_key_settings_llm_key_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LlmKeyBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    settings_tavily_key_settings_tavily_key_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LlmKeyBody"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {

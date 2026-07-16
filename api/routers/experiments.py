@@ -8,8 +8,9 @@ from api.models import RunBody
 from api.services.experiments import analyze_workspace, expand_sweep, preflight_sweep
 from core.config import get_settings
 from core.experiment_store import ExperimentStore
+from core.llm.budget import release_budget_reservation, reserve_monthly_budget
 from core.llm.userconfig import effective_monthly_cap
-from core.runstore import RunStore
+from core.runstore import RunStore, new_run_id
 from governance.rbac import Permission, Principal
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
@@ -77,27 +78,56 @@ def create_sweep(body: SweepBody, principal: Principal = Depends(get_principal))
     require(principal, Permission.RUN)
     try:
         variants = expand_sweep(body.base_run, body.parameters)
-        budget = preflight_sweep(variants, effective_monthly_cap())
+        monthly_cap = effective_monthly_cap()
+        budget = preflight_sweep(variants, monthly_cap)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    run_ids = [new_run_id(run_body.engine) for run_body, _ in variants]
+    estimates = budget.get("variant_estimates_usd") or [0.0] * len(variants)
+    reservations = {
+        run_id: float(estimate)
+        for run_id, estimate in zip(run_ids, estimates, strict=True)
+        if float(estimate) > 0
+    }
+    try:
+        reserve_monthly_budget(
+            get_settings().postgres_url,
+            reservations,
+            monthly_cap,
+            context="experiment_sweep",
+        )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     store = _store()
-    experiment_id = store.create(
-        name=body.name,
-        kind="sweep",
-        base_config=body.base_run.model_dump(),
-        dimensions=body.parameters,
-        created_by=principal.user_id,
-    )
+    try:
+        experiment_id = store.create(
+            name=body.name,
+            kind="sweep",
+            base_config=body.base_run.model_dump(),
+            dimensions=body.parameters,
+            created_by=principal.user_id,
+        )
+    except Exception:
+        for run_id in reservations:
+            release_budget_reservation(get_settings().postgres_url, run_id)
+        raise
     jobs = []
     # Import at request time to keep the router independent from app construction.
-    from api.app import run_create_async
+    from api.app import _enqueue_persistent_run
 
-    for run_body, variant in variants:
+    for index, (run_body, variant) in enumerate(variants):
+        run_id = run_ids[index]
         queued_body = run_body.model_copy(update={"experiment_id": experiment_id})
-        result = run_create_async(queued_body, principal)
-        run_id = str(result.get("run_id") or (result.get("result") or {}).get("run_id") or "")
-        if not run_id:
-            raise HTTPException(status_code=503, detail="queue ไม่คืน run_id สำหรับ experiment")
+        try:
+            result = _enqueue_persistent_run(
+                queued_body,
+                principal,
+                preallocated_run_id=run_id,
+            )
+        except Exception:
+            for pending_run_id in run_ids[index:]:
+                release_budget_reservation(get_settings().postgres_url, pending_run_id)
+            raise
         store.add_member(experiment_id, run_id, variant)
         jobs.append({"run_id": run_id, "job_id": result.get("job_id"), "variant": variant})
     return {

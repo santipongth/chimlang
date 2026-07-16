@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -11,18 +11,19 @@ import {
   Settings as SettingsIcon,
   Target } from "lucide-react";
 import { LangProvider, useLang } from "./i18n";
-import Landing from "./pages/Landing";
-import NewRun from "./pages/NewRun";
-import Runs from "./pages/Runs";
-import Calibration from "./pages/Calibration";
-import Compare from "./pages/Compare";
-import Watchlist from "./pages/Watchlist";
-import Insights from "./pages/Insights";
-import Experiments from "./pages/Experiments";
-import Gallery from "./pages/Gallery";
-import RunDetail from "./pages/RunDetail";
-import Settings from "./pages/Settings";
 import { fetchWatchlists } from "./api";
+
+const Landing = lazy(() => import("./pages/Landing"));
+const NewRun = lazy(() => import("./pages/NewRun"));
+const Runs = lazy(() => import("./pages/Runs"));
+const Calibration = lazy(() => import("./pages/Calibration"));
+const Compare = lazy(() => import("./pages/Compare"));
+const Watchlist = lazy(() => import("./pages/Watchlist"));
+const Insights = lazy(() => import("./pages/Insights"));
+const Experiments = lazy(() => import("./pages/Experiments"));
+const Gallery = lazy(() => import("./pages/Gallery"));
+const RunDetail = lazy(() => import("./pages/RunDetail"));
+const Settings = lazy(() => import("./pages/Settings"));
 
 export type Page =
   | "home"
@@ -169,6 +170,7 @@ function Shell() {
       <Sidebar page={page} setPage={goPage} badges={{ watchlist: unread }} />
       <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
         <div className="w-full">
+          <Suspense fallback={<div className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">กำลังโหลดหน้า…</div>}>
           {page === "home" && <Landing onStart={() => goPage("new")} />}
           {page === "new" && (
             <NewRun
@@ -196,6 +198,7 @@ function Shell() {
           {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
           {page === "gallery" && <Gallery />}
           {page === "settings" && <Settings />}
+          </Suspense>
         </div>
       </main>
     </div>

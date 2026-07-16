@@ -7,7 +7,17 @@ from api.app import _run_dashboard, app
 from api.models import RunBody
 from api.services.experiments import analyze_workspace, expand_sweep, preflight_sweep
 from core.config import get_settings
+from core.db import connection
 from core.experiment_store import ExperimentStore
+from core.llm.budget import (
+    MonthlyBudgetExceededError,
+    check_monthly_budget,
+    record_spend,
+    release_budget_reservation,
+    reserve_monthly_budget,
+    reserved_this_month,
+    spent_this_month,
+)
 from core.runstore import RunStore
 
 DSN = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
@@ -54,6 +64,63 @@ def test_preflight_sweep_uses_aggregate_cost_before_enqueue(monkeypatch):
     assert result["estimated_usd"] == pytest.approx(1.2)
     with pytest.raises(RuntimeError, match="งบรวมเดือน"):
         preflight_sweep(variants, monthly_cap=2.0)
+
+
+@needs_pg
+def test_monthly_budget_reservation_is_atomic_and_settles_actual_spend():
+    reservation_id = f"test-reservation-{uuid4()}"
+    competing_id = f"test-reservation-{uuid4()}"
+    run_id = f"test-reservation-spend-{uuid4()}"
+    baseline = spent_this_month(DSN) + reserved_this_month(DSN)
+    try:
+        reserved = reserve_monthly_budget(
+            DSN,
+            {reservation_id: 0.2},
+            baseline + 0.25,
+            context="pytest",
+        )
+        assert reserved == pytest.approx(0.2)
+        with pytest.raises(MonthlyBudgetExceededError):
+            reserve_monthly_budget(
+                DSN,
+                {competing_id: 0.1},
+                baseline + 0.25,
+                context="pytest",
+            )
+        record_spend(
+            DSN,
+            0.05,
+            run_id=run_id,
+            reservation_id=reservation_id,
+        )
+        with connection(DSN) as conn:
+            remaining = conn.execute(
+                "SELECT usd_remaining FROM monthly_budget_reservations WHERE reservation_id = %s",
+                (reservation_id,),
+            ).fetchone()[0]
+        assert float(remaining) == pytest.approx(0.15)
+        assert release_budget_reservation(DSN, reservation_id) == pytest.approx(0.15)
+        check_monthly_budget(
+            DSN,
+            0.1,
+            baseline + 0.25,
+            reservation_id=reservation_id,
+        )
+        with connection(DSN) as conn:
+            reused = conn.execute(
+                "SELECT usd_remaining FROM monthly_budget_reservations WHERE reservation_id = %s",
+                (reservation_id,),
+            ).fetchone()[0]
+        assert float(reused) == pytest.approx(0.1)
+    finally:
+        release_budget_reservation(DSN, reservation_id)
+        release_budget_reservation(DSN, competing_id)
+        with connection(DSN) as conn:
+            conn.execute("DELETE FROM llm_spend WHERE run_id = %s", (run_id,))
+            conn.execute(
+                "DELETE FROM monthly_budget_reservations WHERE reservation_id IN (%s, %s)",
+                (reservation_id, competing_id),
+            )
 
 
 def test_fabric_persistent_seed_changes_multiverse_snapshot():
@@ -156,12 +223,12 @@ def test_sweep_api_preflights_all_variants_before_queue(monkeypatch):
 
     jobs = []
 
-    def fake_queue(body, principal):
-        run_id = f"sweep-fake-{len(jobs)}"
+    def fake_queue(body, principal, *, preallocated_run_id=None):
+        run_id = preallocated_run_id or f"sweep-fake-{len(jobs)}"
         jobs.append((run_id, body))
         return {"job_id": f"job-{len(jobs)}", "run_id": run_id, "status": "PENDING"}
 
-    monkeypatch.setattr(app_module, "run_create_async", fake_queue)
+    monkeypatch.setattr(app_module, "_enqueue_persistent_run", fake_queue)
     monkeypatch.setattr(
         router_module,
         "preflight_sweep",

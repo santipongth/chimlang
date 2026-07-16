@@ -100,7 +100,7 @@ def test_embedding_adapter_is_priced_and_guarded_before_provider_call(monkeypatc
     spend_rows = []
     monkeypatch.setattr(
         "core.llm.adapter.record_spend",
-        lambda dsn, usd, run_id="": spend_rows.append((usd, run_id)),
+        lambda dsn, usd, run_id="", **kwargs: spend_rows.append((usd, run_id)),
     )
     embeddings = _Embeddings()
     client = SimpleNamespace(embeddings=embeddings, chat=SimpleNamespace(completions=None))
