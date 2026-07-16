@@ -115,6 +115,8 @@ class Dashboard:
     scenarios: tuple[ScenarioColumn, ...]  # DASH-03 baseline vs variant
     voices: tuple[dict, ...] = field(default_factory=tuple)  # DASH-04 ตัวอย่างเสียงจริง
     voice_population_share: tuple[dict, ...] = field(default_factory=tuple)
+    # Raw universe-level uncertainty for range/dot visualizations; never collapse to one point.
+    universe_estimates: tuple[dict, ...] = field(default_factory=tuple)
     # PRD pipeline ขั้น 7: Tipping Points เป็น output บังคับ — key ต้องอยู่เสมอแม้ list ว่าง
     # รูปแบบ: {scenario, round, before, after, delta} (จาก simulation/tipping.py)
     tipping_points: tuple[dict, ...] = field(default_factory=tuple)
@@ -136,5 +138,6 @@ class Dashboard:
             ],
             "voices": list(self.voices),
             "voice_population_share": list(self.voice_population_share),
+            "universe_estimates": list(self.universe_estimates),
             "tipping_points": list(self.tipping_points),
         }

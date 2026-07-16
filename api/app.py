@@ -274,6 +274,15 @@ def _run_dashboard(
         voice_population_share=tuple(
             {"segment": c.segment_name, "population_share": c.share} for c in cards
         ),
+        universe_estimates=tuple(
+            {
+                "universe_id": universe.universe_id,
+                "estimate": universe.estimate.mean_delta,
+                "ci95": list(universe.estimate.ci95),
+                "conclusion": universe.conclusion,
+            }
+            for universe in fragility.universes
+        ),
         tipping_points=tipping,
     )
     return dash
@@ -1127,19 +1136,24 @@ def _validation_report(parent_run_id: str, children: list[dict]) -> dict:
     summaries: list[str] = []
     failed_posts = total_posts = 0
     total_cost = 0.0
+    child_values: dict[str, float] = {}
     for child in completed:
         payload = child["payload"]
         total_cost += float(payload.get("cost_usd", 0) or 0)
         if child["engine"] == "debate":
             series = payload.get("metrics", {}).get("per_round_avg_stance") or [0]
-            values.append(float(series[-1]))
+            value = float(series[-1])
+            values.append(value)
+            child_values[child["run_id"]] = value
             metrics = payload.get("metrics", {})
             failed_posts += int(metrics.get("posts_failed", 0))
             total_posts += int(metrics.get("posts_ok", 0)) + int(metrics.get("posts_failed", 0))
             summaries.append(str(payload.get("synthesis", {}).get("summary", "")))
         else:
             lo, hi = payload.get("brief", {}).get("headline_range", [0, 0])
-            values.append((float(lo) + float(hi)) / 2)
+            value = (float(lo) + float(hi)) / 2
+            values.append(value)
+            child_values[child["run_id"]] = value
             summaries.append(
                 " ".join(line.get("text", "") for line in payload.get("brief", {}).get("lines", []))
             )
@@ -1159,7 +1173,13 @@ def _validation_report(parent_run_id: str, children: list[dict]) -> dict:
             if any(c["status"] in {"queued", "running"} for c in children)
             else "incomplete"
         ),
-        "children": [{k: c[k] for k in ("run_id", "seed", "status", "error")} for c in children],
+        "children": [
+            {
+                **{k: c[k] for k in ("run_id", "seed", "status", "error")},
+                "value": child_values.get(c["run_id"]),
+            }
+            for c in children
+        ],
         "completed": len(completed),
         "failure_rate": 1 - len(completed) / 3,
         "sign_agreement": agreement if values else None,

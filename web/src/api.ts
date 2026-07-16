@@ -17,6 +17,12 @@ export interface DashboardData {
   scenarios: { name: string; belief_by_segment: Record<string, number> }[];
   voices: { private?: string; public?: string; segment?: string }[];
   voice_population_share: { segment: string; population_share: number }[];
+  universe_estimates: {
+    universe_id: number;
+    estimate: number;
+    ci95: [number, number];
+    conclusion: string;
+  }[];
   // PRD pipeline ขั้น 7 — key มีเสมอ (list ว่างได้)
   tipping_points: { scenario: string; round: number; before: number; after: number; delta: number }[];
 }
@@ -327,7 +333,13 @@ export interface ValidationReport {
   claim_overlap: number | null;
   agent_failure_rate: number;
   total_cost_usd: number;
-  children: { run_id: string; seed: number; status: string; error: string | null }[];
+  children: {
+    run_id: string;
+    seed: number;
+    status: string;
+    error: string | null;
+    value: number | null;
+  }[];
   note: string;
 }
 

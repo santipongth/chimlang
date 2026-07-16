@@ -177,4 +177,5 @@ def test_validation_report_separates_stability_from_confidence():
     assert report["completed"] == 3
     assert report["sign_agreement"] == pytest.approx(2 / 3)
     assert report["agent_failure_rate"] == pytest.approx(0.1)
+    assert [child["value"] for child in report["children"]] == [0.2, 0.3, -0.1]
     assert "analyst confidence" in report["note"]

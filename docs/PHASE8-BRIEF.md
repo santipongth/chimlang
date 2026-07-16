@@ -30,12 +30,12 @@
 - [x] Run Detail deep link `#/runs/{run_id}`
 - [x] frontend typed finding/prediction/validation/revision contracts
 
-## P8-M4 — Visualization platform (ค้าง)
+## P8-M4 — Visualization platform ✅
 
-- [ ] TanStack Query cache/SSE reconnect client และ typed OpenAPI client
-- [ ] ECharts quantile/range, scenario bars, stance beeswarm/timeline, stability matrix
-- [ ] Cytoscape interactive contention graph + evidence lineage Sankey
-- [ ] keyboard/reduced-motion/responsive/table fallbacks + Vitest/Playwright
+- [x] TanStack Query cache/SSE reconnect client และ typed OpenAPI client
+- [x] ECharts quantile/range, scenario bars, stance beeswarm/timeline, stability matrix
+- [x] Cytoscape interactive contention graph + evidence lineage Sankey
+- [x] keyboard/reduced-motion/responsive/table fallbacks + Vitest/Playwright
 
 ## P8-M5 — Core Engine/Retrieval (ค้าง)
 
@@ -53,4 +53,4 @@
 - SimulationFinding ไม่เข้า Calibration; legacy ไม่กระทบ Brier หลัก
 - mechanical revision ไม่ทับ analyst synthesis
 - validation ตรวจงบรวม 3 seeds ก่อน enqueue และ child มี `parent_run_id`
-- verification ล่าสุด: 368 tests, ruff check/format, web production build, Compose config และ migration no-op ผ่าน
+- verification ล่าสุด: 369 tests, ruff check/format, web production build, frontend Vitest/Playwright desktop+mobile, Compose build/up ผ่าน

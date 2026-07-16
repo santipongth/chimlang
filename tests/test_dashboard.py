@@ -80,10 +80,14 @@ def test_dashboard_to_dict_and_html():
             ScenarioColumn("variant", {"กลุ่มA": 0.3, "กลุ่มB": 0.2}),
         ),
         voices=({"private": "ไม่เชื่อหรอก", "public": "", "segment": "กลุ่มA"},),
+        universe_estimates=(
+            {"universe_id": 0, "estimate": -0.18, "ci95": [-0.26, -0.10], "conclusion": "ลดลง"},
+        ),
     )
     d = dash.to_dict()
     assert d["brief"]["fragility_index"] == 20
     assert len(d["brief"]["headline_range"]) == 2
+    assert d["universe_estimates"][0]["estimate"] == -0.18
     html = render_dashboard_html(dash)
     assert "not a real poll" in html  # watermark banner
     assert "Executive Brief" in html and "Risk Heatmap" in html

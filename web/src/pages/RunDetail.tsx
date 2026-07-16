@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -16,8 +17,6 @@ import {
   SimRunDetail,
   ValidationReport,
   createPrediction,
-  fetchValidation,
-  fetchRunDetail,
   pct,
   refreshRunNews,
   resynthesizeRun,
@@ -25,6 +24,16 @@ import {
   unshareRun,
   validateRun,
 } from "../api";
+import { getRunDetailTyped, getValidationTyped } from "../openapi-client";
+import { useRunEvents } from "../hooks/useRunEvents";
+import {
+  ContentionGraph,
+  EvidenceLineage,
+  ScenarioComparisonChart,
+  StabilityMatrix,
+  StanceTimelineChart,
+  UniverseRangeChart,
+} from "../components/RunVisualizations";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader, Tabs } from "../ui";
 
@@ -332,8 +341,17 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
 
 export default function RunDetail({ runId, onBack }: { runId: string; onBack: () => void }) {
   const { lang, t } = useLang();
-  const [data, setData] = useState<SimRunDetail | null>(null);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+  const runQuery = useQuery({
+    queryKey: ["run", runId],
+    queryFn: () => getRunDetailTyped(runId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "queued" || status === "running" ? 10_000 : false;
+    },
+  });
+  const data: SimRunDetail | null = runQuery.data ?? null;
+  const error = runQuery.error ? String((runQuery.error as Error).message ?? runQuery.error) : "";
   const [tab, setTab] = useState<Tab>("overview");
   const [replayRound, setReplayRound] = useState<number | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -351,17 +369,26 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
     due_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
   });
   const [contractBusy, setContractBusy] = useState(false);
-  const [validation, setValidation] = useState<ValidationReport | null>(null);
+  const [validationEnabled, setValidationEnabled] = useState(false);
+  const validationQuery = useQuery({
+    queryKey: ["validation", runId],
+    queryFn: () => getValidationTyped(runId),
+    enabled: validationEnabled,
+    refetchInterval: (query) => {
+      const report = query.state.data;
+      return report?.children?.some((child) => child.status === "queued" || child.status === "running") ? 5_000 : false;
+    },
+  });
+  const validation: ValidationReport | null = validationQuery.data ?? null;
 
-  useEffect(() => {
-    fetchRunDetail(runId)
-      .then(setData)
-      .catch((e) => setError(String(e.message ?? e)));
-  }, [runId]);
+  const stream = useRunEvents(
+    runId,
+    data?.status === "queued" || data?.status === "running",
+    () => queryClient.invalidateQueries({ queryKey: ["run", runId] }),
+  );
 
   async function reload() {
-    const fresh = await fetchRunDetail(runId);
-    setData(fresh);
+    await runQuery.refetch();
   }
 
   async function repair(kind: "news" | "synthesis") {
@@ -401,7 +428,8 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
     setRepairErr("");
     try {
       await validateRun(runId);
-      setValidation(await fetchValidation(runId));
+      setValidationEnabled(true);
+      await queryClient.invalidateQueries({ queryKey: ["validation", runId] });
     } catch (e: any) {
       setRepairErr(String(e.message ?? e));
     } finally {
@@ -440,7 +468,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={`${data?.engine === "debate" ? "🗣 DEBATE" : "⚙ FABRIC"} · ${data?.created_at?.slice(0, 16).replace("T", " ") ?? ""}`}
+        eyebrow={`${data?.engine === "debate" ? "🗣 DEBATE" : "⚙ FABRIC"} · ${data?.created_at?.slice(0, 16).replace("T", " ") ?? ""}${stream.state === "live" || stream.state === "reconnecting" ? ` · ${stream.state}` : ""}`}
         title={data?.subject ?? runId}
         right={
           <button onClick={onBack} className="rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted">
@@ -541,11 +569,14 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
               </div>
             )}
             {validation && (
-              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
-                <div>Sign agreement {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
-                <div>Dispersion {validation.between_run_dispersion.toFixed(3)}</div>
-                <div>Failure {pct(validation.failure_rate)}</div>
-                <div>Cost ${validation.total_cost_usd.toFixed(4)}</div>
+              <div className="mt-4">
+                <div className="grid gap-2 text-xs sm:grid-cols-4">
+                  <div>Sign agreement {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
+                  <div>Dispersion {validation.between_run_dispersion.toFixed(3)}</div>
+                  <div>Failure {pct(validation.failure_rate)}</div>
+                  <div>Cost ${validation.total_cost_usd.toFixed(4)}</div>
+                </div>
+                <StabilityMatrix report={validation} />
               </div>
             )}
           </section>
@@ -642,7 +673,15 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   </div>
                 )}
               </section>
+              <section className={card}>
+                <h2 className="mb-2 font-semibold">Stance beeswarm / timeline</h2>
+                <StanceTimelineChart posts={data.posts} />
+              </section>
               <DebateProtocolPanel protocol={p.protocol} t={t} />
+              <section className={card}>
+                <h2 className="mb-3 font-semibold">Interactive contention graph</h2>
+                <ContentionGraph posts={data.posts} />
+              </section>
             </>
           )}
 
@@ -662,18 +701,12 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 </p>
               </section>
               <section className={card}>
+                <h2 className="mb-3 font-semibold">Multiverse uncertainty</h2>
+                <UniverseRangeChart universes={p.universe_estimates ?? []} fallbackRange={p.brief?.headline_range} />
+              </section>
+              <section className={card}>
                 <h2 className="font-semibold mb-3">{t("compare_title")}</h2>
-                <div className="space-y-1.5">
-                  {Object.entries((p.scenarios?.[p.scenarios.length - 1]?.belief_by_segment ?? {}) as Record<string, number>).map(([seg, v]) => (
-                    <div key={seg} className="flex items-center gap-2 text-xs">
-                      <span className="w-44 shrink-0 truncate text-muted-foreground">{seg}</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full bg-primary" style={{ width: `${v * 100}%` }} />
-                      </div>
-                      <span className="w-10 text-right tabular-nums">{pct(v)}</span>
-                    </div>
-                  ))}
-                </div>
+                <ScenarioComparisonChart scenarios={p.scenarios ?? []} population={p.voice_population_share ?? []} />
                 {(p.tipping_points ?? []).length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {p.tipping_points.map((tp: any, i: number) => (
@@ -756,6 +789,17 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
           {tab === "evidence" && (
             <section className={card + " space-y-3"}>
               <h2 className="font-semibold mb-1">🔍 {t("rd_tab_evidence")}</h2>
+              {isDebate && (
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <h3 className="mb-2 text-sm font-semibold">Evidence lineage</h3>
+                  <EvidenceLineage
+                    sources={[...(p.sources ?? []), ...(p.news?.items ?? [])]}
+                    subject={data.subject}
+                    posts={data.posts}
+                    synthesis={p.synthesis?.summary ?? ""}
+                  />
+                </div>
+              )}
               {/* ข่าวจากโต๊ะข่าวสด (P7) — snapshot ที่ agent เห็นจริง พร้อมเวลา+สถานะ PII */}
               {isDebate && p.news?.enabled && (
                 <div className="space-y-1.5">
@@ -943,8 +987,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   try {
                     if (data.share_token) await unshareRun(runId);
                     else await shareRun(runId);
-                    const fresh = await fetchRunDetail(runId);
-                    setData(fresh);
+                    await reload();
                   } catch (e: any) {
                     setShareErr(String(e.message ?? e));
                   } finally {
