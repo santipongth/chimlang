@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 def _apply_module_schemas(conn: Connection) -> None:
     """Bootstrap a fresh database from every PostgreSQL-owned module schema."""
     from core.appsettings import _SCHEMA as appsettings_schema
+    from core.experiment_store import _SCHEMA as experiment_schema
     from core.llm.budget import _SCHEMA as budget_schema
     from core.runstore import _SCHEMA as runstore_schema
     from governance.gallery import _SCHEMA as gallery_schema
@@ -50,6 +51,7 @@ def _apply_module_schemas(conn: Connection) -> None:
         memory_schema,
         appsettings_schema,
         budget_schema,
+        experiment_schema,
     ):
         conn.execute(schema)
     conn.execute(
@@ -252,6 +254,12 @@ def _apply_vector_retrieval_and_observability(conn: Connection) -> None:
     conn.execute(observability_schema)
 
 
+def _apply_experiment_workspaces(conn: Connection) -> None:
+    from core.experiment_store import _SCHEMA as experiment_schema
+
+    conn.execute(experiment_schema)
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -299,6 +307,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-16-vector-retrieval-observability-v1",
         "pgvector HNSW evidence index and PII-safe provider telemetry",
         _apply_vector_retrieval_and_observability,
+    ),
+    (
+        "2026-07-16-experiment-workspaces-v1",
+        "operational sweep/comparison workspaces with run membership",
+        _apply_experiment_workspaces,
     ),
 ]
 

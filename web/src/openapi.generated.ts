@@ -24,6 +24,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Experiments */
+        get: operations["list_experiments_experiments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experiment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Experiment */
+        get: operations["get_experiment_experiments__experiment_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Experiment */
+        delete: operations["delete_experiment_experiments__experiment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Comparison */
+        post: operations["create_comparison_experiments_compare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Sweep */
+        post: operations["create_sweep_experiments_sweep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -50,7 +119,7 @@ export interface paths {
         };
         /**
          * Health Deep
-         * @description M6 (NFR-06): สถานะ dependency รายตัวสำหรับ monitoring — ล่มตัวไหนบอกตรงๆ
+         * @description Dependency status for monitoring; failures expose only safe exception types.
          */
         get: operations["health_deep_health_deep_get"];
         put?: never;
@@ -1189,6 +1258,13 @@ export interface components {
             /** Household Size */
             household_size: number;
         };
+        /** ComparisonBody */
+        ComparisonBody: {
+            /** Name */
+            name: string;
+            /** Run Ids */
+            run_ids: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1290,8 +1366,9 @@ export interface components {
             /**
              * Engine
              * @default fabric
+             * @enum {string}
              */
-            engine: string;
+            engine: "fabric" | "debate";
             /** Subject */
             subject: string;
             /**
@@ -1368,6 +1445,11 @@ export interface components {
              * @default false
              */
             reflection: boolean;
+            /**
+             * Experiment Id
+             * @default
+             */
+            experiment_id: string;
         };
         /** RunReadinessBody */
         RunReadinessBody: {
@@ -1459,6 +1541,16 @@ export interface components {
              */
             agents: number;
         };
+        /** SweepBody */
+        SweepBody: {
+            /** Name */
+            name: string;
+            base_run: components["schemas"]["RunBody"];
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown[];
+            };
+        };
         /** TryAskBody */
         TryAskBody: {
             /** Segment */
@@ -1524,6 +1616,185 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunReadinessBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_experiments_experiments_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_experiment_experiments__experiment_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_experiment_experiments__experiment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_comparison_experiments_compare_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComparisonBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_sweep_experiments_sweep_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SweepBody"];
             };
         };
         responses: {

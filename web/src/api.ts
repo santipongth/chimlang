@@ -224,18 +224,106 @@ export interface DebatePostItem {
   evidence_refs?: string[];
 }
 
-export interface SimRunDetail extends SimRunSummary {
+export interface EvidenceSourceItem {
+  label?: string;
+  title?: string;
+  provider?: string;
+  kind?: string;
+  status?: string;
+  error?: string;
+  url?: string;
+  chunks?: number;
+  fetched_at?: string;
+  pii_redactions?: Record<string, number>;
+  content?: string;
+  channel_tags?: Record<string, number>;
+}
+
+export interface EvidenceMatch extends EvidenceSourceItem {
+  source_label: string;
+  seq: number;
+  score: number;
+  quality_score: number;
+  citation_spans: { start: number; end: number; text: string; match: string }[];
+  retrieval_mode: string;
+  requested_mode: string;
+  note: string;
+  embedding_provenance?: Record<string, unknown>;
+}
+
+export interface DebateRunPayload {
+  result_kind?: "simulation_finding" | "prediction";
+  synthesis: {
+    summary: string;
+    confidence: number;
+    distribution: { bucket: string; pct: number }[];
+    key_drivers: string[];
+    risks: string[];
+    judge?: {
+      verdict: "pass" | "warn" | "fail";
+      citation_assessment: string;
+      contradiction_assessment: string;
+      schema_assessment: string;
+    };
+  };
+  metrics: {
+    per_round_avg_stance: number[];
+    final_dispersion?: number;
+    tipping_points?: { round: number; before: number; after: number; delta: number }[];
+    posts_ok?: number;
+    posts_failed?: number;
+  };
+  protocol?: Record<string, unknown>;
+  cost_usd?: number;
+  red_team?: boolean;
+  sources?: EvidenceSourceItem[];
+  evidence_matches?: EvidenceMatch[];
+  context_used?: number;
+  embedding?: Record<string, unknown>;
+  news?: { enabled: boolean; items: EvidenceSourceItem[]; refreshed_at?: string };
+}
+
+export interface FabricRunPayload extends DashboardData {
+  result_kind?: "simulation_finding" | "prediction";
+  cost_usd?: number;
+}
+
+export type RunPayload = DebateRunPayload | FabricRunPayload;
+
+interface SimRunDetailBase extends Omit<SimRunSummary, "engine"> {
   share_token?: string | null;
   seed: number;
-  config: Record<string, any>;
-  payload: Record<string, any> | null;
+  config: Record<string, unknown>;
   error: string | null;
   posts: DebatePostItem[];
   result_kind?: "simulation_finding" | "prediction";
   findings?: SimulationFinding[];
   predictions?: PredictionContract[];
   synthesis_revisions?: SynthesisRevision[];
+  parent_run_id?: string;
+  events?: {
+    created_at: string;
+    event_type: string;
+    actor: string;
+    message: string;
+    payload: Record<string, unknown>;
+  }[];
+  trust_scorecard?: {
+    score: number;
+    band: string;
+    checks: {
+      id: string;
+      label: string;
+      status: "pass" | "warn" | "block";
+      detail: string;
+      weight?: number;
+    }[];
+  };
 }
+
+export type SimRunDetail =
+  | (SimRunDetailBase & { engine: "fabric"; payload: FabricRunPayload | null })
+  | (SimRunDetailBase & { engine: "debate"; payload: DebateRunPayload | null });
 
 export interface SimulationFinding {
   finding_id: number;
@@ -273,28 +361,6 @@ export interface SynthesisRevision {
   metrics: Record<string, unknown>;
   parser_mode: string;
   cost_usd: number;
-}
-
-export interface SimRunDetail {
-  parent_run_id?: string;
-  events?: {
-    created_at: string;
-    event_type: string;
-    actor: string;
-    message: string;
-    payload: Record<string, any>;
-  }[];
-  trust_scorecard?: {
-    score: number;
-    band: string;
-    checks: {
-      id: string;
-      label: string;
-      status: "pass" | "warn" | "block";
-      detail: string;
-      weight?: number;
-    }[];
-  };
 }
 
 export async function fetchRunDetail(runId: string): Promise<SimRunDetail> {
@@ -637,7 +703,7 @@ export interface GalleryListItem {
 }
 
 export interface GalleryDetail extends Omit<GalleryListItem, "brief"> {
-  payload: DashboardData & Record<string, any>;
+  payload: FabricRunPayload;
 }
 
 export async function fetchGallery(): Promise<GalleryListItem[]> {
@@ -730,7 +796,13 @@ export interface AlertItem {
   ts: string;
   watchlist_id: number | null;
   kind: string;
-  payload: Record<string, any>;
+  payload: {
+    subject?: string;
+    shift?: number;
+    run_id?: string;
+    prediction_id?: number;
+    [key: string]: unknown;
+  };
   read: boolean;
 }
 
@@ -771,7 +843,7 @@ export async function deleteWatchlist(id: number): Promise<void> {
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
 }
 
-export async function runWatchlistNow(id: number): Promise<{ alerts_created: any[] }> {
+export async function runWatchlistNow(id: number): Promise<{ alerts_created: AlertItem[] }> {
   const r = await fetch(`/watchlists/${id}/run`, { method: "POST" });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
@@ -873,6 +945,96 @@ export async function resolvePrediction(
   });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
+}
+
+// ---- Experiment workspace (P8-M6) ----
+
+export interface ExperimentSummary {
+  experiment_id: string;
+  created_at: string;
+  name: string;
+  kind: "sweep" | "comparison";
+  dimensions: Record<string, unknown[]>;
+  run_count: number;
+}
+
+export interface ExperimentRun {
+  run_id: string;
+  variant: Record<string, unknown>;
+  engine: "fabric" | "debate" | "unknown";
+  status: string;
+  value: number | null;
+  cost_usd: number;
+  error: string | null;
+}
+
+export interface SensitivityDimension {
+  groups: { value: string; n: number; mean: number; min: number; max: number }[];
+  sensitivity_range: number | null;
+}
+
+export interface ExperimentDetail {
+  workspace: ExperimentSummary & {
+    base_config: Record<string, unknown>;
+    created_by: string;
+    members: { run_id: string; variant: Record<string, unknown> }[];
+  };
+  analysis: {
+    runs: ExperimentRun[];
+    completed: number;
+    failed: number;
+    total_cost_usd: number;
+    dimensions: Record<string, SensitivityDimension>;
+    ranked_sensitivity: { parameter: string; sensitivity_range: number }[];
+    public_votes_used: false;
+    note: string;
+  };
+}
+
+async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail ?? `HTTP ${response.status}`);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+export async function fetchExperiments(): Promise<ExperimentSummary[]> {
+  const data = await jsonRequest<{ experiments: ExperimentSummary[] }>("/experiments");
+  return data.experiments;
+}
+
+export async function fetchExperiment(experimentId: string): Promise<ExperimentDetail> {
+  return jsonRequest<ExperimentDetail>(`/experiments/${encodeURIComponent(experimentId)}`);
+}
+
+export async function createExperimentComparison(name: string, runIds: string[]): Promise<ExperimentDetail> {
+  return jsonRequest<ExperimentDetail>("/experiments/compare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, run_ids: runIds }),
+  });
+}
+
+export interface SweepCreated {
+  experiment_id: string;
+  budget: { variants: number; estimated_usd: number; monthly_spent_usd?: number; monthly_cap_usd?: number };
+  jobs: { run_id: string; job_id: string; variant: Record<string, unknown> }[];
+  public_votes_used: false;
+}
+
+export async function createExperimentSweep(
+  name: string,
+  baseRun: CreateRunBody,
+  parameters: Record<string, unknown[]>,
+): Promise<SweepCreated> {
+  return jsonRequest<SweepCreated>("/experiments/sweep", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, base_run: baseRun, parameters }),
+  });
 }
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`;

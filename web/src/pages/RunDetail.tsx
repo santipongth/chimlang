@@ -14,6 +14,9 @@ import {
   X,
 } from "lucide-react";
 import {
+  DebateRunPayload,
+  EvidenceSourceItem,
+  FabricRunPayload,
   SimRunDetail,
   ValidationReport,
   createPrediction,
@@ -26,6 +29,7 @@ import {
 } from "../api";
 import { getRunDetailTyped, getValidationTyped } from "../openapi-client";
 import { useRunEvents } from "../hooks/useRunEvents";
+import { VirtualizedDebateList } from "../components/VirtualizedDebateList";
 import {
   ContentionGraph,
   EvidenceLineage,
@@ -40,20 +44,6 @@ import { InfoTip, PageHeader, Tabs } from "../ui";
 // Run detail (P6-M2) — หน้าเดียวรองรับทั้ง fabric (dashboard payload) และ debate (posts+replay)
 
 type Tab = "overview" | "debate" | "canvas" | "evidence" | "report";
-
-function StanceBar({ v }: { v: number }) {
-  // จุดยืน -1..1 → แถบซ้าย(แดง)/ขวา(เขียว) จากกึ่งกลาง
-  const half = Math.abs(v) * 50;
-  return (
-    <span className="relative inline-block h-2 w-24 rounded-full bg-secondary align-middle">
-      <span
-        className={`absolute top-0 h-2 ${v >= 0 ? "bg-primary" : "bg-red-400"}`}
-        style={v >= 0 ? { left: "50%", width: `${half}%` } : { right: "50%", width: `${half}%` }}
-      />
-      <span className="absolute left-1/2 top-[-2px] h-3 w-px bg-border" />
-    </span>
-  );
-}
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "ready") return <CheckCircle2 className="inline h-3.5 w-3.5 text-primary" />;
@@ -124,7 +114,9 @@ function RedactionSummary({ counts, t }: { counts?: Record<string, number>; t: (
   );
 }
 
-function ExecutiveReadout({ data, p, isDebate, t }: { data: SimRunDetail; p: any; isDebate: boolean; t: (k: string) => string }) {
+type RunPayloadView = Partial<DebateRunPayload & FabricRunPayload>;
+
+function ExecutiveReadout({ data, p, isDebate, t }: { data: SimRunDetail; p: RunPayloadView; isDebate: boolean; t: (k: string) => string }) {
   const summary = isDebate
     ? p.synthesis?.summary
     : p.brief?.lines?.[0]?.text || data.subject;
@@ -465,24 +457,27 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
 
   const card = "bg-card border border-border rounded-2xl p-6";
   const isDebate = data?.engine === "debate";
-  const p = data?.payload ?? {};
+  const p = (data?.payload ?? {}) as RunPayloadView;
   // มุมมองที่ผู้ใช้เลือกเปิดตอนสั่งรัน (P6-M6) — ว่าง = ครบทุกมุม
-  const enabledViews: string[] = data?.config?.views ?? ["overview", "debate", "canvas", "evidence"];
+  const configuredViews = data?.config?.views;
+  const enabledViews = Array.isArray(configuredViews)
+    ? configuredViews.filter((view): view is string => typeof view === "string")
+    : ["overview", "debate", "canvas", "evidence"];
   const showView = (v: string) => v === "report" || enabledViews.includes(v);
   const rounds = useMemo(
     () => (data ? [...new Set(data.posts.map((x) => x.round_no))].sort((a, b) => a - b) : []),
     [data],
   );
-  const newsItems: any[] = p.news?.items ?? [];
+  const newsItems: EvidenceSourceItem[] = p.news?.items ?? [];
   const newsCounts = newsItems.reduce(
-    (acc: Record<string, number>, item: any) => {
+    (acc: Record<string, number>, item: EvidenceSourceItem) => {
       acc[item.status || "unknown"] = (acc[item.status || "unknown"] ?? 0) + 1;
       return acc;
     },
     {},
   );
   const sourceCounts = (p.sources ?? []).reduce(
-    (acc: Record<string, number>, item: any) => {
+    (acc: Record<string, number>, item: EvidenceSourceItem) => {
       acc[item.status || "unknown"] = (acc[item.status || "unknown"] ?? 0) + 1;
       return acc;
     },
@@ -614,7 +609,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <p className="text-xs text-muted-foreground">Refresh evidence or append mechanical metrics from the stored snapshot.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {data.config?.live_news && (
+                {data.config?.live_news === true && (
                   <button
                     disabled={!!repairBusy}
                     onClick={() => repair("news")}
@@ -653,11 +648,11 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <p className="text-sm">{p.synthesis?.summary}</p>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <span className="rounded-full bg-primary-soft px-3 py-1 text-primary-strong">
-                    {t("rd_confidence")} {(p.synthesis?.confidence * 100).toFixed(0)}% <InfoTip text={t("tip_debate_conf")} />
+                    {t("rd_confidence")} {((p.synthesis?.confidence ?? 0) * 100).toFixed(0)}% <InfoTip text={t("tip_debate_conf")} />
                   </span>
-                  {p.metrics?.posts_failed > 0 && (
+                  {(p.metrics?.posts_failed ?? 0) > 0 && (
                     <span className="rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-amber-700">
-                      ⚠️ {p.metrics.posts_failed} {t("rd_failed_posts")}
+                      ⚠️ {p.metrics?.posts_failed ?? 0} {t("rd_failed_posts")}
                     </span>
                   )}
                   {p.cost_usd != null && <span className="text-xs text-muted-foreground">{t("rd_cost")} ${p.cost_usd}</span>}
@@ -691,7 +686,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <StanceTrend values={p.metrics?.per_round_avg_stance ?? []} t={t} />
                 {(p.metrics?.tipping_points ?? []).length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {p.metrics.tipping_points.map((tp: any, i: number) => (
+                    {(p.metrics?.tipping_points ?? []).map((tp: any, i: number) => (
                       <span key={i} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700">
                         ⚡ r{tp.round + 1}: {(tp.delta * 100).toFixed(0)}%
                       </span>
@@ -735,7 +730,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <ScenarioComparisonChart scenarios={p.scenarios ?? []} population={p.voice_population_share ?? []} />
                 {(p.tipping_points ?? []).length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {p.tipping_points.map((tp: any, i: number) => (
+                    {(p.tipping_points ?? []).map((tp: any, i: number) => (
                       <span key={i} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700">
                         ⚡ {tp.scenario} r{tp.round}: {tp.delta > 0 ? "+" : ""}{Math.round(tp.delta * 100)}%
                       </span>
@@ -766,33 +761,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   <span className="tabular-nums">{shownRound + 1}/{rounds.length}</span>
                 </div>
               </div>
-              <ul className="mt-4 space-y-2">
-                {data.posts
-                  .filter((x) => x.round_no === shownRound)
-                  .map((x, i) => (
-                    <li key={i} className={`rounded-xl border p-3 text-sm ${x.failed ? "border-dashed border-border opacity-50" : "border-border bg-background"}`}>
-                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">
-                          {x.segment}
-                          <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{x.move_type ?? "legacy claim"}</span>
-                          {x.move_id && <code className="text-[10px] text-muted-foreground">{x.move_id}</code>}
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <StanceBar v={x.stance} />
-                          <span className="tabular-nums w-12">{x.stance >= 0 ? "+" : ""}{x.stance.toFixed(2)}</span>
-                        </span>
-                      </div>
-                      <p className="mt-1">{x.failed ? `(${t("rd_post_failed")})` : x.content}</p>
-                      {!x.failed && (x.parent_move_id || (x.evidence_refs?.length ?? 0) > 0) && (
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {x.parent_move_id ? `↳ ${x.parent_move_id}` : ""}
-                          {x.parent_move_id && x.evidence_refs?.length ? " · " : ""}
-                          {x.evidence_refs?.length ? `evidence ${x.evidence_refs.join(", ")}` : ""}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-              </ul>
+              <VirtualizedDebateList posts={data.posts.filter((post) => post.round_no === shownRound)} />
             </section>
           )}
 
@@ -873,9 +842,9 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
               )}
               {isDebate && (p.evidence_matches ?? []).length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">Retrieved evidence highlights ({p.evidence_matches.length})</p>
+                  <p className="text-xs text-muted-foreground">Retrieved evidence highlights ({(p.evidence_matches ?? []).length})</p>
                   <ul className="space-y-1.5 text-sm">
-                    {p.evidence_matches.map((m: any, i: number) => (
+                    {(p.evidence_matches ?? []).map((m, i: number) => (
                       <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{m.source_label} #{m.seq}</span>
@@ -902,11 +871,11 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                       ))}
                     </div>
                     <ul className="space-y-1.5 text-sm">
-                      {p.sources.map((s: any, i: number) => (
+                      {(p.sources ?? []).map((s, i: number) => (
                         <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
                           <div role="button" tabIndex={0} onClick={() => setSelectedEvidence(s)} onKeyDown={(e) => e.key === "Enter" && setSelectedEvidence(s)} className="w-full text-left">
                           <div className="flex items-center justify-between">
-                            <span className="font-medium"><StatusIcon status={s.status} /> {s.label}</span>
+                            <span className="font-medium"><StatusIcon status={s.status ?? "unknown"} /> {s.label ?? s.title ?? "evidence"}</span>
                             <span className="text-xs text-muted-foreground">{s.chunks} {t("rd_evidence_chunks")}</span>
                           </div>
                           {s.error && <div className="mt-1 text-xs text-red-700">{s.error}</div>}
@@ -926,7 +895,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   <p className="text-xs text-muted-foreground">{t("rd_evidence_fabric")}</p>
                   {(p.tipping_points ?? []).length > 0 ? (
                     <ul className="space-y-1 text-sm">
-                      {p.tipping_points.map((tp: any, i: number) => (
+                      {(p.tipping_points ?? []).map((tp: any, i: number) => (
                         <li key={i} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
                           ⚡ {tp.scenario} · {t("rd_round_word")} {tp.round}: {pct(tp.before)} → {pct(tp.after)} ({tp.delta > 0 ? "+" : ""}{Math.round(tp.delta * 100)}%)
                         </li>
@@ -971,7 +940,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <div>
                   <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("rd_sources")}</div>
                   <ul className="mt-1 space-y-1 text-xs">
-                    {p.sources.map((s: any, i: number) => (
+                    {(p.sources ?? []).map((s, i: number) => (
                       <li key={i}>
                         {s.status === "ready" ? "✅" : s.status === "blocked" ? "⛔" : "⚠️"} {s.label} — {s.status}
                         {s.error && <span className="text-red-700"> ({s.error})</span>}

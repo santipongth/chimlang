@@ -3,6 +3,7 @@ import {
   BarChart3,
   Bell,
   Fish,
+  FlaskConical,
   Globe,
   History,
   Languages,
@@ -17,6 +18,7 @@ import Calibration from "./pages/Calibration";
 import Compare from "./pages/Compare";
 import Watchlist from "./pages/Watchlist";
 import Insights from "./pages/Insights";
+import Experiments from "./pages/Experiments";
 import Gallery from "./pages/Gallery";
 import RunDetail from "./pages/RunDetail";
 import Settings from "./pages/Settings";
@@ -29,6 +31,7 @@ export type Page =
   | "compare"
   | "history"
   | "insights"
+  | "experiments"
   | "calibration"
   | "watchlist"
   | "gallery"
@@ -57,6 +60,7 @@ function Sidebar({
     { id: "new", icon: Plus, label: t("nav_new_run") },
     { id: "history", icon: History, label: t("nav_history") },
     { id: "insights", icon: BarChart3, label: t("nav_insights") },
+    { id: "experiments", icon: FlaskConical, label: "Experiments" },
     { id: "calibration", icon: Target, label: t("nav_calibration") },
     { id: "gallery", icon: Globe, label: t("nav_gallery") },
     { id: "watchlist", icon: Bell, label: t("nav_watchlist") },
@@ -187,6 +191,7 @@ function Shell() {
             />
           )}
           {page === "insights" && <Insights />}
+          {page === "experiments" && <Experiments />}
           {page === "calibration" && <Calibration />}
           {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
           {page === "gallery" && <Gallery />}

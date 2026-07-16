@@ -213,13 +213,20 @@ export function StabilityMatrix({ report }: { report: ValidationReport }) {
   );
 }
 
+const CONTENTION_NODE_LIMIT = 24;
+
 function graphForRound(posts: DebatePostItem[], round: number) {
   const usable = posts.filter((p) => !p.failed && p.round_no === round);
   const grouped = new Map<string, DebatePostItem[]>();
   usable.forEach((p) => grouped.set(p.segment, [...(grouped.get(p.segment) ?? []), p]));
-  const nodes = [...grouped.entries()].map(([segment, items]) => ({ segment, avg: items.reduce((sum, p) => sum + p.stance, 0) / items.length, posts: items.length }));
+  const allNodes = [...grouped.entries()].map(([segment, items]) => ({ segment, avg: items.reduce((sum, p) => sum + p.stance, 0) / items.length, posts: items.length }));
+  // COSE is quadratic in the number of segment pairs. Keep the interactive graph
+  // bounded for 1,000-agent runs; the full post set remains available in Debate feed.
+  const nodes = allNodes
+    .sort((left, right) => right.posts - left.posts || Math.abs(right.avg) - Math.abs(left.avg) || left.segment.localeCompare(right.segment))
+    .slice(0, CONTENTION_NODE_LIMIT);
   const edges = nodes.flatMap((left, i) => nodes.slice(i + 1).map((right) => ({ from: left.segment, to: right.segment, tension: Math.abs(left.avg - right.avg) })).filter((e) => e.tension >= 0.35));
-  return { nodes, edges };
+  return { nodes, edges, hiddenSegments: Math.max(0, allNodes.length - nodes.length) };
 }
 
 export function ContentionGraph({ posts }: { posts: DebatePostItem[] }) {
@@ -257,6 +264,7 @@ export function ContentionGraph({ posts }: { posts: DebatePostItem[] }) {
       <div className="mt-3 flex flex-wrap gap-2" aria-label="เลือก segment ในกราฟ">
         {graph.nodes.map((node) => <button key={node.segment} onClick={() => setSelected(node.segment)} aria-pressed={selected === node.segment} className="rounded-full border border-border px-3 py-1 text-xs hover:bg-muted">{node.segment} {node.avg.toFixed(2)}</button>)}
       </div>
+      {graph.hiddenSegments > 0 && <p className="mt-2 text-xs text-muted-foreground">แสดง {graph.nodes.length} segments ที่มีข้อมูลเด่นจากทั้งหมด {graph.nodes.length + graph.hiddenSegments}; posts ทั้งหมดยังอยู่ใน Debate feed</p>}
       {selected && <div className="mt-3 rounded-xl border border-border bg-background p-3 text-xs"><div className="font-semibold">Posts: {selected}</div>{related.map((p) => <p key={p.agent_idx} className="mt-2 text-muted-foreground">#{p.agent_idx}: {p.content}</p>)}</div>}
       <FallbackTable label="Contention edges" headers={["Round", "From", "To", "Tension"]} rows={graph.edges.map((e) => [`r${round + 1}`, e.from, e.to, e.tension.toFixed(3)])} />
     </div>

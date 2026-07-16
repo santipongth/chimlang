@@ -13,10 +13,9 @@ from collections import deque
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.auth import get_principal, require, require_election
@@ -26,7 +25,10 @@ from api.dashboard import (
     build_executive_brief,
     build_risk_heatmap,
 )
+from api.models import RunBody
 from api.render import render_dashboard_html
+from api.routers.experiments import router as experiments_router
+from api.routers.ops import router as ops_router
 from api.routers.runs import router as runs_router
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
@@ -56,6 +58,8 @@ app = FastAPI(title="ชิมลาง API", version="0.2.0", lifespan=lifespan
 
 # P4-M1: เสิร์ฟ React UI ที่ /app ถ้า build แล้ว (web/dist) — deployment ชิ้นเดียวกับ API
 app.include_router(runs_router)
+app.include_router(experiments_router)
+app.include_router(ops_router)
 
 _WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 if _WEB_DIST.exists():
@@ -99,64 +103,6 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
     return response
-
-
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok", "service": "chimlang-api"}
-
-
-@app.get("/health/deep")
-def health_deep() -> dict:
-    """M6 (NFR-06): สถานะ dependency รายตัวสำหรับ monitoring — ล่มตัวไหนบอกตรงๆ"""
-    settings = get_settings()
-    components: dict[str, str] = {}
-    try:
-        import psycopg
-
-        with psycopg.connect(settings.postgres_url, connect_timeout=3) as conn:
-            conn.execute("SELECT 1")
-        components["postgres"] = "ok"
-    except Exception as e:
-        components["postgres"] = f"down: {type(e).__name__}"
-    try:
-        from core.tasks import celery_app
-
-        with celery_app.connection() as conn:
-            conn.ensure_connection(max_retries=1, timeout=3)
-        components["redis"] = "ok"
-    except Exception as e:
-        components["redis"] = f"down: {type(e).__name__}"
-    try:
-        from graphlayer.store import Neo4jStore
-
-        Neo4jStore(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password).verify()
-        components["neo4j"] = "ok"
-    except Exception as e:
-        components["neo4j"] = f"down: {type(e).__name__}"
-    overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
-    return {"status": overall, "components": components}
-
-
-@app.get("/metrics", include_in_schema=False)
-def prometheus_metrics() -> Response:
-    from core.observability import prometheus_payload
-
-    payload, content_type = prometheus_payload()
-    return Response(content=payload, media_type=content_type)
-
-
-@app.get("/observability.json")
-def observability_json(
-    hours: int = Query(24, ge=1, le=720), principal: Principal = Depends(get_principal)
-) -> dict:
-    from core.observability import provider_health
-
-    try:
-        return provider_health(get_settings().postgres_url, hours=hours)
-    except Exception as exc:
-        detail = f"อ่าน telemetry ไม่สำเร็จ: {type(exc).__name__}"
-        raise HTTPException(status_code=503, detail=detail) from exc
 
 
 @app.get("/graph/indirect.json")
@@ -245,7 +191,12 @@ def _load_pack_factory(pack_id: int | None) -> "PersonaFactory | None":
 
 
 def _run_dashboard(
-    subject: str, granularity: str, agents: int = 100, factory: PersonaFactory | None = None
+    subject: str,
+    granularity: str,
+    agents: int = 100,
+    factory: PersonaFactory | None = None,
+    *,
+    base_seed: int | None = None,
 ) -> Dashboard:
     settings = get_settings()
     policy = ElectionPolicy(classify_scenario(subject))
@@ -264,7 +215,7 @@ def _run_dashboard(
         base_messages=[Message("rumor", "rumor", RUMOR, 1, "public_feed")],
         event=Message("official", "correction", EVENT, 8, "public_feed", counters="rumor"),
         target_msg_id="rumor",
-        base_seed=settings.default_seed,
+        base_seed=settings.default_seed if base_seed is None else base_seed,
     )
     base = outcomes[0]
 
@@ -633,31 +584,6 @@ def settings_tavily_key(body: LlmKeyBody, principal: Principal = Depends(get_pri
 # ---- Persistent runs (P6-M1/M2): เลือก engine → รัน → เก็บถาวร → History/Replay ----
 
 
-class RunBody(BaseModel):
-    engine: str = "fabric"  # fabric | debate
-    subject: str
-    domain: str = "ทั่วไป"
-    agents: int = Field(100, ge=1)
-    rounds: int = Field(3, ge=1, le=10)  # ใช้กับ debate เท่านั้น (fabric ใช้ config ภายใน 20)
-    pack_id: int | None = None
-    red_team: bool = False  # debate: ฝัง adversarial 2 ตัว (fabric ใช้หน้า compare อยู่แล้ว)
-    # P6-M3: เอกสารอ้างอิง (เฉพาะ debate) — {kind: text|url|rss, label, url?, text?}
-    sources: list[dict] = []
-    # เหตุการณ์จริง (ปลดล็อก calibration): ผู้ใช้ตั้งคำทำนายที่วัดผลได้เอง — ว่าง = heuristic
-    claim: str = ""
-    measurement: str = ""
-    due_days: int = 30
-    probability: float | None = Field(None, ge=0.01, le=0.99)
-    seed: int | None = None
-    # มุมมองผลลัพธ์ที่จะเปิดใช้ (P6-M6) — RunDetail แสดงเฉพาะ tab เหล่านี้; ว่าง = ครบทุกมุม
-    views: list[str] = []
-    # News Desk (P7, SIM-11): เปิดโต๊ะข่าวสด (debate เท่านั้น) — agent ได้ข่าวตาม media diet กลุ่มตัวเอง
-    live_news: bool = False
-    retrieval_mode: Literal["hybrid", "bm25", "vector"] = "hybrid"
-    parent_run_id: str = ""
-    reflection: bool = False
-
-
 @app.get("/engines.json")
 def engines_json(principal: Principal = Depends(get_principal)) -> dict:
     from simulation.engines import ENGINES
@@ -801,6 +727,7 @@ def _run_create_impl(
     }
     config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
+    config["experiment_id"] = body.experiment_id
     config["seed"] = run_seed
     if precreated:
         if not rstore.mark_running(run_id, "เริ่มรันใน worker"):
@@ -832,7 +759,9 @@ def _run_create_impl(
     try:
         if body.engine == "fabric":
             rstore.update_progress(run_id, 35, "กำลังรัน fabric multiverse")
-            payload = _run_dashboard(subject, "aggregate", n, factory=factory).to_dict()
+            payload = _run_dashboard(
+                subject, "aggregate", n, factory=factory, base_seed=run_seed
+            ).to_dict()
         else:
             from simulation.debate import make_debate_adapter, run_debate
             from simulation.persona import PersonaFactory
@@ -1067,6 +996,7 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
                 "parent_run_id": body.parent_run_id,
                 "seed": run_seed,
                 "reflection": body.reflection,
+                "experiment_id": body.experiment_id,
             },
             status="queued",
             parent_run_id=body.parent_run_id,

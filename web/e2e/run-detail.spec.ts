@@ -100,3 +100,41 @@ test("keeps visualization fallbacks usable on mobile", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Evidence lineage" })).toBeVisible();
   await expect(page.getByText(/ตารางข้อมูล: Evidence lineage/)).toBeVisible();
 });
+
+test("virtualizes a 1,000-post Debate feed", async ({ page }) => {
+  const largeRun = {
+    ...run,
+    run_id: "e2e-large-run",
+    agents: 1000,
+    rounds: 1,
+    posts: Array.from({ length: 1000 }, (_, index) => ({
+      round_no: 0,
+      agent_idx: index,
+      segment: `กลุ่ม ${index}`,
+      content: `โพสต์ทดสอบลำดับ ${index}`,
+      stance: (index % 20) / 10 - 1,
+      sentiment: 0,
+      failed: false,
+      move_id: `move-${index}`,
+      move_type: "claim",
+    })),
+  };
+  await page.route("**/watchlists.json", async (route) => {
+    await route.fulfill({ json: { items: [], alerts: [], unread: 0, webhook_configured: false } });
+  });
+  await page.route("**/runs/e2e-large-run.json", async (route) => {
+    await route.fulfill({ json: largeRun });
+  });
+  await page.goto("/app/#/runs/e2e-large-run");
+  await page.getByRole("button", { name: /การถกเถียง|Debate/ }).click();
+
+  const list = page.getByTestId("virtual-debate-list");
+  await expect(list).toBeVisible();
+  await expect.poll(() => page.getByTestId("debate-post-row").count()).toBeLessThan(30);
+  await list.evaluate((node) => {
+    node.scrollTop = 132 * 500;
+    node.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await expect(page.getByText("โพสต์ทดสอบลำดับ 500", { exact: true })).toBeVisible();
+  await expect.poll(() => page.getByTestId("debate-post-row").count()).toBeLessThan(30);
+});

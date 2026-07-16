@@ -45,6 +45,14 @@
 - [x] Thai retrieval/evidence/subgroup/social-desirability/future calibration benchmarks
 - [x] OpenTelemetry/Prometheus/provider health dashboards
 
+## P8-M6 — Experiment workspace + platform completion ✅
+
+- [x] experiment workspace สำหรับ parameter sweep, arbitrary run comparison และ sensitivity analysis
+- [x] aggregate BudgetGuard ก่อน enqueue sweep; public votes ไม่ถูกป้อนกลับ engine
+- [x] แยก ops/experiment endpoints เป็น routers + services โดยไม่เพิ่ม DDL ใน runtime
+- [x] frontend typed discriminated run payloads แทน `Record<string, any>` ใน contract หลัก
+- [x] virtualized Debate list + frontend test payload 1,000 posts และ experiment workspace e2e
+
 ## เกณฑ์ตรวจชุดที่ปิดแล้ว
 
 - runtime path ไม่มี DDL; migration version mismatch ทำให้ startup fail-closed
@@ -61,5 +69,8 @@
   ไม่เก็บ prompt/response/secret/PII; `/metrics` และ `/observability.json` รองรับ ops dashboard
 - benchmark ดิบอยู่ `docs/reports/P8-M5-benchmarks.md`; fixture เล็กเป็น harness smoke ไม่ใช่หลักฐาน
   ความแม่นโลกจริงหรือ causal benefit ของ reflection
-- verification ล่าสุด: 377 backend tests, ruff check/format, web OpenAPI generate/Vitest/build,
-  Playwright desktop+mobile, migration no-op ผ่าน
+- M6: sweep สูงสุด 12 variants และตรวจ per-run+monthly aggregate budget ก่อน enqueue; workspace
+  วิเคราะห์ snapshot ของ stored runs เท่านั้นและ `public_votes_used=false`; contention graph จำกัด 24 segment
+  เพื่อไม่ให้ layout O(n²) บล็อกหน้า แต่ Debate feed เก็บครบและ virtualize 1,000 posts
+- verification ล่าสุด: 383 backend tests, ruff check/format, web OpenAPI generate/Vitest/build,
+  Playwright 8 tests desktop+mobile, migration no-op ผ่าน
