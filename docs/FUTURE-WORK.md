@@ -192,21 +192,31 @@ PostgreSQL Row-Level Security เป็น fail-closed boundary ใกล้ sys
 
 ### C. Engineering debt ที่ทำได้ภายหลังโดยไม่เปลี่ยน product contract
 
-1. แยก endpoint กลุ่มที่เหลือจาก `api/app.py` (ยังประมาณ 2,000 บรรทัด) เป็น routers/services พร้อม
-   response models เพื่อให้ generated OpenAPI types ไม่ต้อง cast
-2. ย้าย raw `fetch` ที่เหลือใน `web/src/api.ts` (ประมาณ 37 จุด) ไป typed client/TanStack Query
+1. **ทำบางส่วนใน P8-M8:** Persona/Watchlist แยกเป็น routers แล้ว; `api/app.py` ยังประมาณ 2,000 บรรทัด
+   งานถัดไปคือแยก runs/dashboard/gallery/calibration เป็น services/routers และเพิ่ม response models เพื่อลด cast
+2. **ปิดใน P8-M8:** raw `fetch` ใน `web/src/api.ts` เป็นศูนย์แล้ว ทุก request ผ่าน generated OpenAPI client;
+   งานอนาคตเหลือย้าย stateful page loaders ไป TanStack Query เมื่อมีเหตุผลด้าน cache/revalidation
 3. ลด on-demand chart chunks เพิ่มเติม (ECharts ~642 kB, Cytoscape ~444 kB) หากข้อมูล real-user
    performance ชี้ว่าจำเป็น; initial bundle ถูกลดเหลือ ~82 kB แล้วจึงไม่ใช่ blocker
-4. แก้ warning FastAPI/TestClient ที่รอ `httpx2` โดยอัปเกรดเมื่อ dependency ecosystem รองรับและ CI ผ่าน
-5. เพิ่ม real production load/soak test ที่มี auth, Redis queue, SSE reconnect, budget reservation และ
-   1,000-agent payload พร้อมกัน ไม่ใช้เฉพาะ mocked browser payload
+4. **ปิดใน P8-M8:** test dependency ใช้ `httpx2`; ลบ warning suppression เดิมและ regression suite ผ่าน
+5. **มี baseline ใน P8-M8:** `scripts/production_soak.py` ยิง HTTP → Redis/Celery → PostgreSQL อย่างน้อย 20
+   Fabric runs พร้อมกัน ตรวจ heartbeat/event ID/read-after-write และ cleanup. งานอนาคตสำหรับ release-scale soak
+   คือทดสอบผ่าน TLS+OIDC จริง, SSE disconnect/reconnect ระหว่าง event, budget reservation ที่ชนกัน และ
+   Debate payload 1,000 agents ภายใต้ isolated paid-test budget
 
 ### D. งานที่ต้องมีมติธุรกิจ/ผลิตภัณฑ์
 
-- business model/metering: per-seat, per-run หรือ enterprise license (PRD Open Question #4)
-- open-source strategy และ license review (Open Question #5; repo คง private จนมีมติ)
-- election-mode eligibility: ใครใช้ scenario การเมืองได้และขั้นตอน verification/legal review
-- semantic/long-term autonomous memory: เริ่มเมื่อ benchmark แสดงประโยชน์ชัด; ตอนนี้คง run-local reflection
+P8-M8 รับรอง safety baseline ตาม `ADR-0013`; รายการด้านล่างจึงไม่ใช่สถานะกำกวมอีกต่อไป แต่เป็น
+**ตัวเลือกการขยายที่ยังต้องมีมติใหม่**:
+
+- commercial model: ปัจจุบันวัด cost อย่างเดียวและไม่ billing; ก่อนขายต้องเลือก per-seat, per-run หรือ
+  enterprise contract รวม entitlement, invoice, refund, tax และ legal terms (PRD Open Question #4)
+- open-source strategy: ปัจจุบัน repo private/no redistribution; ก่อนเปิดต้องเลือก license, แยก public/private
+  boundary, ทำ dependency/asset license review และ secret/history scan (Open Question #5)
+- Election Mode eligibility: ปัจจุบัน verified admin + aggregate-only; ก่อนขยายต้องระบุองค์กร/บุคคลที่มีสิทธิ์,
+  verification owner, legal/ethics review, incident response และ audit retention
+- semantic/long-term autonomous memory: ปัจจุบันปิดและใช้ run-local reflection; เปิดได้เมื่อ paired benchmark
+  ≥30 คู่แสดง quality gain ≥10%, cost/token overhead ≤20%, ไม่มี cross-workspace leakage และ human approve
 
 ## สิ่งที่ยังไม่ควรทำอัตโนมัติ
 

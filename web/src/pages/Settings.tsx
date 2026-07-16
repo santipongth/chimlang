@@ -3,8 +3,10 @@ import { Save } from "lucide-react";
 import {
   AppSettings,
   DeepHealth,
+  ProductPolicy,
   RunMetrics,
   fetchDeepHealth,
+  fetchProductPolicy,
   fetchRunMetrics,
   fetchSettings,
   saveLlmKey,
@@ -26,6 +28,7 @@ export default function Settings() {
   const [error, setError] = useState("");
   const [health, setHealth] = useState<DeepHealth | null>(null);
   const [metrics, setMetrics] = useState<RunMetrics | null>(null);
+  const [policy, setPolicy] = useState<ProductPolicy | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [prices, setPrices] = useState<Record<string, { input_usd_per_m: number; output_usd_per_m: number }>>({});
@@ -51,6 +54,7 @@ export default function Settings() {
       .catch((e) => setError(String(e.message ?? e)));
     fetchDeepHealth().then(setHealth).catch(() => setHealth(null));
     fetchRunMetrics().then(setMetrics).catch(() => setMetrics(null));
+    fetchProductPolicy().then(setPolicy).catch(() => setPolicy(null));
   };
   useEffect(load, []);
 
@@ -545,6 +549,48 @@ export default function Settings() {
               )}
             </div>
           </section>
+          )}
+
+          {policy && (
+            <section className={card + " space-y-4"} aria-labelledby="active-policy-title">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 id="active-policy-title" className="font-semibold">
+                    นโยบายธุรกิจและสิทธิ์ใช้งานที่มีผลอยู่
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    ค่าเหล่านี้เป็น safety baseline ไม่ใช่ราคาเสนอขายหรือคำวินิจฉัยทางกฎหมาย
+                  </p>
+                </div>
+                <code className="rounded-lg bg-muted px-2 py-1 text-[11px]">{policy.version}</code>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {policy.items.map((item) => (
+                  <article key={item.key} className="rounded-xl border border-border bg-background p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold">
+                        {{
+                          pricing_metering: "Pricing / metering",
+                          source_strategy: "Open-source strategy",
+                          election_eligibility: "Election Mode eligibility",
+                          semantic_memory: "Semantic memory",
+                        }[item.key]}
+                      </h3>
+                      <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary-strong">
+                        {item.status}
+                      </span>
+                    </div>
+                    <code className="mt-2 block break-words text-[11px] text-foreground">
+                      {item.active_default}
+                    </code>
+                    <p className="mt-2 text-xs text-muted-foreground">{item.rationale}</p>
+                    <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
+                      <strong className="text-foreground">เกณฑ์ก่อนเปลี่ยน:</strong> {item.change_gate}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </section>
           )}
 
           <section className={card + " text-sm space-y-2"}>

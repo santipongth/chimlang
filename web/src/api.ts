@@ -41,12 +41,11 @@ export async function fetchDashboard(
   agents = 100,
   packId?: number | null,
 ): Promise<DashboardData> {
-  const pack = packId != null ? `&pack_id=${packId}` : "";
-  const r = await fetch(
-    `/dashboard.json?subject=${encodeURIComponent(subject)}&agents=${agents}${pack}`,
-  );
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/dashboard.json", {
+    params: { query: { subject, agents, pack_id: packId ?? undefined } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as DashboardData;
 }
 
 // ---- Engines + persistent runs (P6-M1/M2) ----
@@ -166,10 +165,11 @@ export const FALLBACK_PACK_LIMITS: PackLimits = { min_segments: 2, max_segments:
 export async function fetchPool(
   packId?: number | null,
 ): Promise<{ source: string; segments: PoolSegment[]; limits?: PackLimits }> {
-  const q = packId != null ? `?pack_id=${packId}` : "";
-  const r = await fetch(`/personas/pool.json${q}`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/personas/pool.json", {
+    params: { query: { pack_id: packId ?? undefined } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as { source: string; segments: PoolSegment[]; limits?: PackLimits };
 }
 
 export async function createRun(body: CreateRunBody): Promise<string> {
@@ -393,14 +393,18 @@ export interface SynthesisRevision {
 }
 
 export async function fetchRunDetail(runId: string): Promise<SimRunDetail> {
-  const r = await fetch(`/runs/${runId}.json`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/runs/{run_id}.json", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as SimRunDetail;
 }
 
 export async function deleteRun(runId: string): Promise<void> {
-  const r = await fetch(`/runs/${runId}`, { method: "DELETE" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.DELETE("/runs/{run_id}", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function createPrediction(
@@ -414,13 +418,15 @@ export async function createPrediction(
     forecast_type: "binary";
   },
 ): Promise<{ predictions: PredictionContract[]; findings: SimulationFinding[] }> {
-  const r = await fetch(`/runs/${runId}/predictions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const { data, error, response } = await apiClient.POST("/runs/{run_id}/predictions", {
+    params: { path: { run_id: runId } },
+    body: { ...body, domain: body.domain ?? "general" },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as {
+    predictions: PredictionContract[];
+    findings: SimulationFinding[];
+  };
 }
 
 export interface ValidationReport {
@@ -445,36 +451,48 @@ export interface ValidationReport {
 }
 
 export async function validateRun(runId: string): Promise<ValidationReport> {
-  const r = await fetch(`/runs/${runId}/validate`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.POST("/runs/{run_id}/validate", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as ValidationReport;
 }
 
 export async function fetchValidation(runId: string): Promise<ValidationReport> {
-  const r = await fetch(`/runs/${runId}/validation`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/runs/{run_id}/validation", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as ValidationReport;
 }
 
 export async function cancelRun(runId: string): Promise<void> {
-  const r = await fetch(`/runs/${runId}/cancel`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.POST("/runs/{run_id}/cancel", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function retryRun(runId: string): Promise<RunJobStatus> {
-  const r = await fetch(`/runs/${runId}/retry`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.POST("/runs/{run_id}/retry", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as RunJobStatus;
 }
 
 export async function refreshRunNews(runId: string): Promise<void> {
-  const r = await fetch(`/runs/${runId}/refresh-news`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.POST("/runs/{run_id}/refresh-news", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function resynthesizeRun(runId: string): Promise<void> {
-  const r = await fetch(`/runs/${runId}/resynthesize`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.POST("/runs/{run_id}/resynthesize", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export interface RunMetrics {
@@ -497,9 +515,9 @@ export interface RunMetrics {
 }
 
 export async function fetchRunMetrics(): Promise<RunMetrics> {
-  const r = await fetch("/run-metrics.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/run-metrics.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as RunMetrics;
 }
 
 // ---- App settings (P6-M4) ----
@@ -566,6 +584,29 @@ export interface AppSettings {
   };
 }
 
+export interface ProductPolicyItem {
+  key: "pricing_metering" | "source_strategy" | "election_eligibility" | "semantic_memory";
+  status: string;
+  active_default: string;
+  rationale: string;
+  change_gate: string;
+}
+
+export interface ProductPolicy {
+  version: string;
+  billing_enabled: boolean;
+  repository_public: boolean;
+  semantic_memory_enabled: boolean;
+  items: ProductPolicyItem[];
+  note: string;
+}
+
+export async function fetchProductPolicy(): Promise<ProductPolicy> {
+  const { data, error, response } = await apiClient.GET("/product-policy.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as ProductPolicy;
+}
+
 export async function saveTavilyKey(apiKey: string): Promise<void> {
   const { error, response } = await apiClient.PUT("/settings/tavily-key", {
     body: { api_key: apiKey },
@@ -592,9 +633,9 @@ export interface DeepHealth {
 }
 
 export async function fetchDeepHealth(): Promise<DeepHealth> {
-  const r = await fetch("/health/deep");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/health/deep");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as DeepHealth;
 }
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
@@ -623,9 +664,11 @@ export interface ObservabilityData {
 }
 
 export async function fetchObservability(hours = 24): Promise<ObservabilityData> {
-  const r = await fetch(`/observability.json?hours=${hours}`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/observability.json", {
+    params: { query: { hours } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as ObservabilityData;
 }
 
 // ---- Persona packs (P5-M7) ----
@@ -650,29 +693,25 @@ export interface PersonaPack {
 }
 
 export async function fetchPacks(): Promise<PersonaPack[]> {
-  const r = await fetch("/personas/packs.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).packs;
+  const { data, error, response } = await apiClient.GET("/personas/packs.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { packs: PersonaPack[] }).packs;
 }
 
 export async function generatePack(label: string, prompt: string): Promise<PackSegment[]> {
-  const r = await fetch("/personas/packs/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label, prompt }),
+  const { data, error, response } = await apiClient.POST("/personas/packs/generate", {
+    body: { label, prompt },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).segments;
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { segments: PackSegment[] }).segments;
 }
 
 export async function savePack(label: string, segments: PackSegment[], prompt: string): Promise<number> {
-  const r = await fetch("/personas/packs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label, segments, prompt }),
+  const { data, error, response } = await apiClient.POST("/personas/packs", {
+    body: { label, segments: segments.map((segment) => ({ ...segment })), prompt },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).id;
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return Number((data as { id: number }).id);
 }
 
 export async function updatePack(
@@ -681,27 +720,26 @@ export async function updatePack(
   segments: PackSegment[],
   prompt: string,
 ): Promise<void> {
-  const r = await fetch(`/personas/packs/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label, segments, prompt }),
+  const { error, response } = await apiClient.PUT("/personas/packs/{pack_id}", {
+    params: { path: { pack_id: id } },
+    body: { label, segments: segments.map((segment) => ({ ...segment })), prompt },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function tryAsk(segment: PackSegment, question: string): Promise<string> {
-  const r = await fetch("/personas/try-ask", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ segment, question }),
+  const { data, error, response } = await apiClient.POST("/personas/try-ask", {
+    body: { segment: { ...segment }, question },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).answer;
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return String((data as { answer: string }).answer);
 }
 
 export async function deletePack(id: number): Promise<void> {
-  const r = await fetch(`/personas/packs/${id}`, { method: "DELETE" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.DELETE("/personas/packs/{pack_id}", {
+    params: { path: { pack_id: id } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export interface RunsData {
@@ -710,9 +748,9 @@ export interface RunsData {
 }
 
 export async function fetchRuns(): Promise<RunsData> {
-  const r = await fetch("/runs.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/runs.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as RunsData;
 }
 
 // ---- Public gallery (P5-M8, ADR-0004) ----
@@ -732,39 +770,44 @@ export interface GalleryDetail extends Omit<GalleryListItem, "brief"> {
 }
 
 export async function fetchGallery(): Promise<GalleryListItem[]> {
-  const r = await fetch("/gallery.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).items;
+  const { data, error, response } = await apiClient.GET("/gallery.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { items: GalleryListItem[] }).items;
 }
 
 export async function fetchGalleryDetail(token: string): Promise<GalleryDetail> {
-  const r = await fetch(`/gallery/${token}.json`);
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/gallery/{token}.json", {
+    params: { path: { token } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as GalleryDetail;
 }
 
 export async function shareRun(runId: string): Promise<string> {
-  const r = await fetch(`/runs/${runId}/share`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).share_token;
+  const { data, error, response } = await apiClient.POST("/runs/{run_id}/share", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return String((data as { share_token: string }).share_token);
 }
 
 export async function unshareRun(runId: string): Promise<void> {
-  const r = await fetch(`/runs/${runId}/share`, { method: "DELETE" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.DELETE("/runs/{run_id}/share", {
+    params: { path: { run_id: runId } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function voteGallery(
   token: string,
   vote: "agree" | "disagree",
 ): Promise<{ agree: number; disagree: number }> {
-  const r = await fetch(`/gallery/${token}/vote`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ vote }),
+  const { data, error, response } = await apiClient.POST("/gallery/{token}/vote", {
+    params: { path: { token } },
+    body: { vote },
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return (await r.json()).votes;
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return (data as unknown as { votes: { agree: number; disagree: number } }).votes;
 }
 
 // ---- Knowledge graph viz + insights (P5-M6) ----
@@ -785,9 +828,9 @@ export interface GraphSummary {
 }
 
 export async function fetchGraphSummary(): Promise<GraphSummary> {
-  const r = await fetch("/graph/summary.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/graph/summary.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as GraphSummary;
 }
 
 export interface InsightsData {
@@ -798,9 +841,9 @@ export interface InsightsData {
 }
 
 export async function fetchInsights(): Promise<InsightsData> {
-  const r = await fetch("/insights.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/insights.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as InsightsData;
 }
 
 // ---- Watchlist + alerts (P5-M5) ----
@@ -839,9 +882,9 @@ export interface WatchlistData {
 }
 
 export async function fetchWatchlists(): Promise<WatchlistData> {
-  const r = await fetch("/watchlists.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/watchlists.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as WatchlistData;
 }
 
 export async function createWatchlist(body: {
@@ -850,36 +893,39 @@ export async function createWatchlist(body: {
   agents: number;
   cadence: "daily" | "weekly";
 }): Promise<void> {
-  const r = await fetch("/watchlists", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const { error, response } = await apiClient.POST("/watchlists", {
+    body,
   });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function toggleWatchlist(id: number, active: boolean): Promise<void> {
-  const r = await fetch(`/watchlists/${id}/toggle?active=${active}`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.POST("/watchlists/{watchlist_id}/toggle", {
+    params: { path: { watchlist_id: id }, query: { active } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function deleteWatchlist(id: number): Promise<void> {
-  const r = await fetch(`/watchlists/${id}`, { method: "DELETE" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  const { error, response } = await apiClient.DELETE("/watchlists/{watchlist_id}", {
+    params: { path: { watchlist_id: id } },
+  });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export async function runWatchlistNow(id: number): Promise<{ alerts_created: AlertItem[] }> {
-  const r = await fetch(`/watchlists/${id}/run`, { method: "POST" });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.POST("/watchlists/{watchlist_id}/run", {
+    params: { path: { watchlist_id: id } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as { alerts_created: AlertItem[] };
 }
 
 export async function markAlertsRead(id?: number): Promise<void> {
-  await fetch("/alerts/read", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(id == null ? { all: true } : { id }),
+  const { error, response } = await apiClient.POST("/alerts/read", {
+    body: id == null ? { all: true } : { id, all: false },
   });
+  if (!response.ok) throw openApiError(error, response.status);
 }
 
 // ---- Compare baseline vs +Red Team (P5-M4) ----
@@ -908,12 +954,11 @@ export async function fetchCompare(
   agents = 100,
   packId?: number | null,
 ): Promise<CompareData> {
-  const pack = packId != null ? `&pack_id=${packId}` : "";
-  const r = await fetch(
-    `/compare.json?subject=${encodeURIComponent(subject)}&agents=${agents}${pack}`,
-  );
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/compare.json", {
+    params: { query: { subject, agents, pack_id: packId ?? undefined } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as CompareData;
 }
 
 // ---- Calibration (P5-M3) ----
@@ -952,9 +997,9 @@ export interface CalibrationData {
 }
 
 export async function fetchCalibration(): Promise<CalibrationData> {
-  const r = await fetch("/calibration.json");
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.GET("/calibration.json");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as CalibrationData;
 }
 
 export async function resolvePrediction(
@@ -963,13 +1008,15 @@ export async function resolvePrediction(
   note: string,
   evidence: { observed_at: string; evidence_url: string; evidence_name: string },
 ): Promise<{ brier: number }> {
-  const r = await fetch(`/predictions/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outcome, note, ...evidence }),
-  });
-  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
-  return r.json();
+  const { data, error, response } = await apiClient.POST(
+    "/predictions/{prediction_id}/resolve",
+    {
+      params: { path: { prediction_id: id } },
+      body: { outcome, note, ...evidence },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data as unknown as { brier: number };
 }
 
 // ---- Experiment workspace (P8-M6) ----

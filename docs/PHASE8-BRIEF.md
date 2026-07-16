@@ -62,6 +62,16 @@
 - [x] เพิ่ม security/external-validation readiness report; ระบุ TLS/OIDC/multi-tenant gates ที่ต้องมี deployment input
 - [x] regression: backend, migration, OpenAPI, Vitest/build, Playwright desktop/mobile
 
+## P8-M8 — Engineering debt + active business policy ✅
+
+- [x] แยก Persona/Watchlist endpoint groups ออกจาก `api/app.py` โดย contract/RBAC/governance เดิม
+- [x] ย้าย raw `fetch` ใน `web/src/api.ts` ไป generated OpenAPI client ให้เหลือศูนย์
+- [x] production soak runner: concurrent Fabric queue/poll/detail/event + cleanup/report (live 20/20)
+- [x] ติดตั้ง `httpx2` ให้ Starlette TestClient เลิกใช้ deprecated httpx backend
+- [x] formalize active defaults: cost metering/no billing, private source, verified-admin Election,
+  semantic memory benchmark gate และแสดงใน Settings
+- [x] regression + เปิด dev API/worker/web ให้ผู้ใช้ทดลอง
+
 ## เกณฑ์ตรวจชุดที่ปิดแล้ว
 
 - runtime path ไม่มี DDL; migration version mismatch ทำให้ startup fail-closed
