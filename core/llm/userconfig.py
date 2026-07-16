@@ -51,7 +51,13 @@ LLM_PROVIDERS: dict[str, dict] = {
     },
 }
 
-_LLM_SETTINGS_KEYS = ("llm_base_url", "llm_model_crowd", "llm_model_analyst")
+_LLM_SETTINGS_KEYS = (
+    "llm_base_url",
+    "llm_model_crowd",
+    "llm_model_analyst",
+    "llm_model_embedding",
+    "llm_embedding_dimension",
+)
 
 
 def _load_app_llm(dsn: str) -> dict:

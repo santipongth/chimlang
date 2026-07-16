@@ -61,6 +61,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/observability.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Observability Json */
+        get: operations["observability_json_observability_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/graph/indirect.json": {
         parameters: {
             query?: never;
@@ -1338,13 +1355,19 @@ export interface components {
             /**
              * Retrieval Mode
              * @default hybrid
+             * @enum {string}
              */
-            retrieval_mode: string;
+            retrieval_mode: "hybrid" | "bm25" | "vector";
             /**
              * Parent Run Id
              * @default
              */
             parent_run_id: string;
+            /**
+             * Reflection
+             * @default false
+             */
+            reflection: boolean;
         };
         /** RunReadinessBody */
         RunReadinessBody: {
@@ -1412,13 +1435,19 @@ export interface components {
             /**
              * Retrieval Mode
              * @default hybrid
+             * @enum {string}
              */
-            retrieval_mode: string;
+            retrieval_mode: "hybrid" | "bm25" | "vector";
             /**
              * Parent Run Id
              * @default
              */
             parent_run_id: string;
+            /**
+             * Reflection
+             * @default false
+             */
+            reflection: boolean;
         };
         /** ShareBody */
         ShareBody: {
@@ -1560,6 +1589,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    observability_json_observability_json_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

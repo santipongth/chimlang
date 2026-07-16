@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GraphSummary, InsightsData, fetchGraphSummary, fetchInsights } from "../api";
+import { GraphSummary, InsightsData, ObservabilityData, fetchGraphSummary, fetchInsights, fetchObservability } from "../api";
 import { useLang } from "../i18n";
 import { InfoTip, PageHeader } from "../ui";
 
@@ -178,12 +178,14 @@ export default function Insights() {
   const { t } = useLang();
   const [graph, setGraph] = useState<GraphSummary | null>(null);
   const [stats, setStats] = useState<InsightsData | null>(null);
+  const [ops, setOps] = useState<ObservabilityData | null>(null);
   const [graphError, setGraphError] = useState("");
   const [statsError, setStatsError] = useState("");
 
   useEffect(() => {
     fetchGraphSummary().then(setGraph).catch((e) => setGraphError(String(e.message ?? e)));
     fetchInsights().then(setStats).catch((e) => setStatsError(String(e.message ?? e)));
+    fetchObservability().then(setOps).catch(() => setOps(null));
   }, []);
 
   const card = "bg-card border border-border rounded-2xl p-5";
@@ -252,6 +254,45 @@ export default function Insights() {
             </div>
           )}
         </>
+      )}
+
+      {ops && (
+        <section className={card + " space-y-4"} aria-labelledby="provider-health-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 id="provider-health-title" className="font-semibold">Provider & queue health</h2>
+              <p className="mt-1 text-xs text-muted-foreground">24 ชั่วโมงล่าสุด · เก็บเฉพาะ metadata ไม่เก็บ prompt/response/PII</p>
+            </div>
+            <a href="/metrics" className="rounded-lg border border-border px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">Prometheus metrics</a>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">queued</div><div className="text-2xl font-semibold">{ops.queue.queued}</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">running</div><div className="text-2xl font-semibold">{ops.queue.running}</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">errors</div><div className="text-2xl font-semibold">{ops.queue.errors}</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">queue avg</div><div className="text-2xl font-semibold">{ops.queue.avg_latency_seconds.toFixed(1)}s</div></div>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/50 text-muted-foreground"><tr><th className="px-3 py-2">provider / operation</th><th className="px-3 py-2">success</th><th className="px-3 py-2">latency</th><th className="px-3 py-2">cost</th></tr></thead>
+              <tbody>
+                {ops.providers.map((p) => (
+                  <tr key={`${p.provider}-${p.operation}`} className="border-t border-border">
+                    <td className="px-3 py-2"><code>{p.provider}</code> · {p.operation} <span className="text-muted-foreground">({p.calls})</span></td>
+                    <td className="px-3 py-2">{(p.success_rate * 100).toFixed(1)}%</td>
+                    <td className="px-3 py-2">{p.avg_latency_ms.toFixed(0)} ms</td>
+                    <td className="px-3 py-2">${p.cost_usd.toFixed(4)}</td>
+                  </tr>
+                ))}
+                {ops.providers.length === 0 && <tr><td colSpan={4} className="px-3 py-4 text-muted-foreground">ยังไม่มี provider call ในช่วงนี้</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {ops.failure_taxonomy.length > 0 && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              {ops.failure_taxonomy.map((f) => <span key={f.reason} className="rounded-full bg-red-50 px-2.5 py-1 text-red-700">{f.reason}: {f.count}</span>)}
+            </div>
+          )}
+        </section>
       )}
 
       {/* Knowledge graph */}

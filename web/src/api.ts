@@ -74,6 +74,7 @@ export interface RunReadiness {
 export interface CreateRunBody {
   retrieval_mode?: "hybrid" | "bm25" | "vector";
   parent_run_id?: string;
+  reflection?: boolean;
 }
 
 export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadiness> {
@@ -216,6 +217,11 @@ export interface DebatePostItem {
   sentiment: number;
   failed: boolean;
   failure_reason?: string;
+  parser_mode?: string;
+  move_id?: string;
+  move_type?: "claim" | "evidence" | "counterclaim" | "concession" | "question";
+  parent_move_id?: string;
+  evidence_refs?: string[];
 }
 
 export interface SimRunDetail extends SimRunSummary {
@@ -425,6 +431,8 @@ export interface AppSettings {
   llm_base_url: string;
   llm_model_crowd: string;
   llm_model_analyst: string;
+  llm_model_embedding: string;
+  llm_embedding_dimension: number;
   llm_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
   run_budget_usd_cap: number;
   monthly_budget_usd_cap: number;
@@ -437,8 +445,11 @@ export interface AppSettings {
     active_base_url: string;
     active_model_crowd: string;
     active_model_analyst: string;
+    active_model_embedding: string;
+    embedding_dimension: number;
     env_model_crowd: string;
     env_model_analyst: string;
+    env_model_embedding: string;
     yaml_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
   };
   budget: {
@@ -499,6 +510,29 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
+  if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
+  return r.json();
+}
+
+export interface ObservabilityData {
+  window_hours: number;
+  providers: {
+    provider: string;
+    operation: string;
+    calls: number;
+    successes: number;
+    success_rate: number;
+    avg_latency_ms: number;
+    cost_usd: number;
+    last_call_at: string | null;
+  }[];
+  failure_taxonomy: { reason: string; count: number }[];
+  queue: { queued: number; running: number; errors: number; avg_latency_seconds: number };
+  pii_policy: string;
+}
+
+export async function fetchObservability(hours = 24): Promise<ObservabilityData> {
+  const r = await fetch(`/observability.json?hours=${hours}`);
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return r.json();
 }

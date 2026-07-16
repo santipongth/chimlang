@@ -38,6 +38,7 @@ def _apply_module_schemas(conn: Connection) -> None:
     from simulation.persona_packs import _SCHEMA as packs_schema
     from simulation.sources import _SCHEMA as sources_schema
 
+    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
     for schema in (
         runstore_schema,
         governance_schema,
@@ -209,6 +210,48 @@ def _retain_synthesis_revisions(conn: Connection) -> None:
     )
 
 
+def _apply_typed_debate_moves(conn: Connection) -> None:
+    conn.execute(
+        """
+        ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS move_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS move_type TEXT NOT NULL DEFAULT 'claim';
+        ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS parent_move_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE debate_posts ADD COLUMN IF NOT EXISTS evidence_refs JSONB
+            NOT NULL DEFAULT '[]'::jsonb;
+        CREATE UNIQUE INDEX IF NOT EXISTS debate_posts_move_id
+            ON debate_posts (run_id, move_id) WHERE move_id <> '';
+        CREATE INDEX IF NOT EXISTS debate_posts_parent_move
+            ON debate_posts (run_id, parent_move_id) WHERE parent_move_id <> '';
+        """
+    )
+
+
+def _apply_vector_retrieval_and_observability(conn: Connection) -> None:
+    from core.observability import _SCHEMA as observability_schema
+
+    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS run_chunk_embeddings (
+            chunk_id BIGINT NOT NULL REFERENCES run_chunks(id) ON DELETE CASCADE,
+            run_id TEXT NOT NULL,
+            model TEXT NOT NULL,
+            model_version TEXT NOT NULL,
+            dimension INT NOT NULL,
+            embedding vector NOT NULL,
+            embedded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (chunk_id, model, dimension)
+        );
+        CREATE INDEX IF NOT EXISTS run_chunk_embeddings_run
+            ON run_chunk_embeddings (run_id, model, dimension);
+        CREATE INDEX IF NOT EXISTS run_chunk_embeddings_hnsw_1536
+            ON run_chunk_embeddings USING hnsw ((embedding::vector(1536)) vector_cosine_ops)
+            WHERE dimension = 1536;
+        """
+    )
+    conn.execute(observability_schema)
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -246,6 +289,16 @@ MIGRATIONS: list[Migration] = [
         "2026-07-15-synthesis-revision-retention-v1",
         "retain append-only synthesis revisions after operational run deletion",
         _retain_synthesis_revisions,
+    ),
+    (
+        "2026-07-16-typed-debate-moves-v1",
+        "typed debate moves with evidence and parent lineage",
+        _apply_typed_debate_moves,
+    ),
+    (
+        "2026-07-16-vector-retrieval-observability-v1",
+        "pgvector HNSW evidence index and PII-safe provider telemetry",
+        _apply_vector_retrieval_and_observability,
     ),
 ]
 

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model_crowd: str = ""
     llm_model_analyst: str = ""
+    llm_model_embedding: str = ""
+    llm_embedding_dimension: int = 1536
+    otel_exporter_otlp_endpoint: str = ""
 
     # --- Cost guard / reproducibility ---
     run_budget_usd_cap: float = 5.0

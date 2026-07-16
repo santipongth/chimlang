@@ -40,8 +40,10 @@ celery_app.conf.update(
 @signals.worker_process_init.connect
 def _worker_schema_check(**_kwargs) -> None:
     from core.db import require_schema
+    from core.observability import configure_telemetry
 
     require_schema(_settings.postgres_url)
+    configure_telemetry("chimlang-worker", _settings.otel_exporter_otlp_endpoint)
 
 
 @contextmanager
@@ -76,12 +78,13 @@ def whatif_dashboard_task(subject: str, granularity: str, agents: int) -> dict:
     return _run_dashboard(subject, granularity, agents).to_dict()
 
 
-@celery_app.task(name="chimlang.persistent_run")
+@celery_app.task(name="chimlang.persistent_run", bind=True)
 def persistent_run_task(
-    body: dict, actor: str, election_verified: bool = False, run_id: str | None = None
+    self, body: dict, actor: str, election_verified: bool = False, run_id: str | None = None
 ) -> dict:
     """สร้าง persistent run ใน worker — ใช้ code path เดียวกับ POST /runs เพื่อไม่ข้าม governance."""
     from api.app import RunBody, _run_create_impl
+    from core.observability import extracted_trace, traced
     from governance.rbac import Principal, Role
 
     role = Role.ADMIN if election_verified else Role.ANALYST
@@ -99,22 +102,24 @@ def persistent_run_task(
                 "idempotent": True,
                 "status": detail["status"],
             }
-    with _heartbeat(run_id) if run_id else nullcontext():
-        try:
-            return _run_create_impl(
-                RunBody(**body), principal=principal, run_id=run_id, precreated=bool(run_id)
-            )
-        except Exception as exc:
-            if run_id and getattr(exc, "status_code", None) == 409:
-                current = RunStore(_settings.postgres_url).get(run_id)
-                return {
-                    "run_id": run_id,
-                    "engine": current["engine"],
-                    "agents": current["agents"],
-                    "idempotent": True,
-                    "status": current["status"],
-                }
-            raise
+    with extracted_trace(getattr(self.request, "headers", None)):
+        with traced("celery.persistent_run", run_id=run_id or "", engine=body.get("engine", "")):
+            with _heartbeat(run_id) if run_id else nullcontext():
+                try:
+                    return _run_create_impl(
+                        RunBody(**body), principal=principal, run_id=run_id, precreated=bool(run_id)
+                    )
+                except Exception as exc:
+                    if run_id and getattr(exc, "status_code", None) == 409:
+                        current = RunStore(_settings.postgres_url).get(run_id)
+                        return {
+                            "run_id": run_id,
+                            "engine": current["engine"],
+                            "agents": current["agents"],
+                            "idempotent": True,
+                            "status": current["status"],
+                        }
+                    raise
 
 
 @celery_app.task(name="chimlang.check_watchlists")

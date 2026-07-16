@@ -1,0 +1,62 @@
+{
+  "retrieval": [
+    {
+      "query": "ค่ารถไฟฟ้าส่งผลต่อค่าใช้จ่ายครัวเรือนอย่างไร",
+      "documents": {
+        "T1": "ครัวเรือนรายได้น้อยมีภาระค่าเดินทางด้วยรถไฟฟ้าเพิ่มขึ้นเมื่อค่าโดยสารสูงขึ้น",
+        "T2": "ราคาปุ๋ยมีผลต่อต้นทุนการปลูกข้าวของเกษตรกร",
+        "T3": "การอุดหนุนค่าโดยสารช่วยลดค่าใช้จ่ายเดินทางของคนทำงานในเมือง"
+      },
+      "relevant_ids": ["T1", "T3"]
+    },
+    {
+      "query": "ผู้ค้ารายย่อยกังวลเรื่องค่าธรรมเนียมรถติด",
+      "documents": {
+        "T4": "ผู้ค้ารายย่อยกังวลว่าค่าธรรมเนียมรถติดจะทำให้ลูกค้าเดินทางมาน้อยลง",
+        "T5": "สวนสาธารณะเปิดให้บริการตามเวลาปกติ",
+        "T6": "ระบบขนส่งสาธารณะอาจได้รับผู้โดยสารเพิ่มจากมาตรการลดรถติด"
+      },
+      "relevant_ids": ["T4"]
+    }
+  ],
+  "evidence": [
+    {
+      "available_evidence_ids": ["E1", "E2"],
+      "relevant_evidence_ids": ["E1"],
+      "evidence_refs": ["E1"],
+      "requires_evidence": true
+    },
+    {
+      "available_evidence_ids": ["E3"],
+      "relevant_evidence_ids": ["E3"],
+      "evidence_refs": [],
+      "requires_evidence": true
+    }
+  ],
+  "subgroup": {
+    "target": {"แรงงานเมือง": 0.4, "ผู้ค้ารายย่อย": 0.35, "เกษตรกร": 0.25},
+    "observed": {"แรงงานเมือง": 0.42, "ผู้ค้ารายย่อย": 0.33, "เกษตรกร": 0.25}
+  },
+  "social_desirability": [
+    {"private_stance": -0.6, "public_stance": -0.2, "expected_gap_sign": 1},
+    {"private_stance": 0.5, "public_stance": 0.2, "expected_gap_sign": -1}
+  ],
+  "future_calibration": [
+    {"probability": 0.8, "outcome": true, "baseline": 0.5},
+    {"probability": 0.3, "outcome": false, "baseline": 0.5},
+    {"probability": 0.6, "outcome": true, "baseline": 0.5},
+    {"probability": 0.2, "outcome": false, "baseline": 0.5}
+  ],
+  "reflection": {
+    "available_evidence_ids": ["E1"],
+    "calls": 2,
+    "before_moves": [
+      {"round_no": 0, "agent_idx": 0, "segment": "แรงงานเมือง", "content": "ค่าใช้จ่ายเพิ่ม 25%", "stance": -0.4, "move_id": "b1", "move_type": "claim", "parent_move_id": "", "evidence_refs": []},
+      {"round_no": 1, "agent_idx": 1, "segment": "ผู้ค้ารายย่อย", "content": "มีหลักฐานโต้แย้ง", "stance": 0.2, "move_id": "b2", "move_type": "evidence", "parent_move_id": "b1", "evidence_refs": ["E404"]}
+    ],
+    "after_moves": [
+      {"round_no": 0, "agent_idx": 0, "segment": "แรงงานเมือง", "content": "หลักฐาน E1 ระบุว่าค่าใช้จ่ายเพิ่ม", "stance": -0.4, "move_id": "a1", "move_type": "claim", "parent_move_id": "", "evidence_refs": ["E1"]},
+      {"round_no": 1, "agent_idx": 1, "segment": "ผู้ค้ารายย่อย", "content": "หลักฐาน E1 ทำให้ยังไม่เห็นด้วย", "stance": -0.1, "move_id": "a2", "move_type": "evidence", "parent_move_id": "a1", "evidence_refs": ["E1"]}
+    ]
+  }
+}

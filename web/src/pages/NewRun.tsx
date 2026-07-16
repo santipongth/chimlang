@@ -101,6 +101,7 @@ export default function NewRun({
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [liveNews, setLiveNews] = useState(false);
   const [retrievalMode, setRetrievalMode] = useState<"hybrid" | "bm25" | "vector">("hybrid");
+  const [reflection, setReflection] = useState(false);
   const [claim, setClaim] = useState("");
   const [measurement, setMeasurement] = useState("");
   const [dueDays, setDueDays] = useState(30);
@@ -166,6 +167,7 @@ export default function NewRun({
       views,
       live_news: isDebate && liveNews,
       retrieval_mode: retrievalMode,
+      reflection: isDebate && reflection,
       claim,
       measurement,
       due_days: dueDays,
@@ -173,7 +175,7 @@ export default function NewRun({
     fetchRunReadiness(body)
       .then(setReadiness)
       .catch(() => setReadiness(null));
-  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews, retrievalMode, claim, measurement, dueDays]);
+  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews, retrievalMode, reflection, claim, measurement, dueDays]);
 
   function addSource() {
     if (sources.length >= 10) return;
@@ -214,6 +216,7 @@ export default function NewRun({
         views,
         live_news: isDebate && liveNews,
         retrieval_mode: retrievalMode,
+        reflection: isDebate && reflection,
         claim,
         measurement,
         due_days: dueDays,
@@ -346,8 +349,24 @@ export default function NewRun({
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Vector mode falls back to deterministic retrieval until embeddings are configured.</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">Hybrid ใช้ RRF ระหว่าง pgvector HNSW กับ BM25; ถ้า embedding ยังไม่ตั้งค่าจะแสดง BM25 fallback ใน provenance</p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setReflection(!reflection)}
+            className={`flex w-full items-center justify-between rounded-xl border p-3 text-left text-sm transition ${
+              reflection ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"
+            }`}
+          >
+            <span>
+              <span className="font-medium">🪞 Run-local reflection</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">เลือกใช้เท่านั้น · สูงสุด 2 ครั้ง · ไม่สร้างความจำระยะยาว · คิดต้นทุนผ่าน BudgetGuard</span>
+            </span>
+            <span className={`ml-3 rounded-full px-2.5 py-0.5 text-xs font-medium ${reflection ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
+              {reflection ? "ON" : "OFF"}
+            </span>
+          </button>
 
           {/* โต๊ะข่าวสด (P7, SIM-11) — โต๊ะข่าวกลางดึงข่าวให้ agent ตาม media diet ของกลุ่ม */}
           <button

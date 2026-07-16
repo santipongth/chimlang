@@ -52,16 +52,21 @@ def estimate_run_cost(body: dict, settings: Settings | None = None) -> dict:
         return {"estimated_usd": 0.0, "currency": "USD", "calls": 0, "note": "fabric_engine_no_llm"}
     llm_settings = effective_llm_settings()
     pricing = effective_pricing()
-    estimate = CostEstimator(pricing).estimate(
-        [
-            TierLoad(llm_settings.llm_model_crowd, agents * rounds, 900, 160),
-            TierLoad(llm_settings.llm_model_analyst, 1, 1500, 800),
-        ]
-    )
+    reflection_calls = min(2, max(0, rounds - 1)) if body.get("reflection") else 0
+    loads = [
+        TierLoad(llm_settings.llm_model_crowd, agents * rounds, 900, 160),
+        TierLoad(llm_settings.llm_model_analyst, 1 + reflection_calls, 1500, 800),
+    ]
+    if (
+        str(body.get("retrieval_mode", "hybrid")) in {"hybrid", "vector"}
+        and llm_settings.llm_model_embedding.strip()
+    ):
+        loads.append(TierLoad(llm_settings.llm_model_embedding, 1, 12_000, 0))
+    estimate = CostEstimator(pricing).estimate(loads)
     return {
         "estimated_usd": round(estimate.total_usd, 6),
         "currency": "USD",
-        "calls": agents * rounds + 1,
+        "calls": agents * rounds + 1 + reflection_calls + int(len(loads) == 3),
         "run_cap_usd": llm_settings.run_budget_usd_cap,
         "note": "preflight_estimate",
     }
@@ -133,6 +138,26 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
         )
     else:
         checks.append(ReadinessCheck("news", "News Desk", "warn", "disabled"))
+    retrieval_mode = str(body.get("retrieval_mode", "hybrid"))
+    embedding_model = effective_llm_settings().llm_model_embedding.strip()
+    if retrieval_mode in {"hybrid", "vector"} and not embedding_model:
+        checks.append(
+            ReadinessCheck(
+                "retrieval",
+                "Evidence retrieval",
+                "warn",
+                "embedding_not_configured_bm25_fallback",
+            )
+        )
+    else:
+        checks.append(
+            ReadinessCheck(
+                "retrieval",
+                "Evidence retrieval",
+                "pass",
+                f"{retrieval_mode}:{embedding_model or 'bm25'}",
+            )
+        )
     try:
         cost = estimate_run_cost(body, settings)
         run_cap = float(cost.get("run_cap_usd", settings.run_budget_usd_cap))
@@ -237,6 +262,25 @@ def build_trust_scorecard(detail: dict) -> dict:
         "Reproducibility",
         "pass" if detail.get("seed") is not None and detail.get("run_id") else "warn",
         f"seed={detail.get('seed')}",
+    )
+    verifier = (payload.get("protocol") or {}).get("verifier") or {}
+    add(
+        "deterministic_verifier",
+        "Typed move verifier",
+        "pass"
+        if verifier.get("status") == "pass"
+        else "block"
+        if verifier.get("status") == "fail"
+        else "warn",
+        f"{verifier.get('status', 'legacy')} · {len(verifier.get('violations') or [])} findings",
+        2,
+    )
+    judge = (payload.get("protocol") or {}).get("analyst_judge") or {}
+    add(
+        "analyst_judge",
+        "Analyst judge",
+        "pass" if judge.get("verdict") == "pass" else "warn",
+        str(judge.get("verdict") or "legacy/unavailable"),
     )
     total_weight = sum(c["weight"] for c in checks)
     earned = sum(c["weight"] for c in checks if c["status"] == "pass") + 0.5 * sum(

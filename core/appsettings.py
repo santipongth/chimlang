@@ -26,6 +26,8 @@ DEFAULTS: dict = {
     "llm_base_url": "",
     "llm_model_crowd": "",
     "llm_model_analyst": "",
+    "llm_model_embedding": "",
+    "llm_embedding_dimension": 1536,
     "llm_prices": {},  # model -> {input_usd_per_m, output_usd_per_m} (แก้ราคามาตรฐาน/เพิ่มใหม่ได้)
     # API key เก็บ **ciphertext** (ADR-0007) — เขียนผ่าน set_llm_api_key() เท่านั้น ห้าม PUT ตรง
     "llm_api_key_enc": "",
@@ -68,9 +70,13 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
 
         if patch["llm_provider"] not in LLM_PROVIDERS:
             raise ValueError(f"ไม่รู้จัก provider: {patch['llm_provider']}")
-    for k in ("llm_base_url", "llm_model_crowd", "llm_model_analyst"):
+    for k in ("llm_base_url", "llm_model_crowd", "llm_model_analyst", "llm_model_embedding"):
         if k in patch and not isinstance(patch[k], str):
             raise ValueError(f"{k} ต้องเป็นข้อความ")
+    if "llm_embedding_dimension" in patch and not (
+        128 <= int(patch["llm_embedding_dimension"]) <= 4096
+    ):
+        raise ValueError("llm_embedding_dimension ต้องอยู่ใน 128-4096")
     if "llm_base_url" in patch and patch["llm_base_url"]:
         if not str(patch["llm_base_url"]).startswith(("http://", "https://")):
             raise ValueError("base URL ต้องขึ้นต้นด้วย http(s)://")

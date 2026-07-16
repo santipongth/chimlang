@@ -5,6 +5,7 @@
 """
 
 from dataclasses import dataclass, field
+from threading import Lock
 
 
 class BudgetExceededError(RuntimeError):
@@ -51,6 +52,7 @@ class CostEstimator:
 class BudgetGuard:
     cap_usd: float
     spent_usd: float = field(default=0.0)
+    _lock: Lock = field(default_factory=Lock, repr=False, compare=False)
 
     def check_estimate(self, estimate: CostEstimate) -> None:
         """เรียกก่อนเริ่ม run — estimate เกิน cap = ไม่เริ่ม"""
@@ -61,6 +63,22 @@ class BudgetGuard:
 
     def add_actual(self, usd: float) -> None:
         """เรียกหลังทุก LLM call — ยอดสะสมแตะ cap = abort กลาง run"""
-        self.spent_usd += usd
-        if self.spent_usd >= self.cap_usd:
-            raise BudgetExceededError(usd=self.spent_usd, cap_usd=self.cap_usd, phase="runtime")
+        with self._lock:
+            self.spent_usd += usd
+            if self.spent_usd >= self.cap_usd:
+                raise BudgetExceededError(usd=self.spent_usd, cap_usd=self.cap_usd, phase="runtime")
+
+    def check_additional(self, usd: float) -> None:
+        """Fail before a provider call when its conservative marginal estimate exceeds cap."""
+        with self._lock:
+            projected = self.spent_usd + max(0.0, usd)
+            if projected >= self.cap_usd:
+                raise BudgetExceededError(usd=projected, cap_usd=self.cap_usd, phase="pre_call")
+
+    def ensure_open(self) -> None:
+        """Never call a provider after another concurrent call exhausted the cap."""
+        with self._lock:
+            if self.spent_usd >= self.cap_usd:
+                raise BudgetExceededError(
+                    usd=self.spent_usd, cap_usd=self.cap_usd, phase="pre_call"
+                )

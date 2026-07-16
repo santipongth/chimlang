@@ -37,13 +37,13 @@
 - [x] Cytoscape interactive contention graph + evidence lineage Sankey
 - [x] keyboard/reduced-motion/responsive/table fallbacks + Vitest/Playwright
 
-## P8-M5 — Core Engine/Retrieval (ค้าง)
+## P8-M5 — Core Engine/Retrieval ✅
 
-- [ ] typed debate moves + lineage + deterministic verifier/analyst judge
-- [ ] bounded run-local reflection benchmark
-- [ ] embedding adapter ใต้ `core/llm/` + BudgetGuard + pgvector HNSW/BM25/RRF จริง
-- [ ] Thai retrieval/evidence/subgroup/social-desirability/future calibration benchmarks
-- [ ] OpenTelemetry/Prometheus/provider health dashboards
+- [x] typed debate moves + lineage + deterministic verifier/analyst judge
+- [x] bounded run-local reflection benchmark
+- [x] embedding adapter ใต้ `core/llm/` + BudgetGuard + pgvector HNSW/BM25/RRF จริง
+- [x] Thai retrieval/evidence/subgroup/social-desirability/future calibration benchmarks
+- [x] OpenTelemetry/Prometheus/provider health dashboards
 
 ## เกณฑ์ตรวจชุดที่ปิดแล้ว
 
@@ -53,4 +53,13 @@
 - SimulationFinding ไม่เข้า Calibration; legacy ไม่กระทบ Brier หลัก
 - mechanical revision ไม่ทับ analyst synthesis
 - validation ตรวจงบรวม 3 seeds ก่อน enqueue และ child มี `parent_run_id`
-- verification ล่าสุด: 369 tests, ruff check/format, web production build, frontend Vitest/Playwright desktop+mobile, Compose build/up ผ่าน
+- M5: typed move snapshot มี ID/type/parent/evidence refs; verifier replay ได้และ analyst judge ลดระดับ
+  verifier finding ไม่ได้; reflection opt-in จำกัด 2 calls/2400 chars/220 output tokens และไม่มี long-term memory
+- embedding model/ราคา/dimension ตั้งจาก Settings/env; ไม่ตั้งหรือ provider ใช้ไม่ได้ = BM25 fallback
+  พร้อม provenance; 1536d ใช้ HNSW, dimension อื่นบอกตรงว่า exact pgvector
+- telemetry เก็บเฉพาะ provider/operation/status/latency/token/cost/error taxonomy/model version
+  ไม่เก็บ prompt/response/secret/PII; `/metrics` และ `/observability.json` รองรับ ops dashboard
+- benchmark ดิบอยู่ `docs/reports/P8-M5-benchmarks.md`; fixture เล็กเป็น harness smoke ไม่ใช่หลักฐาน
+  ความแม่นโลกจริงหรือ causal benefit ของ reflection
+- verification ล่าสุด: 377 backend tests, ruff check/format, web OpenAPI generate/Vitest/build,
+  Playwright desktop+mobile, migration no-op ผ่าน

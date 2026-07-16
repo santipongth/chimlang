@@ -22,7 +22,15 @@ from core.config import get_settings
 from core.llm.adapter import LLMAdapter, ModelTier
 from core.llm.cost import BudgetGuard, CostEstimator, TierLoad
 from core.text import sanitize_llm_text
+from simulation.debate_protocol import (
+    MoveType,
+    compact_verifier_report,
+    normalize_evidence_refs,
+    normalize_move_type,
+    verify_moves,
+)
 from simulation.persona import Persona
+from simulation.reflection import ReflectionPolicy, RunLocalReflector
 from simulation.tipping import detect_tipping_points
 
 DEFAULT_ROUNDS = 3
@@ -36,8 +44,22 @@ POST_SCHEMA = {
         "stance": {"type": "number", "minimum": -1, "maximum": 1},
         "sentiment": {"type": "number", "minimum": -1, "maximum": 1},
         "want_to_know": {"type": "string"},
+        "move_type": {
+            "type": "string",
+            "enum": ["claim", "evidence", "counterclaim", "concession", "question"],
+        },
+        "reply_to": {"type": "string"},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
     },
-    "required": ["content", "stance", "sentiment", "want_to_know"],
+    "required": [
+        "content",
+        "stance",
+        "sentiment",
+        "want_to_know",
+        "move_type",
+        "reply_to",
+        "evidence_refs",
+    ],
     "additionalProperties": False,
 }
 
@@ -60,8 +82,28 @@ SYNTHESIS_SCHEMA = {
         },
         "key_drivers": {"type": "array", "items": {"type": "string"}},
         "risks": {"type": "array", "items": {"type": "string"}},
+        "judge": {
+            "type": "object",
+            "properties": {
+                "verdict": {"type": "string", "enum": ["pass", "warn", "fail"]},
+                "citation_assessment": {"type": "string"},
+                "contradiction_assessment": {"type": "string"},
+                "schema_assessment": {"type": "string"},
+                "unsupported_claims": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "verdict",
+                "citation_assessment",
+                "contradiction_assessment",
+                "schema_assessment",
+                "unsupported_claims",
+                "notes",
+            ],
+            "additionalProperties": False,
+        },
     },
-    "required": ["summary", "confidence", "distribution", "key_drivers", "risks"],
+    "required": ["summary", "confidence", "distribution", "key_drivers", "risks", "judge"],
     "additionalProperties": False,
 }
 
@@ -82,6 +124,10 @@ class DebatePost:
     failure_reason: str = ""
     want_to_know: str = ""  # query intent (P7-M3) — สิ่งที่ agent อยากรู้เพิ่ม → โต๊ะข่าวค้นให้
     parser_mode: str = ""
+    move_id: str = ""
+    move_type: str = MoveType.CLAIM
+    parent_move_id: str = ""
+    evidence_refs: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -95,6 +141,10 @@ class DebatePost:
             "failure_reason": self.failure_reason,
             "want_to_know": self.want_to_know,
             "parser_mode": self.parser_mode,
+            "move_id": self.move_id,
+            "move_type": str(self.move_type),
+            "parent_move_id": self.parent_move_id,
+            "evidence_refs": list(self.evidence_refs),
         }
 
 
@@ -112,7 +162,7 @@ class DebateResult:
         return [p for p in self.posts if not p.failed]
 
 
-def make_debate_adapter(agents: int, rounds: int) -> LLMAdapter:
+def make_debate_adapter(agents: int, rounds: int, *, reflection_calls: int = 0) -> LLMAdapter:
     """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap (ต่อรัน/รวมเดือน) = ไม่เริ่ม
 
     ใช้ค่าจากหน้าตั้งค่า (provider/model/ราคา/key/งบ) ถ้าผู้ใช้ตั้งไว้ (ADR-0006/0007)
@@ -126,17 +176,24 @@ def make_debate_adapter(agents: int, rounds: int) -> LLMAdapter:
 
     settings = effective_llm_settings()
     pricing = effective_pricing()
-    estimate = CostEstimator(pricing).estimate(
-        [
-            TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
-            TierLoad(settings.llm_model_analyst, 1, 1500, 800),
-        ]
-    )
+    loads = [
+        TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
+        TierLoad(settings.llm_model_analyst, 1 + max(0, reflection_calls), 1500, 800),
+    ]
+    if settings.llm_model_embedding.strip():
+        # One bounded document batch plus one query. Conservative Thai char/token estimate.
+        loads.append(TierLoad(settings.llm_model_embedding, 1, 12_000, 0))
+    estimate = CostEstimator(pricing).estimate(loads)
     # งบรวมเดือน (P6-M5) ก่อน — ยอดสะสม + estimate เกิน = block
     check_monthly_budget(settings.postgres_url, estimate.total_usd, effective_monthly_cap())
     guard = BudgetGuard(cap_usd=settings.run_budget_usd_cap)
     guard.check_estimate(estimate)  # งบต่อรัน
-    return LLMAdapter(settings, pricing, guard)
+    return LLMAdapter(
+        settings,
+        pricing,
+        guard,
+        monthly_cap_usd=effective_monthly_cap(),
+    )
 
 
 def _initial_stance(p: Persona) -> float:
@@ -171,6 +228,15 @@ def _parse_post(text: str) -> tuple[str, float, float, str]:
     sentiment = max(-1.0, min(1.0, float(data.get("sentiment", 0))))
     want = str(data.get("want_to_know", "")).strip()[:120]
     return content, stance, sentiment, want
+
+
+def _parse_move_metadata(text: str) -> tuple[str, str, tuple[str, ...]]:
+    data = _load_json_object(text)
+    return (
+        normalize_move_type(data.get("move_type")),
+        str(data.get("reply_to", "")).strip()[:80],
+        normalize_evidence_refs(data.get("evidence_refs")),
+    )
 
 
 def _load_json_object(text: str) -> dict:
@@ -332,6 +398,11 @@ def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict
             sentiment=float(p.get("sentiment", 0.0)),
             failed=bool(p.get("failed", False)),
             failure_reason=str(p.get("failure_reason", "")),
+            parser_mode=str(p.get("parser_mode", "")),
+            move_id=str(p.get("move_id", "")),
+            move_type=normalize_move_type(p.get("move_type")),
+            parent_move_id=str(p.get("parent_move_id", "")),
+            evidence_refs=normalize_evidence_refs(p.get("evidence_refs", [])),
         )
         for p in posts
     ]
@@ -346,6 +417,7 @@ def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict
     )
     synthesis["resynthesized_from_snapshot"] = True
     protocol = analyze_protocol(debate_posts, subject=subject, rounds=effective_rounds)
+    protocol["verifier"] = verify_moves(debate_posts)
     return {"synthesis": synthesis, "metrics": metrics, "protocol": protocol}
 
 
@@ -357,9 +429,11 @@ def run_debate(
     seed: int,
     adapter: LLMAdapter,
     context_chunks: tuple[str, ...] = (),
+    evidence_ids: tuple[str, ...] = (),
     segment_news: dict[str, tuple[str, ...]] | None = None,
     news_fetcher=None,  # callable(list[str]) -> dict[segment, tuple[str,...]] — โต๊ะข่าวค้นตาม intent
     on_round=None,
+    reflection_policy: ReflectionPolicy | None = None,
 ) -> DebateResult:
     settings = get_settings()
     if len(personas) > settings.max_agents_per_debate:
@@ -370,9 +444,13 @@ def run_debate(
     rng = Random(seed)
     stances = [_initial_stance(p) for p in personas]
     all_posts: list[DebatePost] = []
+    reflector = RunLocalReflector(adapter, reflection_policy) if reflection_policy else None
     news: dict[str, tuple[str, ...]] = dict(segment_news or {})  # media diet รายกลุ่ม (P7)
     context_block = (
-        "\n".join(f"[{i + 1}] {c[:600]}" for i, c in enumerate(context_chunks[:6]))
+        "\n".join(
+            f"[{evidence_ids[i] if i < len(evidence_ids) else f'E{i + 1}'}] {c[:600]}"
+            for i, c in enumerate(context_chunks[:6])
+        )
         if context_chunks
         else "(ไม่มีเอกสารอ้างอิง — ใช้มุมมองของกลุ่มคุณ)"
     )
@@ -386,7 +464,11 @@ def run_debate(
             pool = [p for p in prev if p.agent_idx != idx]
             chosen = pool if len(pool) <= REPLY_SAMPLE else rng.sample(pool, REPLY_SAMPLE)
             feeds.append(
-                "\n".join(f"- [{p.segment} | จุดยืน {p.stance:+.2f}]: {p.content}" for p in chosen)
+                "\n".join(
+                    f"- [{p.move_id} | {p.segment} | {p.move_type} | จุดยืน {p.stance:+.2f}]: "
+                    f"{p.content}"
+                    for p in chosen
+                )
                 or "(ยังไม่มีโพสต์ก่อนหน้า — นี่คือรอบเปิด แสดงมุมมองตั้งต้นของคุณ)"
             )
 
@@ -408,14 +490,23 @@ def run_debate(
             want_hint = (
                 ', "want_to_know": "สิ่งที่อยากรู้เพิ่มก่อนตัดสินใจ (สั้นๆ หรือเว้นว่าง)"' if news_fetcher else ""
             )
+            reflection_block = reflector.prompt_context() if reflector else ""
+            reflection_note = (
+                f"\nบทสรุปไตร่ตรองจากรอบก่อน (ใช้เฉพาะ run นี้):\n{reflection_block}\n"
+                if reflection_block
+                else ""
+            )
             user = (
                 f"หัวข้อดีเบต: {subject}\n\n"
                 f"ข้อมูลอ้างอิง:\n{context_block}\n{news_block}\n"
                 f"จุดยืนปัจจุบันของคุณ: {stances[idx]:+.2f} (−1 คัดค้านสุด … +1 เห็นด้วยสุด)\n\n"
-                f"โพสต์ล่าสุดจากคนอื่น (รอบ {r}):\n{feeds[idx]}\n\n"
+                f"โพสต์ล่าสุดจากคนอื่น (รอบ {r + 1}):\n{feeds[idx]}\n{reflection_note}\n"
                 "เขียนโพสต์ 1 โพสต์ (ไม่เกิน 60 คำ) ตามเสียงของกลุ่มคุณ — โต้ตอบประเด็น/โพสต์อื่นได้\n"
                 'ตอบ JSON: {"content": "ข้อความโพสต์", "stance": จุดยืนใหม่ -1..1, '
-                f'"sentiment": โทนอารมณ์ -1..1{want_hint}}}'
+                f'"sentiment": โทนอารมณ์ -1..1{want_hint}, '
+                '"move_type": "claim|evidence|counterclaim|concession|question", '
+                '"reply_to": "move ID ก่อนหน้า หรือเว้นว่าง", '
+                '"evidence_refs": ["evidence ID เช่น E1"]}'
             )
             try:
                 structured_kwargs = (
@@ -436,6 +527,7 @@ def run_debate(
                     **structured_kwargs,
                 )
                 content, stance, sentiment, want = _parse_post(result.text)
+                move_type, parent_move_id, refs = _parse_move_metadata(result.text)
                 return DebatePost(
                     r,
                     idx,
@@ -445,6 +537,10 @@ def run_debate(
                     sentiment,
                     want_to_know=want,
                     parser_mode=getattr(result, "structured_mode", "parser_fallback_capability"),
+                    move_id=f"m-r{r + 1}-a{idx + 1}",
+                    move_type=move_type,
+                    parent_move_id=parent_move_id,
+                    evidence_refs=refs,
                 )
             except Exception as exc:
                 # fail-closed: ติดธง ไม่ปนใน metrics — จุดยืนเดิมคงไว้
@@ -458,6 +554,8 @@ def run_debate(
                     failed=True,
                     failure_reason=_failure_reason(exc),
                     parser_mode="failed",
+                    move_id=f"m-r{r + 1}-a{idx + 1}",
+                    move_type=MoveType.CLAIM,
                 )
 
         with ThreadPoolExecutor(max_workers=8) as pool_ex:
@@ -466,6 +564,12 @@ def run_debate(
             if not post.failed:
                 stances[post.agent_idx] = post.stance
         all_posts.extend(round_posts)
+        if reflector and r < rounds - 1:
+            try:
+                reflector.reflect(subject=subject, round_no=r, posts=round_posts, seed=seed)
+            except Exception:
+                # Reflection is an optional bounded aid; failure never corrupts typed moves.
+                pass
         # query intent (P7-M3): รวบสิ่งที่ agent อยากรู้ → โต๊ะข่าวค้นให้ก่อนรอบถัดไป
         if news_fetcher and r < rounds - 1:
             from simulation.newsdesk import dedupe_intents
@@ -483,6 +587,21 @@ def run_debate(
 
     metrics = _compute_metrics(all_posts, rounds, len(personas))
     protocol = analyze_protocol(all_posts, subject=subject, rounds=rounds)
+    verifier = verify_moves(all_posts, evidence_ids=set(evidence_ids))
+    protocol["verifier"] = verifier
+    protocol["move_lineage"] = verifier["lineage"]
+    protocol["reflections"] = list(reflector.summaries) if reflector else []
+    protocol["reflection_policy"] = (
+        {
+            "max_calls": reflector.policy.max_calls,
+            "max_input_chars": reflector.policy.max_input_chars,
+            "max_output_tokens": reflector.policy.max_output_tokens,
+            "calls_used": reflector.calls,
+            "scope": "run_local_only",
+        }
+        if reflector
+        else {"enabled": False, "scope": "run_local_only"}
+    )
     if metrics["posts_ok"] == 0:
         failures = protocol["failure_taxonomy"]
         summary = ", ".join(f"{reason}={count}" for reason, count in sorted(failures.items()))
@@ -492,6 +611,9 @@ def run_debate(
 
     ok_last = [p for p in all_posts if not p.failed and p.round_no == rounds - 1]
     digest = "\n".join(f"- [{p.segment}] จุดยืน {p.stance:+.2f}: {p.content}" for p in ok_last)
+    verifier_digest = json.dumps(
+        compact_verifier_report(verifier), ensure_ascii=False, separators=(",", ":")
+    )
     try:
         structured_kwargs = (
             {"response_schema": SYNTHESIS_SCHEMA, "schema_name": "debate_synthesis"}
@@ -503,15 +625,23 @@ def run_debate(
             [
                 {
                     "role": "system",
-                    "content": "คุณคือนักวิเคราะห์ สรุปผลดีเบตจำลอง ตอบภาษาไทยเท่านั้น ตอบ JSON ล้วน",
+                    "content": (
+                        "คุณคือนักวิเคราะห์และ judge สรุปผลดีเบตจำลอง ตอบภาษาไทยเท่านั้น "
+                        "ตอบ JSON ล้วน ห้ามลดทอนข้อผิดพลาดที่ deterministic verifier รายงาน"
+                    ),
                 },
                 {
                     "role": "user",
                     "content": f"หัวข้อ: {subject}\nรอบดีเบต: {rounds}\n\n"
                     f"จุดยืนสุดท้ายของ agents:\n{digest}\n\n"
+                    f"รายงาน verifier:\n{verifier_digest}\n\n"
                     'ตอบ JSON: {"summary": "2-3 ประโยค", "confidence": 0..1, '
                     '"distribution": [{"bucket": "ชื่อกลุ่มความเห็น", "pct": %}], '
-                    '"key_drivers": ["ปัจจัย 3-5 ข้อ"], "risks": ["ความเสี่ยง 2-4 ข้อ"]}',
+                    '"key_drivers": ["ปัจจัย 3-5 ข้อ"], "risks": ["ความเสี่ยง 2-4 ข้อ"], '
+                    '"judge": {"verdict": "pass|warn|fail", '
+                    '"citation_assessment": "...", "contradiction_assessment": "...", '
+                    '"schema_assessment": "...", '
+                    '"unsupported_claims": ["..."], "notes": ["..."]}}',
                 },
             ],
             max_tokens=900,
@@ -524,10 +654,37 @@ def run_debate(
         synthesis["fallback"] = False
         synthesis["parser_mode"] = getattr(result, "structured_mode", "parser_fallback_capability")
         synthesis["model_version"] = getattr(result, "model", "")
+        judge = synthesis.get("judge")
+        if not isinstance(judge, dict):
+            synthesis["judge"] = {
+                "verdict": "fail" if verifier["status"] == "fail" else "warn",
+                "citation_assessment": "analyst response ไม่มี judge contract",
+                "contradiction_assessment": "ใช้ deterministic verifier เท่านั้น",
+                "schema_assessment": "analyst response ไม่มี judge contract",
+                "unsupported_claims": [],
+                "notes": ["analyst_judge_unavailable"],
+            }
+        else:
+            verdict_rank = {"pass": 0, "warn": 1, "fail": 2}
+            verifier_floor = verifier.get("status", "pass")
+            analyst_rank = verdict_rank.get(judge.get("verdict"), -1)
+            if verifier_floor in verdict_rank and analyst_rank < verdict_rank[verifier_floor]:
+                judge["verdict"] = verifier_floor
+                judge["notes"] = [*list(judge.get("notes") or []), "verifier_floor_applied"]
     except Exception as exc:
         synthesis = _mechanical_synthesis(all_posts, subject, rounds)
         synthesis["parser_mode"] = "mechanical_fallback"
         synthesis["failure_reason"] = _failure_reason(exc)
+        synthesis["judge"] = {
+            "verdict": verifier["status"],
+            "citation_assessment": "ใช้ deterministic verifier เพราะ analyst judge ไม่พร้อม",
+            "contradiction_assessment": "ใช้ deterministic verifier เพราะ analyst judge ไม่พร้อม",
+            "schema_assessment": "ใช้ deterministic verifier เพราะ analyst judge ไม่พร้อม",
+            "unsupported_claims": [],
+            "notes": ["mechanical_judge_fallback"],
+        }
+
+    protocol["analyst_judge"] = synthesis["judge"]
 
     # ความมั่นใจถูกลดตามสัดส่วน agent ที่พัง (คำตอบหายไป = ความไม่แน่นอนเพิ่ม)
     failed = metrics["posts_failed"]
@@ -538,7 +695,7 @@ def run_debate(
     return DebateResult(
         posts=tuple(all_posts),
         synthesis=synthesis,
-        metrics={**metrics, "protocol_version": 1},
+        metrics={**metrics, "protocol_version": 2},
         protocol=protocol,
         failed_posts=failed,
         cost_usd=round(spent_after - spent_before, 6),

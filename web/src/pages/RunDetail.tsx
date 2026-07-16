@@ -290,6 +290,9 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
   const nodes = protocol.contention_graph?.nodes ?? [];
   const edges = protocol.contention_graph?.edges ?? [];
   const failures = Object.entries(protocol.failure_taxonomy ?? {});
+  const verifier = protocol.verifier ?? null;
+  const judge = protocol.analyst_judge ?? null;
+  const reflections = protocol.reflections ?? [];
   return (
     <div>
       <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
@@ -333,6 +336,29 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
           {failures.map(([k, v], i) => (
             <span key={k}>{i > 0 ? ", " : ""}{t(`failure_${k}`) === `failure_${k}` ? k : t(`failure_${k}`)} {String(v)}</span>
           ))}
+        </div>
+      )}
+      {(verifier || judge) && (
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-border bg-background p-3 text-xs">
+            <div className="font-semibold">Deterministic verifier</div>
+            <div className="mt-1 text-muted-foreground">status {verifier?.status ?? "legacy"} · checked {verifier?.moves_checked ?? 0} moves · {verifier?.violations?.length ?? 0} findings</div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {Object.entries(verifier?.counts ?? {}).map(([key, value]) => <span key={key} className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">{key}: {String(value)}</span>)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-background p-3 text-xs">
+            <div className="font-semibold">Analyst judge</div>
+            <div className="mt-1 text-muted-foreground">verdict {judge?.verdict ?? "unavailable"}</div>
+            <p className="mt-2">{judge?.citation_assessment ?? "—"}</p>
+            <p className="mt-1">{judge?.contradiction_assessment ?? "—"}</p>
+            <p className="mt-1">{judge?.schema_assessment ?? "—"}</p>
+          </div>
+        </div>
+      )}
+      {reflections.length > 0 && (
+        <div className="mt-3 rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
+          Run-local reflection {reflections.length} ครั้ง · จำกัดเฉพาะ run นี้ · ไม่มี long-term memory
         </div>
       )}
     </div>
@@ -746,13 +772,24 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                   .map((x, i) => (
                     <li key={i} className={`rounded-xl border p-3 text-sm ${x.failed ? "border-dashed border-border opacity-50" : "border-border bg-background"}`}>
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">{x.segment}</span>
+                        <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">
+                          {x.segment}
+                          <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{x.move_type ?? "legacy claim"}</span>
+                          {x.move_id && <code className="text-[10px] text-muted-foreground">{x.move_id}</code>}
+                        </span>
                         <span className="flex items-center gap-2">
                           <StanceBar v={x.stance} />
                           <span className="tabular-nums w-12">{x.stance >= 0 ? "+" : ""}{x.stance.toFixed(2)}</span>
                         </span>
                       </div>
                       <p className="mt-1">{x.failed ? `(${t("rd_post_failed")})` : x.content}</p>
+                      {!x.failed && (x.parent_move_id || (x.evidence_refs?.length ?? 0) > 0) && (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {x.parent_move_id ? `↳ ${x.parent_move_id}` : ""}
+                          {x.parent_move_id && x.evidence_refs?.length ? " · " : ""}
+                          {x.evidence_refs?.length ? `evidence ${x.evidence_refs.join(", ")}` : ""}
+                        </p>
+                      )}
                     </li>
                   ))}
               </ul>

@@ -48,7 +48,11 @@ CREATE TABLE IF NOT EXISTS debate_posts (
     sentiment DOUBLE PRECISION NOT NULL,
     failed BOOLEAN NOT NULL DEFAULT false,
     failure_reason TEXT NOT NULL DEFAULT '',
-    parser_mode TEXT NOT NULL DEFAULT ''
+    parser_mode TEXT NOT NULL DEFAULT '',
+    move_id TEXT NOT NULL DEFAULT '',
+    move_type TEXT NOT NULL DEFAULT 'claim',
+    parent_move_id TEXT NOT NULL DEFAULT '',
+    evidence_refs JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 CREATE INDEX IF NOT EXISTS debate_posts_run ON debate_posts (run_id, round_no, agent_idx);
 CREATE TABLE IF NOT EXISTS run_events (
@@ -146,11 +150,15 @@ class RunStore:
                 "UPDATE sim_runs SET status = 'running', started_at = COALESCE(started_at, now()), "
                 "progress = GREATEST(progress, 5), progress_message = %s, "
                 "heartbeat_at = now(), attempt = attempt + 1 "
-                "WHERE run_id = %s AND status = 'queued' RETURNING run_id",
+                "WHERE run_id = %s AND status = 'queued' "
+                "RETURNING run_id, engine, extract(epoch FROM (started_at - queued_at))",
                 (message, run_id),
             ).fetchone()
             if updated is None:
                 return False
+        from core.observability import QUEUE_LATENCY
+
+        QUEUE_LATENCY.labels(str(updated[1])).observe(max(0.0, float(updated[2] or 0)))
         self.add_event(run_id, "running", stage="start", progress=5, message=message)
         return True
 
@@ -207,11 +215,15 @@ class RunStore:
 
     def fail(self, run_id: str, error: str) -> None:
         with self._conn() as conn:
-            conn.execute(
+            row = conn.execute(
                 "UPDATE sim_runs SET status = 'error', error = %s, progress_message = 'error', "
-                "finished_at = now() WHERE run_id = %s",
+                "finished_at = now() WHERE run_id = %s RETURNING engine",
                 (safe_event_message(error), run_id),
-            )
+            ).fetchone()
+        if row:
+            from core.observability import RUN_FAILURES
+
+            RUN_FAILURES.labels(str(row[0]), "run_failed").inc()
         self.add_event(
             run_id,
             "failed",
@@ -237,8 +249,9 @@ class RunStore:
             conn.cursor().executemany(
                 "INSERT INTO debate_posts "
                 "(run_id, round_no, agent_idx, segment, content, stance, sentiment, "
-                "failed, failure_reason, parser_mode) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "failed, failure_reason, parser_mode, move_id, move_type, parent_move_id, "
+                "evidence_refs) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
                 [
                     (
                         run_id,
@@ -251,6 +264,10 @@ class RunStore:
                         p.get("failed", False),
                         p.get("failure_reason", ""),
                         p.get("parser_mode", ""),
+                        p.get("move_id", ""),
+                        p.get("move_type", "claim"),
+                        p.get("parent_move_id", ""),
+                        json.dumps(p.get("evidence_refs", []), ensure_ascii=False),
                     )
                     for p in posts
                 ],
@@ -316,7 +333,9 @@ class RunStore:
                 raise ValueError(f"ไม่พบ run {run_id}")
             posts = conn.execute(
                 "SELECT round_no, agent_idx, segment, content, stance, sentiment, failed, "
-                "COALESCE(failure_reason, ''), COALESCE(parser_mode, '') "
+                "COALESCE(failure_reason, ''), COALESCE(parser_mode, ''), "
+                "COALESCE(move_id, ''), COALESCE(move_type, 'claim'), "
+                "COALESCE(parent_move_id, ''), COALESCE(evidence_refs, '[]'::jsonb) "
                 "FROM debate_posts WHERE run_id = %s ORDER BY round_no, agent_idx",
                 (run_id,),
             ).fetchall()
@@ -364,6 +383,10 @@ class RunStore:
                     "failed": p[6],
                     "failure_reason": p[7],
                     "parser_mode": p[8],
+                    "move_id": p[9],
+                    "move_type": p[10],
+                    "parent_move_id": p[11],
+                    "evidence_refs": p[12],
                 }
                 for p in posts
             ],

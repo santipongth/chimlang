@@ -5,14 +5,17 @@
 - ทุก call ถูกคิดเงินผ่าน BudgetGuard — แตะ cap แล้ว abort ทันที (กฎ Cost guard)
 """
 
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 
 from openai import OpenAI
 
 from core.config import Settings
+from core.llm.budget import check_monthly_budget, record_spend
 from core.llm.cost import BudgetGuard
 from core.llm.pricing import PricingRegistry
+from core.observability import provider_name, record_provider_call, traced
 
 
 class ModelTier(StrEnum):
@@ -34,6 +37,15 @@ class LLMResult:
     structured_mode: str = "none"
 
 
+@dataclass(frozen=True)
+class EmbeddingResult:
+    vectors: tuple[tuple[float, ...], ...]
+    model: str
+    dimension: int
+    input_tokens: int
+    cost_usd: float
+
+
 class LLMAdapter:
     def __init__(
         self,
@@ -41,6 +53,8 @@ class LLMAdapter:
         pricing: PricingRegistry,
         guard: BudgetGuard,
         client: OpenAI | None = None,
+        run_id: str = "",
+        monthly_cap_usd: float = 0.0,
     ):
         self._models = {
             ModelTier.CROWD: settings.llm_model_crowd,
@@ -55,6 +69,12 @@ class LLMAdapter:
         self._pricing = pricing
         self._guard = guard
         self._base_url = settings.llm_base_url or ""
+        self._embedding_model = settings.llm_model_embedding.strip()
+        self._embedding_dimension = int(settings.llm_embedding_dimension)
+        self._dsn = settings.postgres_url
+        self._run_id = run_id
+        self._monthly_cap_usd = max(0.0, monthly_cap_usd)
+        self._provider = provider_name(self._base_url)
         self._client = client or OpenAI(
             base_url=settings.llm_base_url or None,
             api_key=settings.llm_api_key,
@@ -68,6 +88,21 @@ class LLMAdapter:
         """Capability gate before adding JSON Schema parameters to a provider request."""
         base = self._base_url.lower()
         return "openrouter" in base or "api.openai.com" in base
+
+    def supports_embeddings(self) -> bool:
+        return bool(self._embedding_model)
+
+    @property
+    def embedding_model(self) -> str:
+        return self._embedding_model
+
+    @property
+    def embedding_dimension(self) -> int:
+        return self._embedding_dimension
+
+    def bind_run(self, run_id: str) -> None:
+        """Attach safe operational lineage before calls; no prompt/content is recorded."""
+        self._run_id = run_id[:160]
 
     def chat(
         self,
@@ -90,6 +125,7 @@ class LLMAdapter:
         เพื่อไม่กระทบคุณภาพที่ benchmark ไว้ (ADR-0001)
         """
         model = self._models[tier]
+        self._guard.ensure_open()
         kwargs: dict = {"model": model, "messages": messages, "max_tokens": max_tokens}
         if temperature is not None:
             kwargs["temperature"] = temperature
@@ -115,28 +151,60 @@ class LLMAdapter:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
+        started = time.monotonic()
         try:
-            response = self._client.chat.completions.create(**kwargs)
+            with traced("llm.chat", provider=self._provider, tier=tier.value):
+                try:
+                    response = self._client.chat.completions.create(**kwargs)
+                except Exception as exc:
+                    if not (
+                        response_schema is not None
+                        and allow_parser_fallback
+                        and self._structured_output_unsupported(exc)
+                    ):
+                        raise
+                    kwargs.pop("response_format", None)
+                    if extra_body.get("provider"):
+                        extra_body.pop("provider")
+                    if extra_body:
+                        kwargs["extra_body"] = extra_body
+                    else:
+                        kwargs.pop("extra_body", None)
+                    response = self._client.chat.completions.create(**kwargs)
+                    structured_mode = "parser_fallback_unsupported"
         except Exception as exc:
-            if not (
-                response_schema is not None
-                and allow_parser_fallback
-                and self._structured_output_unsupported(exc)
-            ):
-                raise
-            kwargs.pop("response_format", None)
-            if extra_body.get("provider"):
-                extra_body.pop("provider")
-            if extra_body:
-                kwargs["extra_body"] = extra_body
-            else:
-                kwargs.pop("extra_body", None)
-            response = self._client.chat.completions.create(**kwargs)
-            structured_mode = "parser_fallback_unsupported"
+            record_provider_call(
+                self._dsn,
+                run_id=self._run_id,
+                provider=self._provider,
+                operation="chat",
+                tier=tier.value,
+                status="error",
+                latency_s=time.monotonic() - started,
+                error_kind=type(exc).__name__,
+                model_version=model,
+            )
+            raise
 
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
         cost_usd = self._pricing.cost_usd(model, input_tokens, output_tokens)
+        record_provider_call(
+            self._dsn,
+            run_id=self._run_id,
+            provider=self._provider,
+            operation="chat",
+            tier=tier.value,
+            status="success",
+            latency_s=time.monotonic() - started,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
+            model_version=response.model or model,
+        )
+        if self._run_id:
+            # Per-call ledger includes failed runs and calls that exhaust the runtime cap.
+            record_spend(self._dsn, cost_usd, run_id=self._run_id)
         # คิดเงินก่อน return — ถ้าแตะ cap จะ raise BudgetExceededError = abort run
         self._guard.add_actual(cost_usd)
 
@@ -148,6 +216,77 @@ class LLMAdapter:
             cost_usd=cost_usd,
             structured_mode=structured_mode,
         )
+
+    def embed(self, texts: list[str]) -> EmbeddingResult:
+        """Create evidence embeddings through the same priced, guarded provider path."""
+
+        if not texts:
+            return EmbeddingResult((), self._embedding_model, self._embedding_dimension, 0, 0.0)
+        if not self._embedding_model:
+            raise AdapterConfigError("ยังไม่ได้ตั้งค่า embedding model")
+        clean = [str(text)[:12000] for text in texts]
+        # Thai can tokenize close to one code point/token, so use chars as a conservative bound.
+        estimated_tokens = sum(max(1, len(text)) for text in clean)
+        estimated_cost = self._pricing.cost_usd(self._embedding_model, estimated_tokens, 0)
+        self._guard.check_additional(estimated_cost)
+        if self._run_id and self._monthly_cap_usd > 0:
+            check_monthly_budget(self._dsn, estimated_cost, self._monthly_cap_usd)
+        started = time.monotonic()
+        try:
+            with traced(
+                "llm.embedding",
+                provider=self._provider,
+                tier="embedding",
+                input_count=len(clean),
+            ):
+                response = self._client.embeddings.create(
+                    model=self._embedding_model,
+                    input=clean,
+                    dimensions=self._embedding_dimension,
+                )
+        except Exception as exc:
+            record_provider_call(
+                self._dsn,
+                run_id=self._run_id,
+                provider=self._provider,
+                operation="embedding",
+                tier="embedding",
+                status="error",
+                latency_s=time.monotonic() - started,
+                error_kind=type(exc).__name__,
+                model_version=self._embedding_model,
+            )
+            raise
+        vectors = tuple(tuple(float(value) for value in item.embedding) for item in response.data)
+        dimension = len(vectors[0]) if vectors else 0
+        if len(vectors) != len(clean) or not dimension or any(len(v) != dimension for v in vectors):
+            raise AdapterConfigError("embedding provider คืน vector shape ไม่ครบ")
+        if dimension != self._embedding_dimension:
+            raise AdapterConfigError(
+                f"embedding dimension ไม่ตรง: ได้ {dimension}, ตั้งไว้ {self._embedding_dimension}"
+            )
+        usage = getattr(response, "usage", None)
+        input_tokens = int(
+            getattr(usage, "prompt_tokens", 0) or getattr(usage, "total_tokens", 0) or 0
+        )
+        cost_usd = self._pricing.cost_usd(self._embedding_model, input_tokens, 0)
+        model_version = getattr(response, "model", "") or self._embedding_model
+        record_provider_call(
+            self._dsn,
+            run_id=self._run_id,
+            provider=self._provider,
+            operation="embedding",
+            tier="embedding",
+            status="success",
+            latency_s=time.monotonic() - started,
+            input_tokens=input_tokens,
+            cost_usd=cost_usd,
+            model_version=model_version,
+        )
+        if self._run_id:
+            record_spend(self._dsn, cost_usd, run_id=self._run_id)
+        self._guard.add_actual(cost_usd)
+        return EmbeddingResult(vectors, model_version, dimension, input_tokens, cost_usd)
 
     @staticmethod
     def _structured_output_unsupported(exc: Exception) -> bool:

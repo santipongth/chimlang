@@ -13,9 +13,10 @@ from collections import deque
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.auth import get_principal, require, require_election
@@ -42,8 +43,11 @@ from trust.universe import run_multiverse_whatif
 async def lifespan(_app: FastAPI):
     """Runtime only checks the migration ledger; it never creates or alters tables."""
     from core.db import close_pools, require_schema
+    from core.observability import configure_telemetry
 
-    require_schema(get_settings().postgres_url)
+    settings = get_settings()
+    require_schema(settings.postgres_url)
+    configure_telemetry("chimlang-api", settings.otel_exporter_otlp_endpoint)
     yield
     close_pools()
 
@@ -87,7 +91,10 @@ EVENT = "กทม. แถลงชี้แจงทางการ: ร่า�
 @app.middleware("http")
 async def security_headers(request, call_next):
     """M6 (NFR-05 ขั้นต่ำ): ป้องกัน MIME sniffing / clickjacking — TLS เป็นหน้าที่ reverse proxy"""
-    response = await call_next(request)
+    from core.observability import traced
+
+    with traced("http.request", method=request.method, path=request.url.path):
+        response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
@@ -129,6 +136,27 @@ def health_deep() -> dict:
         components["neo4j"] = f"down: {type(e).__name__}"
     overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
     return {"status": overall, "components": components}
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics() -> Response:
+    from core.observability import prometheus_payload
+
+    payload, content_type = prometheus_payload()
+    return Response(content=payload, media_type=content_type)
+
+
+@app.get("/observability.json")
+def observability_json(
+    hours: int = Query(24, ge=1, le=720), principal: Principal = Depends(get_principal)
+) -> dict:
+    from core.observability import provider_health
+
+    try:
+        return provider_health(get_settings().postgres_url, hours=hours)
+    except Exception as exc:
+        detail = f"อ่าน telemetry ไม่สำเร็จ: {type(exc).__name__}"
+        raise HTTPException(status_code=503, detail=detail) from exc
 
 
 @app.get("/graph/indirect.json")
@@ -527,8 +555,11 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
             "active_base_url": eff.llm_base_url,
             "active_model_crowd": eff.llm_model_crowd,
             "active_model_analyst": eff.llm_model_analyst,
+            "active_model_embedding": eff.llm_model_embedding,
+            "embedding_dimension": eff.llm_embedding_dimension,
             "env_model_crowd": settings.llm_model_crowd,
             "env_model_analyst": settings.llm_model_analyst,
+            "env_model_embedding": settings.llm_model_embedding,
             "yaml_prices": yaml_prices,
         },
         "budget": {
@@ -622,8 +653,9 @@ class RunBody(BaseModel):
     views: list[str] = []
     # News Desk (P7, SIM-11): เปิดโต๊ะข่าวสด (debate เท่านั้น) — agent ได้ข่าวตาม media diet กลุ่มตัวเอง
     live_news: bool = False
-    retrieval_mode: str = "hybrid"
+    retrieval_mode: Literal["hybrid", "bm25", "vector"] = "hybrid"
     parent_run_id: str = ""
+    reflection: bool = False
 
 
 @app.get("/engines.json")
@@ -765,6 +797,7 @@ def _run_create_impl(
         "requested_agents": body.agents,
         "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
         "live_news": body.live_news,  # provenance: run นี้ใช้ข่าวสดหรือไม่ (P7)
+        "reflection": body.reflection,
     }
     config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
@@ -804,11 +837,17 @@ def _run_create_impl(
             from simulation.debate import make_debate_adapter, run_debate
             from simulation.persona import PersonaFactory
             from simulation.redteam_population import inject_red_team
+            from simulation.reflection import ReflectionPolicy
             from simulation.sources import retrieve_evidence
 
             # Budget/model readiness must fail before source or News Desk I/O.
             rstore.update_progress(run_id, 10, "กำลังตรวจงบและโมเดล")
-            debate_adapter = make_debate_adapter(n, rounds)
+            if body.reflection:
+                debate_adapter = make_debate_adapter(n, rounds, reflection_calls=min(2, rounds - 1))
+            else:
+                debate_adapter = make_debate_adapter(n, rounds)
+            if hasattr(debate_adapter, "bind_run"):
+                debate_adapter.bind_run(run_id)
             personas = (factory or PersonaFactory()).sample(n, seed=run_seed, max_agents=n)
             if body.red_team:
                 personas = inject_red_team(personas)
@@ -820,10 +859,26 @@ def _run_create_impl(
                 source_status = ingest_sources(settings.postgres_url, run_id, body.sources)
             else:
                 rstore.update_progress(run_id, 20, "ไม่มีหลักฐานแนบ")
+            embedding_status: dict = {"status": "not_requested"}
+            if body.retrieval_mode in {"hybrid", "vector"}:
+                from simulation.sources import index_run_embeddings
+
+                try:
+                    embedding_status = index_run_embeddings(
+                        settings.postgres_url, run_id, debate_adapter
+                    )
+                except Exception as exc:
+                    embedding_status = {"status": "unavailable", "reason": type(exc).__name__}
             evidence_matches = retrieve_evidence(
-                settings.postgres_url, run_id, subject, k=6, mode=body.retrieval_mode
+                settings.postgres_url,
+                run_id,
+                subject,
+                k=6,
+                mode=body.retrieval_mode,
+                embedding_adapter=debate_adapter,
             )
             context = tuple(item["content"] for item in evidence_matches)
+            evidence_ids = tuple(f"E{i + 1}" for i in range(len(evidence_matches)))
             # News Desk (P7, SIM-11): โต๊ะข่าวกลางดึงข่าวสด → media diet รายกลุ่ม
             segment_news: dict[str, tuple[str, ...]] = {}
             news_fetcher = None
@@ -877,14 +932,17 @@ def _run_create_impl(
                 seed=run_seed,
                 adapter=debate_adapter,
                 context_chunks=context,
+                evidence_ids=evidence_ids,
                 segment_news=segment_news,
                 news_fetcher=news_fetcher,
+                reflection_policy=ReflectionPolicy() if body.reflection else None,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
-            # งบรวมเดือน (P6-M5): บันทึกยอดจ่ายจริงเพื่อคุมสะสมทั้งเดือน
-            from core.llm.budget import record_spend
-
-            record_spend(settings.postgres_url, result.cost_usd, run_id=run_id)
+            total_cost = (
+                float(debate_adapter._guard.spent_usd)
+                if hasattr(debate_adapter, "_guard")
+                else result.cost_usd
+            )
             # อัปเดตรายการข่าวหลังรัน (รวมที่ค้นเพิ่มจาก intent ระหว่างรอบ)
             if news_status.get("enabled"):
                 from simulation.newsdesk import load_items as _reload_news
@@ -905,11 +963,12 @@ def _run_create_impl(
                 "synthesis": result.synthesis,
                 "metrics": result.metrics,
                 "protocol": result.protocol,
-                "cost_usd": result.cost_usd,
+                "cost_usd": round(total_cost, 6),
                 "red_team": body.red_team,
                 "sources": source_status,
                 "evidence_matches": evidence_matches,
                 "context_used": len(context),
+                "embedding": embedding_status,
                 "news": news_status,
             }
         rstore.update_progress(run_id, 90, "กำลังบันทึก finding/prediction contract")
@@ -1007,6 +1066,7 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
                 "retrieval_mode": body.retrieval_mode,
                 "parent_run_id": body.parent_run_id,
                 "seed": run_seed,
+                "reflection": body.reflection,
             },
             status="queued",
             parent_run_id=body.parent_run_id,
@@ -1015,9 +1075,14 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
     payload = body.model_dump()
+    from core.observability import inject_trace_headers
+
+    trace_headers = inject_trace_headers()
     if celery_app.conf.task_always_eager:
         res = persistent_run_task.apply(
-            args=(payload, principal.user_id, principal.election_verified, run_id), throw=True
+            args=(payload, principal.user_id, principal.election_verified, run_id),
+            headers=trace_headers,
+            throw=True,
         )
         rstore.attach_job(run_id, res.id)
         return {"job_id": res.id, "run_id": run_id, "status": "SUCCESS", "result": res.get()}
@@ -1025,6 +1090,7 @@ def run_create_async(body: RunBody, principal: Principal = Depends(get_principal
         res = persistent_run_task.apply_async(
             args=(payload, principal.user_id, principal.election_verified, run_id),
             queue=body.engine,
+            headers=trace_headers,
         )
         rstore.attach_job(run_id, res.id)
     except Exception as e:
