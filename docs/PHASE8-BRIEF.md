@@ -82,7 +82,7 @@
   วิเคราะห์ snapshot ของ stored runs เท่านั้นและ `public_votes_used=false`; contention graph จำกัด 24 segment
   เพื่อไม่ให้ layout O(n²) บล็อกหน้า แต่ Debate feed เก็บครบและ virtualize 1,000 posts
 - M7: sweep/validation reservation batch ใช้ transaction advisory lock ก่อน enqueue และ settle/release ตาม actual spend;
-  readiness `public-ga` block เมื่อ TLS/pen-test/OIDC/RLS ไม่พร้อม; ADR-0012 ยัง Proposed จึงไม่มี
+  readiness `public-ga` block เมื่อ TLS/pen-test/OIDC/RLS ไม่พร้อม; ADR-0012 ถูก Deferred จึงไม่มี
   fake multi-tenant หรือ TLS vendor choice ใน production code
 - verification ล่าสุด: 387 backend tests, ruff check/format, web OpenAPI generate/Vitest/build,
   Playwright 8 tests desktop+mobile, migration no-op ผ่าน

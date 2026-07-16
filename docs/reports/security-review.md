@@ -11,7 +11,7 @@
   ไม่พบ known vulnerability ใน dependency (ตัว package `chimlang` เองถูก skip เพราะไม่ใช่ package บน PyPI)
 - `scripts.production_readiness` ไม่แสดงค่า secret และ fail-closed สำหรับ public GA เมื่อไม่มี HTTPS,
   independent pen-test, OIDC หรือ PostgreSQL RLS
-- ADR-0012 ยัง Proposed: ระบบ production ปัจจุบันยังเป็น self-hosted single-tenant + API key ตามมติเดิม;
+- ADR-0012 ถูก Deferred: ระบบ production ปัจจุบันยังเป็น self-hosted single-tenant + API key ตามมติเดิม;
   readiness metadata ไม่ได้แปลว่า OIDC/RLS ถูก implement แล้ว
 
 ## 🆕 Surface ใหม่จาก Phase 5 (12 ก.ค. 2026)

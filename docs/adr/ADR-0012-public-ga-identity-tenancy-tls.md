@@ -1,6 +1,6 @@
 # ADR-0012 — Public GA identity, tenant isolation และ TLS
 
-สถานะ: **Proposed — รอมติผู้ใช้ก่อน implement**
+สถานะ: **Deferred — บันทึกใน `docs/FUTURE-WORK.md` ตามมติผู้ใช้ 16 ก.ค. 2026**
 
 วันที่: 16 ก.ค. 2026
 
@@ -27,7 +27,7 @@
 - PostgreSQL RLS เป็นด่าน fail-closed ใกล้ system of record มากกว่ากรองเฉพาะ application query
 - TLS ที่ reverse proxy แยก certificate lifecycle ออกจาก FastAPI และรองรับ deployment เดิม
 
-## มติที่ต้องการจากผู้ใช้
+## มติที่ต้องการเมื่อหยิบงานกลับมาทำ
 
 - TLS อยู่ที่ Caddy ใน Compose หรือ load balancer/reverse proxy ขององค์กร
 - OIDC provider/issuer และ claim ที่ใช้ map tenant/role
