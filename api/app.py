@@ -39,6 +39,7 @@ from api.routers.experiments import router as experiments_router
 from api.routers.ops import router as ops_router
 from api.routers.personas import router as personas_router
 from api.routers.policy import router as policy_router
+from api.routers.populations import router as populations_router
 from api.routers.projects import router as projects_router
 from api.routers.rehearsals import router as rehearsals_router
 from api.routers.runs import router as runs_router
@@ -77,6 +78,7 @@ app.include_router(experiments_router)
 app.include_router(ops_router)
 app.include_router(settings_router)
 app.include_router(personas_router)
+app.include_router(populations_router)
 app.include_router(policy_router)
 app.include_router(watchlists_router)
 app.include_router(projects_router)
@@ -580,6 +582,57 @@ def _materialize_evidence_set(body: RunBody) -> tuple[RunBody, dict]:
     )
 
 
+def _materialize_population_set(body: RunBody, *, actor: str) -> tuple[RunBody, dict]:
+    """Resolve or freeze PopulationSetV1 before a production run can be persisted."""
+
+    if body.input_mode == "frozen":
+        return body, {}
+    from core.population_store import PopulationSetStore
+
+    store = PopulationSetStore(get_settings().postgres_url)
+    if body.population_set_id.strip():
+        try:
+            frozen = store.get(body.population_set_id.strip())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not frozen["hash_valid"] or not frozen["acknowledged"]:
+            raise HTTPException(
+                status_code=409, detail="PopulationSetV1 hash/acknowledgement ไม่ครบ"
+            )
+        if body.project_id and frozen["project_id"] and body.project_id != frozen["project_id"]:
+            raise HTTPException(status_code=422, detail="population set อยู่นอก project ที่ระบุ")
+        return body, frozen
+    if not body.population_acknowledged:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "ต้องยอมรับและ freeze PopulationSetV1 ก่อนรัน — "
+                "population ปัจจุบันเป็นสมมติฐานสังเคราะห์ ไม่ใช่ผลสำรวจจริง"
+            ),
+        )
+    factory = _load_pack_factory(body.pack_id) or PersonaFactory()
+    source_kind = "persona-pack" if body.pack_id is not None else "sample-default"
+    source_ref = (
+        str(body.pack_id) if body.pack_id is not None else "data/samples/population/segments.yaml"
+    )
+    try:
+        frozen = store.freeze(
+            factory.segments,
+            name="Frozen persona pack"
+            if body.pack_id is not None
+            else "Acknowledged sample population",
+            actor=actor,
+            source_kind=source_kind,
+            source_ref=source_ref,
+            project_id=body.project_id,
+            synthetic=True,
+            acknowledged=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return body.model_copy(update={"population_set_id": frozen["set_id"]}), frozen
+
+
 def _prepare_run_spec(
     body: RunBody,
     *,
@@ -595,7 +648,6 @@ def _prepare_run_spec(
         version_snapshot,
     )
     from governance.pii import PIIDetector, load_allowlist
-    from simulation.persona import PersonaFactory
 
     detector = PIIDetector(load_allowlist())
     for source in body.sources:
@@ -624,8 +676,19 @@ def _prepare_run_spec(
         if not population_segments:
             raise HTTPException(status_code=409, detail="manifest เดิมไม่มี population snapshot")
     else:
-        factory = _load_pack_factory(body.pack_id) or PersonaFactory()
-        population_segments = factory.segments
+        if not body.population_set_id.strip():
+            raise HTTPException(status_code=409, detail="run ไม่มี frozen PopulationSetV1")
+        from core.population_store import PopulationSetStore
+
+        try:
+            population_set = PopulationSetStore(get_settings().postgres_url).get(
+                body.population_set_id.strip()
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not population_set["hash_valid"] or not population_set["acknowledged"]:
+            raise HTTPException(status_code=409, detail="PopulationSetV1 ไม่ครบหรือ hash ไม่ถูกต้อง")
+        population_segments = population_set["segments"]
     normalized = normalize_run_request(
         body.model_dump(),
         agents=agents,
@@ -639,7 +702,10 @@ def _prepare_run_spec(
         input_mode=body.input_mode,
         source_run_id=source_run_id,
     )
-    model_config, pricing = model_and_pricing_snapshot(body.engine)
+    model_config, pricing = model_and_pricing_snapshot(
+        body.engine,
+        include_embedding=body.retrieval_mode in {"hybrid", "vector"},
+    )
     versions = version_snapshot(body.engine)
     versions["model"] = model_config
     election_active = ElectionPolicy(classify_scenario(body.subject)).active
@@ -666,6 +732,21 @@ def _prepare_run_spec(
             "schema_version": frozen["schema_version"],
             "content_hash": frozen["content_hash"],
             "hash_valid": frozen["hash_valid"],
+        }
+    if body.population_set_id:
+        from core.population_store import PopulationSetStore
+
+        frozen_population = PopulationSetStore(get_settings().postgres_url).get(
+            body.population_set_id
+        )
+        governance["population_set"] = {
+            "set_id": frozen_population["set_id"],
+            "schema_version": frozen_population["schema_version"],
+            "content_hash": frozen_population["content_hash"],
+            "hash_valid": frozen_population["hash_valid"],
+            "synthetic": frozen_population["synthetic"],
+            "acknowledged": frozen_population["acknowledged"],
+            "source_kind": frozen_population["source_kind"],
         }
     return spec, versions, pricing, governance
 
@@ -712,6 +793,7 @@ def _persist_run_manifest(run_id: str) -> dict | None:
 
 @app.post("/runs")
 def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+    body, _ = _materialize_population_set(body, actor=principal.user_id)
     return _run_create_impl(body, principal=principal)
 
 
@@ -816,6 +898,7 @@ def _run_create_impl(
     config["experiment_id"] = body.experiment_id
     config["project_id"] = body.project_id
     config["evidence_set_id"] = body.evidence_set_id
+    config["population_set_id"] = body.population_set_id
     config["seed"] = run_seed
     config["run_spec"] = run_spec.model_dump(mode="json")
     config["manifest_versions"] = manifest_versions
@@ -866,7 +949,7 @@ def _run_create_impl(
                 subject, "aggregate", n, factory=factory, base_seed=run_seed
             ).to_dict()
         else:
-            from simulation.debate import make_debate_adapter, run_debate
+            from simulation.debate import DebateUnavailableError, make_debate_adapter, run_debate
             from simulation.persona import PersonaFactory
             from simulation.redteam_population import inject_red_team
             from simulation.reflection import ReflectionPolicy
@@ -1003,6 +1086,10 @@ def _run_create_impl(
                 reflection_policy=ReflectionPolicy() if body.reflection else None,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
+            if result.synthesis.get("status") == "analyst_failed":
+                raise DebateUnavailableError(
+                    "analyst LLM สรุปผลไม่สำเร็จ — run ถูก fail โดยไม่ใช้ mechanical fallback"
+                )
             total_cost = (
                 float(debate_adapter._guard.spent_usd)
                 if hasattr(debate_adapter, "_guard")
@@ -1116,12 +1203,13 @@ def _enqueue_persistent_run(
     from simulation.engines import get_engine
 
     settings = get_settings()
-    task_body = body
     try:
         engine = get_engine(body.engine)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     body, _ = _materialize_evidence_set(body)
+    body, _ = _materialize_population_set(body, actor=principal.user_id)
+    task_body = body
     subject = body.subject.strip()
     if len(subject) < 4:
         raise HTTPException(status_code=422, detail="หัวข้อสั้นเกินไป")
@@ -1170,7 +1258,7 @@ def _enqueue_persistent_run(
             "reused": True,
             **_run_urls(existing["run_id"]),
         }
-    if not celery_app.conf.task_always_eager and not worker_available():
+    if not celery_app.conf.task_always_eager and not worker_available(verify_control=True):
         raise HTTPException(
             status_code=503,
             detail="worker ไม่พร้อม — ยังไม่สร้าง run กรุณาเปิด Celery worker แล้วลองใหม่",
@@ -1197,6 +1285,7 @@ def _enqueue_persistent_run(
                 "experiment_id": body.experiment_id,
                 "project_id": body.project_id,
                 "evidence_set_id": body.evidence_set_id,
+                "population_set_id": body.population_set_id,
                 "run_spec": run_spec.model_dump(mode="json"),
                 "manifest_versions": manifest_versions,
                 "manifest_pricing": manifest_pricing,
@@ -1378,6 +1467,8 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
         live_news=bool(old["config"].get("live_news")),
         retrieval_mode=old["config"].get("retrieval_mode") or "hybrid",
         parent_run_id=run_id,
+        population_set_id=old["config"].get("population_set_id") or "",
+        population_acknowledged=True,
     )
     out = run_create_async(body, principal=principal)
     try:
@@ -2485,96 +2576,6 @@ def signal_json(
         provenance_source=DEFAULT_SEGMENTS_PATH,
     )
     return bundle.to_dict()
-
-
-class CitizenImpactRequest(BaseModel):
-    """CIT-01: ตัวเลือกปิดทั้งหมด ≤ 10 ฟิลด์ — ไม่มี free text โดยโครงสร้าง"""
-
-    income_band: str
-    region: str
-    commute: str
-    occupation: str
-    age_band: str
-    household_size: int
-
-
-@app.post("/citizen/impact.json")
-def citizen_impact(req: CitizenImpactRequest) -> dict:
-    """Personal Impact Twin — session-only: ไม่บันทึกอินพุตใดๆ ลง DB (CIT-01/NFR-04)"""
-    from simulation.citizen import CitizenInputs, InvalidCitizenInputError, build_impact_twin
-
-    settings = get_settings()
-    try:
-        inputs = CitizenInputs(**req.model_dump())
-    except InvalidCitizenInputError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    twin = build_impact_twin(
-        inputs,
-        PersonaFactory(),
-        max_agents=settings.max_agents_per_run,
-        seed=settings.default_seed,
-    )
-    return twin.to_dict()  # มี CITIZEN_DISCLAIMER เสมอ (CIT-04)
-
-
-class CitizenFeedbackRequest(BaseModel):
-    segment_id: str
-    stance: str
-
-
-@app.post("/citizen/feedback.json")
-def citizen_feedback(req: CitizenFeedbackRequest) -> dict:
-    """CIT-03 — รับความเห็น (segment+stance เท่านั้น); aggregate ปล่อยเมื่อ n ≥ 20"""
-    from simulation.citizen import CITIZEN_DISCLAIMER, FeedbackPool, InvalidCitizenInputError
-
-    settings = get_settings()
-    pool = FeedbackPool(settings.postgres_url)
-    try:
-        pool.add(req.segment_id, req.stance)
-    except InvalidCitizenInputError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    return {
-        "status": "รับความเห็นแล้ว",
-        "k_anonymity_note": "ความเห็นจะแสดงต่อสาธารณะเมื่อกลุ่มของคุณมีผู้ตอบครบ 20 คน",
-        "disclaimer": CITIZEN_DISCLAIMER,
-    }
-
-
-@app.get("/citizen/portal.html", response_class=HTMLResponse)
-def citizen_portal() -> str:
-    """CIT-02 — portal ฉบับประชาชน (ภาษาง่าย + ช่วง + disclaimer ถาวร)"""
-    from simulation.citizen import (
-        CitizenInputs,
-        FeedbackPool,
-        apply_feedback_round,
-        build_impact_twin,
-        render_citizen_portal,
-    )
-
-    settings = get_settings()
-    factory = PersonaFactory()
-    sample = CitizenInputs(
-        income_band="15k-30k",
-        region="ชานเมือง",
-        commute="รถยนต์ส่วนตัว",
-        occupation="พนักงานออฟฟิศ",
-        age_band="31-45",
-        household_size=3,
-    )
-    twin = build_impact_twin(
-        sample, factory, max_agents=settings.max_agents_per_run, seed=settings.default_seed
-    )
-    pool = FeedbackPool(settings.postgres_url)
-    aggregates = pool.aggregates()
-    effect = apply_feedback_round(
-        aggregates, factory, max_agents=settings.max_agents_per_run, seed=settings.default_seed
-    )
-    md = render_citizen_portal("มาตรการค่าธรรมเนียมรถติด กทม.", twin, aggregates, effect)
-    return (
-        "<!doctype html><html lang='th'><head><meta charset='utf-8'></head>"
-        "<body><pre style='white-space:pre-wrap;font-family:system-ui'>"
-        f"{md}</pre></body></html>"
-    )
 
 
 class OOSRequest(BaseModel):

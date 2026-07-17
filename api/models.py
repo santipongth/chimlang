@@ -27,6 +27,8 @@ class RunBody(BaseModel):
     experiment_id: str = ""
     project_id: str = ""
     evidence_set_id: str = ""
+    population_set_id: str = ""
+    population_acknowledged: bool = False
     input_mode: Literal["latest", "frozen"] = "latest"
     source_run_id: str = ""
 

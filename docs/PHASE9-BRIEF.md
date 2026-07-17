@@ -50,6 +50,20 @@
 - ห้ามอ้าง MIRACL/calibration/human-panel/pilot accuracy ก่อนมี pinned raw result + report จริง
 - backend 391 tests เดิม, lint, frontend tests/build/E2E และ migration no-op ต้องผ่านเสมอ
 
+## Production-real runtime closure (มติผู้ใช้ 17 ก.ค. 2569)
+
+- [x] supervised Compose startup สำหรับ API+worker+beat, auto-restart และ startup readiness gate
+- [x] worker readiness ใช้ heartbeat + Celery control ping; offline เป็น degraded และ async run fail-fast
+- [x] immutable PopulationSetV1; synthetic population ต้องรับทราบก่อน freeze/run และมี manifest hash
+- [x] Citizen demo ถูกถอดจาก production routes และย้ายเป็น offline CLI
+- [x] Debate analyst failure เป็น run error/degraded ไม่ส่ง mechanical fallback เป็น success
+- [x] unmocked real-process Project → Evidence → Population → Run → worker → Result → Export ผ่าน
+- [x] low-cost OpenRouter Debate smoke ผ่าน BudgetGuard: actual USD 0.000411 < cap USD 0.05
+- [x] CI แยก backend mocked, browser stubbed, live integration และ manual provider smoke ชัดเจน
+
+ผล gate: ผ่านสำหรับ self-hosted trusted-network runtime — ดู ADR-0018 และ
+docs/reports/P9-production-runtime-gate.md; usability ผู้ใช้จริง 5 คนยัง pending ตามเดิม
+
 ## Deferred / ไม่ทำใน Phase 9
 
 - simulation engine ใหม่, autonomous long-term memory/outcome scraping, public-vote feedback,

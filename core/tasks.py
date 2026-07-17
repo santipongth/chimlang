@@ -60,8 +60,10 @@ def _worker_heartbeat_loop() -> None:
     client.close()
 
 
-def worker_available(*, max_age_s: float = WORKER_HEARTBEAT_TTL_S) -> bool:
-    """Return true only when a worker process recently published a live heartbeat."""
+def worker_available(
+    *, max_age_s: float = WORKER_HEARTBEAT_TTL_S, verify_control: bool = False
+) -> bool:
+    """Require a fresh heartbeat and, for readiness, a live Celery control reply."""
 
     try:
         import redis
@@ -72,7 +74,19 @@ def worker_available(*, max_age_s: float = WORKER_HEARTBEAT_TTL_S) -> bool:
         finally:
             client.close()
         age_s = time() - float(raw) if raw is not None else -1
-        return 0 <= age_s <= max_age_s
+        if not 0 <= age_s <= max_age_s:
+            return False
+        if verify_control:
+            replies = celery_app.control.ping(timeout=1.0)
+            return any(
+                isinstance(reply, dict)
+                and any(
+                    isinstance(payload, dict) and payload.get("ok") == "pong"
+                    for payload in reply.values()
+                )
+                for reply in replies
+            )
+        return True
     except Exception:
         return False
 

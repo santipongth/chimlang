@@ -302,6 +302,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/population-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze Population */
+        post: operations["freeze_population_population_sets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/population-sets/{set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Population */
+        get: operations["get_population_population_sets__set_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/product-policy.json": {
         parameters: {
             query?: never;
@@ -1570,66 +1604,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/citizen/impact.json": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Citizen Impact
-         * @description Personal Impact Twin — session-only: ไม่บันทึกอินพุตใดๆ ลง DB (CIT-01/NFR-04)
-         */
-        post: operations["citizen_impact_citizen_impact_json_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/citizen/feedback.json": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Citizen Feedback
-         * @description CIT-03 — รับความเห็น (segment+stance เท่านั้น); aggregate ปล่อยเมื่อ n ≥ 20
-         */
-        post: operations["citizen_feedback_citizen_feedback_json_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/citizen/portal.html": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Citizen Portal
-         * @description CIT-02 — portal ฉบับประชาชน (ภาษาง่าย + ช่วง + disclaimer ถาวร)
-         */
-        get: operations["citizen_portal_citizen_portal_html_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/signal/oos-test.json": {
         parameters: {
             query?: never;
@@ -1721,31 +1695,6 @@ export interface components {
             status: string;
             /** Transitioned */
             transitioned: boolean;
-        };
-        /** CitizenFeedbackRequest */
-        CitizenFeedbackRequest: {
-            /** Segment Id */
-            segment_id: string;
-            /** Stance */
-            stance: string;
-        };
-        /**
-         * CitizenImpactRequest
-         * @description CIT-01: ตัวเลือกปิดทั้งหมด ≤ 10 ฟิลด์ — ไม่มี free text โดยโครงสร้าง
-         */
-        CitizenImpactRequest: {
-            /** Income Band */
-            income_band: string;
-            /** Region */
-            region: string;
-            /** Commute */
-            commute: string;
-            /** Occupation */
-            occupation: string;
-            /** Age Band */
-            age_band: string;
-            /** Household Size */
-            household_size: number;
         };
         /** ComparisonBody */
         ComparisonBody: {
@@ -2052,6 +2001,61 @@ export interface components {
             label: string;
             /** Prompt */
             prompt: string;
+        };
+        /** PopulationFreezeBody */
+        PopulationFreezeBody: {
+            /**
+             * Name
+             * @default Frozen population
+             */
+            name: string;
+            /** Pack Id */
+            pack_id?: number | null;
+            /**
+             * Project Id
+             * @default
+             */
+            project_id: string;
+            /**
+             * Acknowledged Synthetic
+             * @default false
+             */
+            acknowledged_synthetic: boolean;
+        };
+        /** PopulationSetResponse */
+        PopulationSetResponse: {
+            /** Set Id */
+            set_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Created At */
+            created_at: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Name */
+            name: string;
+            /** Source Kind */
+            source_kind: string;
+            /** Source Ref */
+            source_ref: string;
+            /** Synthetic */
+            synthetic: boolean;
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Content Hash */
+            content_hash: string;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Created By */
+            created_by: string;
+            /** Hash Valid */
+            hash_valid: boolean;
+            /** Segments */
+            segments: {
+                [key: string]: unknown;
+            }[];
         };
         /** PredictionCreateBody */
         PredictionCreateBody: {
@@ -2456,6 +2460,16 @@ export interface components {
              */
             evidence_set_id: string;
             /**
+             * Population Set Id
+             * @default
+             */
+            population_set_id: string;
+            /**
+             * Population Acknowledged
+             * @default false
+             */
+            population_acknowledged: boolean;
+            /**
              * Input Mode
              * @default latest
              * @enum {string}
@@ -2546,6 +2560,16 @@ export interface components {
              * @default false
              */
             reflection: boolean;
+            /**
+             * Population Set Id
+             * @default
+             */
+            population_set_id: string;
+            /**
+             * Population Acknowledged
+             * @default false
+             */
+            population_acknowledged: boolean;
         };
         /** RunSpecResponse */
         RunSpecResponse: {
@@ -3408,6 +3432,92 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    freeze_population_population_sets_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PopulationFreezeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopulationSetResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_population_population_sets__set_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopulationSetResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description Validation Error */
@@ -6266,96 +6376,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    citizen_impact_citizen_impact_json_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CitizenImpactRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    citizen_feedback_citizen_feedback_json_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CitizenFeedbackRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    citizen_portal_citizen_portal_html_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
                 };
             };
         };

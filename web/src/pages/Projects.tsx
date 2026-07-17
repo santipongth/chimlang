@@ -48,6 +48,7 @@ export default function Projects({
   const [evidenceKind, setEvidenceKind] = useState<"text" | "url" | "rss" | "file">("text");
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [subject, setSubject] = useState("");
+  const [populationAcknowledged, setPopulationAcknowledged] = useState(false);
   const [error, setError] = useState("");
   const dateFormat = useMemo(
     () => new Intl.DateTimeFormat(th ? "th-TH" : "en-US", { dateStyle: "medium" }),
@@ -131,6 +132,7 @@ export default function Projects({
           rounds: 3,
           project_id: project.project_id,
           evidence_set_id: String(currentSet.set_id),
+          population_acknowledged: populationAcknowledged,
         },
         crypto.randomUUID(),
       );
@@ -393,8 +395,21 @@ export default function Projects({
                   placeholder={th ? "คำถามที่ต้องการจำลอง" : "Simulation question"}
                   className="min-h-28 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 />
+                <label className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+                  <input
+                    type="checkbox"
+                    checked={populationAcknowledged}
+                    onChange={(event) => setPopulationAcknowledged(event.target.checked)}
+                    className="mt-0.5 size-4"
+                  />
+                  <span>
+                    {th
+                      ? "รับทราบว่า population เริ่มต้นเป็นสมมติฐานสังเคราะห์ และจะถูก freeze เป็น PopulationSetV1 ก่อนรัน"
+                      : "Acknowledge that the initial population is synthetic and will be frozen as PopulationSetV1 before the run."}
+                  </span>
+                </label>
                 <button
-                  disabled={!currentSet || subject.trim().length < 4}
+                  disabled={!currentSet || !populationAcknowledged || subject.trim().length < 4}
                   onClick={startRun}
                   className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
                 >

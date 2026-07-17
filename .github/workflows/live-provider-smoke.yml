@@ -1,63 +1,20 @@
-name: ci
+name: live-provider-smoke
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      crowd_model:
+        description: Priced low-cost OpenRouter crowd model
+        required: true
+        default: qwen/qwen3.5-flash-02-23
+      analyst_model:
+        description: Priced low-cost OpenRouter analyst model
+        required: true
+        default: qwen/qwen3-235b-a22b-2507
 
 jobs:
-  backend-unit-mocked:
-    name: Backend unit / mocked contracts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync
-      - name: Lint
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
-      - name: Unit and mocked integration tests (no live provider)
-        run: uv run pytest -q
-      - name: Audit Python dependencies
-        run: |
-          uv export --format requirements-txt --no-hashes --output-file audit-requirements.txt
-          uvx pip-audit -r audit-requirements.txt
-
-  browser-stubbed:
-    name: Browser stubbed / accessibility
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - name: Install web dependencies
-        run: npm ci
-        working-directory: web
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-        working-directory: web
-      - name: Vitest unit tests
-        run: npm run test
-        working-directory: web
-      - name: Build frontend (type-check + bundle)
-        run: npm run build
-        working-directory: web
-      - name: Playwright browser tests (network routes intentionally stubbed)
-        run: npm run test:e2e
-        working-directory: web
-      - name: Audit frontend dependencies
-        run: npm audit --audit-level=high
-        working-directory: web
-
-  live-integration:
-    name: Live integration / real API + worker processes
+  openrouter-debate:
+    name: Live OpenRouter Debate under BudgetGuard
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -100,12 +57,20 @@ jobs:
       NEO4J_URI: bolt://127.0.0.1:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: chimlang_dev
+      LLM_BASE_URL: https://openrouter.ai/api/v1
+      LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      LLM_MODEL_CROWD: ${{ inputs.crowd_model }}
+      LLM_MODEL_ANALYST: ${{ inputs.analyst_model }}
+      RUN_BUDGET_USD_CAP: "0.05"
+      MONTHLY_BUDGET_USD_CAP: "1.00"
       CHIMLANG_GIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
+      - name: Require provider secret
+        run: test -n "$LLM_API_KEY"
       - name: Install dependencies
         run: uv sync
       - name: Apply migrations
@@ -116,8 +81,8 @@ jobs:
           uv run celery -A core.tasks.celery_app worker --pool=solo -l info -Q fabric,debate,maintenance > worker-live.log 2>&1 &
       - name: Startup readiness gate
         run: uv run python scripts/wait_for_readiness.py --timeout 120
-      - name: Project to stored export over real processes
-        run: uv run python scripts/live_workflow.py --engine fabric --agents 2 --rounds 1 --max-estimate-usd 0.01
+      - name: Low-cost Debate smoke (real OpenRouter)
+        run: uv run python scripts/live_workflow.py --engine debate --agents 2 --rounds 1 --max-estimate-usd 0.05
       - name: Process logs on failure
         if: failure()
         run: |

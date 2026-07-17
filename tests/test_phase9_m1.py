@@ -217,6 +217,7 @@ def test_async_idempotency_manifest_rerun_and_snapshot_export(client):
         "engine": "fabric",
         "subject": f"ทดสอบ manifest และ idempotency {suffix}",
         "agents": 20,
+        "population_acknowledged": True,
     }
     first = client.post("/runs/async", json=body, headers={"Idempotency-Key": key})
     assert first.status_code == 202

@@ -154,7 +154,7 @@ def test_inject_feedback_to_memory(pool):
     assert items and "aggregate" in items[0].content and items[0].kind == "real_event"
 
 
-# --- API (session-only + validation) ---
+# --- Production route boundary ---
 
 
 @pytest.fixture(scope="module")
@@ -162,59 +162,6 @@ def client() -> TestClient:
     return TestClient(api_app.app)
 
 
-def test_citizen_impact_endpoint_session_only(client):
-    import psycopg
-
-    try:
-        with psycopg.connect(DSN) as conn:
-            before = conn.execute("SELECT count(*) FROM audit_log").fetchone()[0]
-            before_mem = conn.execute("SELECT count(*) FROM world_memory").fetchone()[0]
-    except Exception:
-        pytest.skip("PostgreSQL ไม่พร้อม")
-    r = client.post(
-        "/citizen/impact.json",
-        json={
-            "income_band": "15k-30k",
-            "region": "แนวรถไฟฟ้า",
-            "commute": "รถไฟฟ้า/รถเมล์",
-            "occupation": "พนักงานออฟฟิศ",
-            "age_band": "18-30",
-            "household_size": 2,
-        },
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["disclaimer"] == CITIZEN_DISCLAIMER
-    assert len(body["concern_baseline_range"]) == 2
-    with psycopg.connect(DSN) as conn:
-        after = conn.execute("SELECT count(*) FROM audit_log").fetchone()[0]
-        after_mem = conn.execute("SELECT count(*) FROM world_memory").fetchone()[0]
-    assert (before, before_mem) == (after, after_mem)  # session-only: ไม่เขียนอะไรลง DB
-
-
-def test_citizen_impact_rejects_free_text(client):
-    r = client.post(
-        "/citizen/impact.json",
-        json={
-            "income_band": "15k-30k",
-            "region": "พิมพ์ที่อยู่จริงมาเลย",
-            "commute": "รถยนต์ส่วนตัว",
-            "occupation": "พนักงานออฟฟิศ",
-            "age_band": "31-45",
-            "household_size": 2,
-        },
-    )
-    assert r.status_code == 422
-
-
-def test_citizen_feedback_endpoint(client):
-    import psycopg
-
-    try:
-        r = client.post(
-            "/citizen/feedback.json", json={"segment_id": "test-api", "stance": "เห็นด้วย"}
-        )
-    except psycopg.OperationalError:
-        pytest.skip("PostgreSQL ไม่พร้อม (TestClient re-raise exception จาก endpoint)")
-    assert r.status_code == 200
-    assert "20 คน" in r.json()["k_anonymity_note"]
+def test_citizen_demo_routes_are_not_mounted_in_production(client):
+    assert client.post("/citizen/impact.json", json={}).status_code == 404
+    assert client.post("/citizen/feedback.json", json={}).status_code == 404

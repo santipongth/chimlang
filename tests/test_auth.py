@@ -85,7 +85,7 @@ def test_election_scenario_requires_verified_admin(client, monkeypatch):
     )
 
 
-def test_citizen_endpoints_stay_public(client, monkeypatch):
+def test_citizen_demo_routes_are_not_mounted_when_auth_is_enabled(client, monkeypatch):
     _auth_on(monkeypatch)
     r = client.post(
         "/citizen/impact.json",
@@ -98,4 +98,4 @@ def test_citizen_endpoints_stay_public(client, monkeypatch):
             "household_size": 2,
         },
     )
-    assert r.status_code == 200  # Citizen Mode สาธารณะโดยเจตนา (ไม่ต้องมีคีย์)
+    assert r.status_code == 404

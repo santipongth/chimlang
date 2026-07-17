@@ -113,6 +113,19 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
             else "aggregate_policy_ready",
         )
     )
+    population_ready = bool(body.get("population_set_id")) or bool(
+        body.get("population_acknowledged")
+    )
+    checks.append(
+        ReadinessCheck(
+            "population",
+            "PopulationSetV1",
+            "pass" if population_ready else "block",
+            "frozen_or_explicitly_acknowledged"
+            if population_ready
+            else "synthetic_population_requires_acknowledgement_and_freeze",
+        )
+    )
     sources = list(body.get("sources") or [])
     if sources and engine.key != "debate":
         checks.append(

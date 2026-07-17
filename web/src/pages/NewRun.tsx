@@ -91,6 +91,7 @@ export default function NewRun({
   const [redTeam, setRedTeam] = useState(false);
   const [packs, setPacks] = useState<PersonaPack[]>([]);
   const [packId, setPackId] = useState<number | null>(null);
+  const [populationAcknowledged, setPopulationAcknowledged] = useState(false);
   const [packIntent, setPackIntent] = useState<PackModalIntent | null>(null);
   const [packToDelete, setPackToDelete] = useState<PersonaPack | null>(null);
   const [sources, setSources] = useState<SourceInput[]>([]);
@@ -161,6 +162,7 @@ export default function NewRun({
       agents: Math.min(agents, cap),
       rounds,
       pack_id: packId,
+      population_acknowledged: populationAcknowledged,
       red_team: redTeam,
       sources: isDebate ? sources : [],
       views,
@@ -174,7 +176,7 @@ export default function NewRun({
     fetchRunReadiness(body)
       .then(setReadiness)
       .catch(() => setReadiness(null));
-  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews, retrievalMode, reflection, claim, measurement, dueDays]);
+  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, populationAcknowledged, redTeam, sources, views, isDebate, liveNews, retrievalMode, reflection, claim, measurement, dueDays]);
 
   function addSource() {
     if (sources.length >= 10) return;
@@ -211,6 +213,7 @@ export default function NewRun({
         agents: Math.min(agents, cap),
         rounds,
         pack_id: packId,
+        population_acknowledged: populationAcknowledged,
         red_team: redTeam,
         sources: isDebate ? sources : [],
         views,
@@ -647,6 +650,19 @@ export default function NewRun({
                 ))}
               </div>
             )}
+            <label className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+              <input
+                type="checkbox"
+                checked={populationAcknowledged}
+                onChange={(event) => setPopulationAcknowledged(event.target.checked)}
+                className="mt-0.5 size-4"
+              />
+              <span>
+                {lang === "th"
+                  ? "ฉันรับทราบว่า PopulationSet นี้เป็นสมมติฐานสังเคราะห์ ไม่ใช่ผลสำรวจหรือสำมะโนจริง และระบบจะ freeze ชุดนี้ก่อนรัน"
+                  : "I acknowledge that this PopulationSet contains synthetic assumptions, not survey or census results, and will be frozen before the run."}
+              </span>
+            </label>
           </div>
           <div className="grid grid-cols-[130px_1fr] gap-y-2">
             <span className="text-muted-foreground">{t("wiz_step1")}</span><span className="font-medium">{subject || "—"}</span>
@@ -676,7 +692,7 @@ export default function NewRun({
             {t("next")}
           </button>
         ) : (
-          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy || readiness?.can_run === false} onClick={submit}>
+          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy || !populationAcknowledged || readiness?.can_run === false} onClick={submit}>
             {busy ? `⏳ ${t("running")}` : t("run_now")}
           </button>
         )}

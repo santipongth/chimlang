@@ -86,6 +86,8 @@ export interface CreateRunBody {
   reflection?: boolean;
   project_id?: string;
   evidence_set_id?: string;
+  population_set_id?: string;
+  population_acknowledged?: boolean;
 }
 
 export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadiness> {
@@ -145,6 +147,8 @@ function toRunRequest(body: CreateRunBody) {
     experiment_id: "",
     project_id: body.project_id ?? "",
     evidence_set_id: body.evidence_set_id ?? "",
+    population_set_id: body.population_set_id ?? "",
+    population_acknowledged: body.population_acknowledged ?? false,
     input_mode: "latest" as const,
     source_run_id: "",
   };

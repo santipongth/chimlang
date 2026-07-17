@@ -341,6 +341,12 @@ def _apply_validation_case_kinds_v1(conn: Connection) -> None:
     )
 
 
+def _apply_population_sets_v1(conn: Connection) -> None:
+    from core.population_store import _SCHEMA as population_schema
+
+    conn.execute(population_schema)
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -428,6 +434,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-17-validation-case-kinds-v1",
         "append-only model robustness and usability validation dataset kinds",
         _apply_validation_case_kinds_v1,
+    ),
+    (
+        "2026-07-17-population-sets-v1",
+        "immutable acknowledged population snapshots for every production run",
+        _apply_population_sets_v1,
     ),
 ]
 

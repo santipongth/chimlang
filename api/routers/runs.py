@@ -27,6 +27,8 @@ class RunReadinessBody(BaseModel):
     retrieval_mode: Literal["hybrid", "bm25", "vector"] = "hybrid"
     parent_run_id: str = ""
     reflection: bool = False
+    population_set_id: str = ""
+    population_acknowledged: bool = False
 
 
 @router.post("/runs/readiness")

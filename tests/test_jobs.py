@@ -67,7 +67,12 @@ def test_agents_clamped_to_cap(client):
 def test_run_readiness_preflight_for_fabric(client):
     r = client.post(
         "/runs/readiness",
-        json={"engine": "fabric", "subject": "readiness scenario", "agents": 20},
+        json={
+            "engine": "fabric",
+            "subject": "readiness scenario",
+            "agents": 20,
+            "population_acknowledged": True,
+        },
     )
     assert r.status_code == 200
     body = r.json()
@@ -83,7 +88,13 @@ def test_run_readiness_blocks_exceeded_monthly_budget(client, monkeypatch):
     monkeypatch.setattr(quality, "effective_monthly_cap", lambda: 5.0)
     r = client.post(
         "/runs/readiness",
-        json={"engine": "debate", "subject": "monthly budget readiness", "agents": 10},
+        json={
+            "engine": "debate",
+            "subject": "monthly budget readiness",
+            "agents": 10,
+            "population_acknowledged": True,
+            "retrieval_mode": "bm25",
+        },
     )
 
     assert r.status_code == 200
@@ -107,7 +118,12 @@ def test_task_itself_enforces_governance():
 def test_submit_persistent_run_async_eager(client):
     r = client.post(
         "/runs/async",
-        json={"engine": "fabric", "subject": "ทดสอบ persistent run ผ่าน queue", "agents": 20},
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบ persistent run ผ่าน queue",
+            "agents": 20,
+            "population_acknowledged": True,
+        },
     )
     assert r.status_code == 202
     body = r.json()
@@ -151,12 +167,17 @@ def test_async_run_precreates_queued_row(client, monkeypatch):
 
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
-    monkeypatch.setattr(tasks, "worker_available", lambda: True)
+    monkeypatch.setattr(tasks, "worker_available", lambda **_kwargs: True)
     monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         r = client.post(
             "/runs/async",
-            json={"engine": "fabric", "subject": "ทดสอบ queued row", "agents": 20},
+            json={
+                "engine": "fabric",
+                "subject": "ทดสอบ queued row",
+                "agents": 20,
+                "population_acknowledged": True,
+            },
         )
     finally:
         celery_app.conf.task_always_eager = old_eager
@@ -186,12 +207,17 @@ def test_cancel_queued_run_updates_status(client, monkeypatch):
 
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
-    monkeypatch.setattr(tasks, "worker_available", lambda: True)
+    monkeypatch.setattr(tasks, "worker_available", lambda **_kwargs: True)
     monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         r = client.post(
             "/runs/async",
-            json={"engine": "fabric", "subject": "ทดสอบ cancel queued", "agents": 20},
+            json={
+                "engine": "fabric",
+                "subject": "ทดสอบ cancel queued",
+                "agents": 20,
+                "population_acknowledged": True,
+            },
         )
     finally:
         celery_app.conf.task_always_eager = old_eager
@@ -213,11 +239,16 @@ def test_async_run_rejects_before_persist_when_worker_is_offline(client, monkeyp
     subject = "ทดสอบปฏิเสธเมื่อ worker offline " + uuid4().hex[:8]
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
-    monkeypatch.setattr(tasks, "worker_available", lambda: False)
+    monkeypatch.setattr(tasks, "worker_available", lambda **_kwargs: False)
     try:
         response = client.post(
             "/runs/async",
-            json={"engine": "fabric", "subject": subject, "agents": 20},
+            json={
+                "engine": "fabric",
+                "subject": subject,
+                "agents": 20,
+                "population_acknowledged": True,
+            },
         )
     finally:
         celery_app.conf.task_always_eager = old_eager
@@ -241,15 +272,16 @@ def test_async_run_reuses_accepted_idempotency_key_when_worker_goes_offline(clie
         "engine": "fabric",
         "subject": f"ทดสอบ idempotency worker offline {suffix}",
         "agents": 20,
+        "population_acknowledged": True,
     }
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
-    monkeypatch.setattr(tasks, "worker_available", lambda: True)
+    monkeypatch.setattr(tasks, "worker_available", lambda **_kwargs: True)
     monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         first = client.post("/runs/async", json=body, headers={"Idempotency-Key": key})
         assert first.status_code == 202
-        monkeypatch.setattr(tasks, "worker_available", lambda: False)
+        monkeypatch.setattr(tasks, "worker_available", lambda **_kwargs: False)
         reused = client.post("/runs/async", json=body, headers={"Idempotency-Key": key})
     finally:
         celery_app.conf.task_always_eager = old_eager
@@ -286,6 +318,31 @@ def test_worker_available_requires_a_fresh_valid_heartbeat(monkeypatch):
     ):
         client.value = value
         assert tasks.worker_available() is expected
+
+
+def test_worker_available_can_require_live_celery_control_reply(monkeypatch):
+    import redis
+
+    from core import tasks
+
+    class _RedisClient:
+        def get(self, _key):
+            return "100"
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(redis.Redis, "from_url", lambda *args, **kwargs: _RedisClient())
+    monkeypatch.setattr(tasks, "time", lambda: 100.0)
+    monkeypatch.setattr(tasks.celery_app.control, "ping", lambda timeout: [])
+    assert tasks.worker_available(verify_control=True) is False
+
+    monkeypatch.setattr(
+        tasks.celery_app.control,
+        "ping",
+        lambda timeout: [{"celery@worker": {"ok": "pong"}}],
+    )
+    assert tasks.worker_available(verify_control=True) is True
 
 
 @needs_pg

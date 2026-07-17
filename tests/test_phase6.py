@@ -163,6 +163,17 @@ def test_debate_fails_closed_when_every_agent_call_fails():
         run_debate(_personas(), subject="ทดสอบ", rounds=1, seed=3, adapter=adapter)
 
 
+def test_debate_marks_analyst_failure_without_mechanical_fallback():
+    adapter = _FakeAdapter(fail_on={7})
+    result = run_debate(_personas(), subject="ทดสอบ", rounds=1, seed=3, adapter=adapter)
+
+    assert result.metrics["posts_ok"] == 6
+    assert result.synthesis["status"] == "analyst_failed"
+    assert result.synthesis["fallback"] is False
+    assert result.synthesis["summary"] == ""
+    assert "mechanical_fallback" not in result.synthesis["parser_mode"]
+
+
 def test_debate_classifies_llm_transport_failures():
     expected = {
         "APIConnectionError": "llm_connection_error",
@@ -423,7 +434,15 @@ def test_runstore_lineage_events():
 
 @needs_pg
 def test_post_runs_fabric_full_governance(client):
-    r = client.post("/runs", json={"engine": "fabric", "subject": "ทดสอบ run ถาวร", "agents": 20})
+    r = client.post(
+        "/runs",
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบ run ถาวร",
+            "agents": 20,
+            "population_acknowledged": True,
+        },
+    )
     assert r.status_code == 200
     rid = r.json()["run_id"]
     detail = client.get(f"/runs/{rid}.json").json()
@@ -453,13 +472,51 @@ def test_post_runs_debate_uses_mocked_engine(client, monkeypatch):
     monkeypatch.setattr(dbt, "make_debate_adapter", lambda a, r, **kwargs: _FakeAdapter())
     r = client.post(
         "/runs",
-        json={"engine": "debate", "subject": "ทดสอบดีเบตผ่าน api", "agents": 6, "rounds": 2},
+        json={
+            "engine": "debate",
+            "subject": "ทดสอบดีเบตผ่าน api",
+            "agents": 6,
+            "rounds": 2,
+            "population_acknowledged": True,
+            "retrieval_mode": "bm25",
+        },
     )
     assert r.status_code == 200
     detail = client.get(f"/runs/{r.json()['run_id']}.json").json()
     assert detail["engine"] == "debate" and len(detail["posts"]) == 12
     assert detail["payload"]["synthesis"]["summary"]
     client.delete(f"/runs/{detail['run_id']}")
+
+
+@needs_pg
+def test_post_runs_debate_marks_run_error_when_analyst_fails(client, monkeypatch):
+    import simulation.debate as dbt
+
+    subject = f"ทดสอบ analyst fail {uuid4().hex}"
+    monkeypatch.setattr(
+        dbt,
+        "make_debate_adapter",
+        lambda a, r, **kwargs: _FakeAdapter(fail_on={7}),
+    )
+    response = client.post(
+        "/runs",
+        json={
+            "engine": "debate",
+            "subject": subject,
+            "agents": 6,
+            "rounds": 1,
+            "population_acknowledged": True,
+            "retrieval_mode": "bm25",
+        },
+    )
+
+    assert response.status_code == 502
+    run = RunStore(DSN).list_runs(search=subject, limit=1)[0]
+    detail = RunStore(DSN).get(run["run_id"])
+    assert detail["status"] == "error"
+    assert len(detail["posts"]) == 6
+    assert "mechanical fallback" in detail["error"]
+    client.delete(f"/runs/{run['run_id']}")
 
 
 @needs_pg
@@ -529,6 +586,7 @@ def test_post_runs_user_claim_registered(client):
             "claim": "โพลสำนัก X หลังแถลงจะต่ำกว่า 50%",
             "measurement": "โพลสำนัก X รอบสิ้นเดือน",
             "due_days": 14,
+            "population_acknowledged": True,
         },
     )
     assert r.status_code == 200
@@ -767,6 +825,7 @@ def test_run_stores_selected_views(client):
             "subject": "ทดสอบ views",
             "agents": 20,
             "views": ["overview", "canvas"],
+            "population_acknowledged": True,
         },
     )
     rid = r.json()["run_id"]
@@ -777,7 +836,15 @@ def test_run_stores_selected_views(client):
 
 @needs_pg
 def test_run_views_empty_defaults_to_all(client):
-    r = client.post("/runs", json={"engine": "fabric", "subject": "ทดสอบ views ว่าง", "agents": 20})
+    r = client.post(
+        "/runs",
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบ views ว่าง",
+            "agents": 20,
+            "population_acknowledged": True,
+        },
+    )
     rid = r.json()["run_id"]
     views = client.get(f"/runs/{rid}.json").json()["config"]["views"]
     assert set(views) == {"overview", "debate", "canvas", "evidence"}  # ว่าง = ครบ
@@ -810,7 +877,13 @@ def _pool_segments():
 @needs_pg
 def test_run_share_toggle_cycle(client):
     r = client.post(
-        "/runs", json={"engine": "fabric", "subject": "ทดสอบ share toggle", "agents": 20}
+        "/runs",
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบ share toggle",
+            "agents": 20,
+            "population_acknowledged": True,
+        },
     )
     rid = r.json()["run_id"]
     # ยังไม่แชร์
@@ -836,7 +909,13 @@ def test_run_share_toggle_cycle(client):
 @needs_pg
 def test_run_share_blocks_election(client):
     r = client.post(
-        "/runs", json={"engine": "fabric", "subject": "ทดสอบ ผลเลือกตั้งผู้ว่าฯ รอบใหม่", "agents": 20}
+        "/runs",
+        json={
+            "engine": "fabric",
+            "subject": "ทดสอบ ผลเลือกตั้งผู้ว่าฯ รอบใหม่",
+            "agents": 20,
+            "population_acknowledged": True,
+        },
     )
     rid = r.json()["run_id"]
     assert client.post(f"/runs/{rid}/share").status_code == 403  # election ห้ามแชร์ (ADR-0004)

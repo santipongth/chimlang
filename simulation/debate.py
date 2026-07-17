@@ -7,7 +7,8 @@
 - **fail-closed**: parse พัง/call พัง = โพสต์ติดธง failed — ไม่ปนใน metrics/synthesis
   (ต้นแบบนับ stance 0 ต่อเงียบๆ = silent corruption)
 - ทุก call ผ่าน adapter + BudgetGuard, ประเมิน cost ก่อนเริ่ม; crowd ใช้ reasoning=False
-  (บทเรียน 6 ก.ค. — เร็ว 29x); synthesis ใช้ analyst + mechanical fallback
+  (บทเรียน 6 ก.ค. — เร็ว 29x); production synthesis ใช้ analyst และ fail หาก analyst ล้ม
+  ส่วน mechanical synthesis ใช้เฉพาะคำสั่ง rebuild stored snapshot ที่ผู้ใช้เรียกชัดเจน
 - ภาษาไทย first-class + กติกา prompt มาตรฐาน (ห้ามกุชื่อ/ตัวเลข)
 """
 
@@ -685,16 +686,26 @@ def run_debate(
                 judge["verdict"] = verifier_floor
                 judge["notes"] = [*list(judge.get("notes") or []), "verifier_floor_applied"]
     except Exception as exc:
-        synthesis = _mechanical_synthesis(all_posts, subject, rounds)
-        synthesis["parser_mode"] = "mechanical_fallback"
-        synthesis["failure_reason"] = _failure_reason(exc)
+        # Production runs must not substitute a deterministic summary for a failed analyst.
+        # Return the posts/metrics so the caller can persist audit evidence, then fail the run.
+        synthesis = {
+            "status": "analyst_failed",
+            "summary": "",
+            "confidence": 0.0,
+            "distribution": [],
+            "key_drivers": [],
+            "risks": ["analyst model ไม่พร้อม; ไม่มีการสร้าง mechanical fallback"],
+            "fallback": False,
+            "parser_mode": "analyst_failed",
+            "failure_reason": _failure_reason(exc),
+        }
         synthesis["judge"] = {
-            "verdict": verifier["status"],
-            "citation_assessment": "ใช้ deterministic verifier เพราะ analyst judge ไม่พร้อม",
-            "contradiction_assessment": "ใช้ deterministic verifier เพราะ analyst judge ไม่พร้อม",
-            "schema_assessment": "ใช้ deterministic verifier เพราะ analyst judge ไม่พร้อม",
+            "verdict": "fail",
+            "citation_assessment": "analyst judge ไม่พร้อม",
+            "contradiction_assessment": "analyst judge ไม่พร้อม",
+            "schema_assessment": "analyst response ไม่ผ่าน contract",
             "unsupported_claims": [],
-            "notes": ["mechanical_judge_fallback"],
+            "notes": ["run_must_fail_no_mechanical_fallback"],
         }
 
     protocol["analyst_judge"] = synthesis["judge"]

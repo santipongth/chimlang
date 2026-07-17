@@ -153,6 +153,7 @@ test("202 accepted navigates immediately to running detail and supports cancel",
   await next.click();
   await next.click();
   await expect(page.getByText("พร้อมรัน")).toBeVisible();
+  await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: /รันจำลอง/ }).click();
 
   await expect(page).toHaveURL(/#\/runs\/e2e-accepted$/);

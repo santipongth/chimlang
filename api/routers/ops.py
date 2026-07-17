@@ -40,7 +40,7 @@ def health_deep() -> dict:
     try:
         from core.tasks import worker_available
 
-        components["worker"] = "ok" if worker_available() else "offline"
+        components["worker"] = "ok" if worker_available(verify_control=True) else "offline"
     except Exception as exc:
         components["worker"] = f"down: {type(exc).__name__}"
     try:
