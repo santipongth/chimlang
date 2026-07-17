@@ -19,10 +19,12 @@ import {
   FabricRunPayload,
   SimRunDetail,
   ValidationReport,
+  cancelRun,
   createPrediction,
   pct,
   refreshRunNews,
   resynthesizeRun,
+  rerunRun,
   shareRun,
   unshareRun,
   validateRun,
@@ -357,7 +359,15 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
   );
 }
 
-export default function RunDetail({ runId, onBack }: { runId: string; onBack: () => void }) {
+export default function RunDetail({
+  runId,
+  onBack,
+  onOpenRun,
+}: {
+  runId: string;
+  onBack: () => void;
+  onOpenRun?: (runId: string) => void;
+}) {
   const { lang, t } = useLang();
   const queryClient = useQueryClient();
   const runQuery = useQuery({
@@ -387,6 +397,7 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
     due_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
   });
   const [contractBusy, setContractBusy] = useState(false);
+  const [runActionBusy, setRunActionBusy] = useState("");
   const [validationEnabled, setValidationEnabled] = useState(false);
   const validationQuery = useQuery({
     queryKey: ["validation", runId],
@@ -407,6 +418,34 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
 
   async function reload() {
     await runQuery.refetch();
+  }
+
+  async function cancelCurrentRun() {
+    setRunActionBusy("cancel");
+    setRepairErr("");
+    try {
+      await cancelRun(runId);
+      await reload();
+    } catch (e: any) {
+      setRepairErr(String(e.message ?? e));
+    } finally {
+      setRunActionBusy("");
+    }
+  }
+
+  async function rerun(inputMode: "frozen" | "latest") {
+    setRunActionBusy(inputMode);
+    setRepairErr("");
+    try {
+      const key = globalThis.crypto?.randomUUID?.() ?? `rerun-${Date.now()}-${Math.random()}`;
+      const accepted = await rerunRun(runId, inputMode, key);
+      if (onOpenRun) onOpenRun(accepted.run_id);
+      else window.location.hash = `/runs/${encodeURIComponent(accepted.run_id)}`;
+    } catch (e: any) {
+      setRepairErr(String(e.message ?? e));
+    } finally {
+      setRunActionBusy("");
+    }
   }
 
   async function repair(kind: "news" | "synthesis") {
@@ -498,7 +537,14 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
         }
       />
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 text-sm">{error}</div>}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+          <p>{error}</p>
+          <button type="button" onClick={reload} className="mt-3 rounded-lg border border-red-300 px-3 py-2 font-medium">
+            {lang === "th" ? "ลองเชื่อมต่อใหม่" : "Reconnect"}
+          </button>
+        </div>
+      )}
       {!data && !error && (
         <section className={card + " animate-pulse"}>
           <div className="h-4 w-40 rounded bg-muted" />
@@ -508,9 +554,85 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
       )}
       {data?.status === "error" && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 text-sm">
-          {t("rd_failed")}: {data.error}
+          <p>{t("rd_failed")}: {data.error}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={!!runActionBusy} onClick={() => rerun("latest")} className="rounded-lg bg-red-700 px-3 py-2 font-medium text-white disabled:opacity-50">
+              {lang === "th" ? "รันใหม่ด้วยข้อมูลล่าสุด" : "Run with latest data"}
+            </button>
+            {data.manifest?.complete && (
+              <button type="button" disabled={!!runActionBusy} onClick={() => rerun("frozen")} className="rounded-lg border border-red-300 px-3 py-2 font-medium disabled:opacity-50">
+                {lang === "th" ? "รันใหม่ด้วย input ที่ freeze" : "Run frozen inputs"}
+              </button>
+            )}
+          </div>
         </div>
       )}
+
+      {data && (data.status === "queued" || data.status === "running" || data.status === "canceled") && (
+        <section className={card + " space-y-4"} aria-live="polite">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {data.status === "canceled"
+                  ? (lang === "th" ? "ยกเลิกแล้ว" : "Canceled")
+                  : (lang === "th" ? "ลำดับขั้นการรัน" : "Running timeline")}
+              </div>
+              <h2 className="mt-1 font-display text-xl font-semibold">
+                {data.progress_message || data.status}
+              </h2>
+              {data.status !== "canceled" && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  SSE: {stream.state} · event #{stream.lastEventId || "—"}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={reload} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted">
+                <RefreshCw className="mr-1 inline h-4 w-4" /> {lang === "th" ? "เชื่อมต่อใหม่" : "Reconnect"}
+              </button>
+              {data.status !== "canceled" && (
+                <button type="button" disabled={!!runActionBusy} onClick={cancelCurrentRun} className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">
+                  {runActionBusy === "cancel" ? "…" : (lang === "th" ? "ยกเลิกรัน" : "Cancel run")}
+                </button>
+              )}
+            </div>
+          </div>
+          {data.status !== "canceled" && (
+            <div>
+              <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+                <span>{data.status}</span><span>{data.progress ?? 0}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div className="h-full bg-primary transition-all" style={{ width: `${Math.max(2, data.progress ?? 0)}%` }} />
+              </div>
+            </div>
+          )}
+          {(data.events ?? []).length > 0 && (
+            <ol className="space-y-2 border-l border-border pl-4 text-xs">
+              {(data.events ?? []).slice(-6).map((event, index) => (
+                <li key={`${event.created_at}-${index}`}>
+                  <span className="font-medium">{event.event_type}</span>
+                  <span className="ml-2 text-muted-foreground">{event.message}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {data.status === "canceled" && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={!!runActionBusy} onClick={() => rerun("latest")} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {lang === "th" ? "รันด้วยข้อมูลล่าสุด" : "Run latest data"}
+              </button>
+              {data.manifest?.complete && (
+                <button type="button" disabled={!!runActionBusy} onClick={() => rerun("frozen")} className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50">
+                  {lang === "th" ? "รัน input ที่ freeze" : "Run frozen inputs"}
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {repairErr && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{repairErr}</p>}
 
       {data && (data.status === "complete" || data.status === "error") && (
         <>
@@ -921,6 +1043,8 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 <span>seed</span><span className="text-foreground">{data.seed} ({t("rd_seed_note")})</span>
                 <span>domain</span><span className="text-foreground">{data.domain}</span>
                 <span>parent</span><span className="font-mono text-xs text-foreground">{data.parent_run_id || "none"}</span>
+                <span>manifest</span><span className="break-all font-mono text-xs text-foreground">{data.manifest?.manifest_hash || "legacy-incomplete"}</span>
+                <span>reproducibility</span><span className="text-foreground">{data.manifest?.reproducibility || "legacy-incomplete"}</span>
               </div>
               {(data.events ?? []).length > 0 && (
                 <div>
@@ -950,16 +1074,29 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
                 </div>
               )}
               <p className="text-xs text-muted-foreground">📌 {t("rd_prediction_note")}</p>
-              {!isDebate && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    className="inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white"
-                    href={`/dashboard.pdf?subject=${encodeURIComponent(data.subject)}&agents=${data.agents}&lang=${lang}`}
-                  >
-                    ⬇ {lang === "th" ? "PDF (มี watermark)" : "PDF (watermarked)"}
-                  </a>
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <a className="inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white" href={`/runs/${encodeURIComponent(runId)}/export.pdf?lang=${lang}`}>
+                  ⬇ {lang === "th" ? "PDF snapshot (มี watermark)" : "PDF snapshot (watermarked)"}
+                </a>
+                <a className="inline-block rounded-xl border border-border px-5 py-2.5 text-sm font-medium" href={`/runs/${encodeURIComponent(runId)}/export.json`}>
+                  ⬇ JSON snapshot
+                </a>
+              </div>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-primary-strong">
+                {lang === "th"
+                  ? "เปิดผลเดิม = snapshot ที่เก็บไว้; รัน input ที่ freeze = provider อาจต่างแบบ best-effort; รันข้อมูลล่าสุด = ดึง evidence/news ใหม่"
+                  : "Open original = stored snapshot; frozen rerun = provider determinism is best-effort; latest rerun fetches current evidence/news."}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {data.manifest?.complete && (
+                  <button type="button" disabled={!!runActionBusy} onClick={() => rerun("frozen")} className="rounded-xl border border-border px-4 py-2 text-sm disabled:opacity-50">
+                    {lang === "th" ? "รันใหม่ด้วย input ที่ freeze" : "Rerun frozen inputs"}
+                  </button>
+                )}
+                <button type="button" disabled={!!runActionBusy} onClick={() => rerun("latest")} className="rounded-xl border border-border px-4 py-2 text-sm disabled:opacity-50">
+                  {lang === "th" ? "รันด้วยข้อมูลล่าสุด" : "Run latest data"}
+                </button>
+              </div>
               <button
                 onClick={() => { setShareErr(""); setShareOpen(true); }}
                 className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm text-muted-foreground hover:bg-muted"
@@ -1014,12 +1151,12 @@ export default function RunDetail({ runId, onBack }: { runId: string; onBack: ()
               <div className="mt-3 flex gap-2">
                 <input
                   readOnly
-                  value={`${window.location.origin}/app/#gallery/${data.share_token}`}
+                  value={`${window.location.origin}/app/#/gallery/${data.share_token}`}
                   className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs"
                 />
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/app/#gallery/${data.share_token}`);
+                    navigator.clipboard.writeText(`${window.location.origin}/app/#/gallery/${data.share_token}`);
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   }}

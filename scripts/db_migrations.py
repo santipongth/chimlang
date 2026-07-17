@@ -266,6 +266,45 @@ def _apply_monthly_budget_reservations(conn: Connection) -> None:
     conn.execute(budget_schema)
 
 
+def _apply_run_manifests_v1(conn: Connection) -> None:
+    conn.execute(
+        """
+        ALTER TABLE sim_runs ADD COLUMN IF NOT EXISTS idempotency_request_hash TEXT
+            NOT NULL DEFAULT '';
+        CREATE TABLE IF NOT EXISTS run_manifests (
+            run_id TEXT PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            schema_version INT NOT NULL,
+            complete BOOLEAN NOT NULL,
+            config_hash TEXT NOT NULL,
+            manifest_hash TEXT NOT NULL,
+            reproducibility TEXT NOT NULL,
+            spec JSONB NOT NULL DEFAULT '{}'::jsonb,
+            manifest JSONB NOT NULL
+        );
+        INSERT INTO run_manifests (
+            run_id, schema_version, complete, config_hash, manifest_hash,
+            reproducibility, spec, manifest
+        )
+        SELECT
+            run_id, 0, false, '', '', 'legacy-incomplete', '{}'::jsonb,
+            jsonb_build_object(
+                'run_id', run_id,
+                'schema_version', 0,
+                'complete', false,
+                'reproducibility', 'legacy-incomplete',
+                'reason', 'created-before-ADR-0014; provenance was not reconstructed'
+            )
+        FROM sim_runs
+        ON CONFLICT (run_id) DO NOTHING;
+        DROP TRIGGER IF EXISTS run_manifests_append_only ON run_manifests;
+        CREATE TRIGGER run_manifests_append_only
+            BEFORE UPDATE OR DELETE ON run_manifests
+            FOR EACH ROW EXECUTE FUNCTION reject_mutation();
+        """
+    )
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -323,6 +362,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-16-monthly-budget-reservations-v1",
         "transactional monthly budget reservations before sweep enqueue",
         _apply_monthly_budget_reservations,
+    ),
+    (
+        "2026-07-17-run-manifests-v1",
+        "immutable run specs/manifests and idempotent async request hashes",
+        _apply_run_manifests_v1,
     ),
 ]
 

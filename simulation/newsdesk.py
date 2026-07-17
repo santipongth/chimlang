@@ -22,6 +22,7 @@ import httpx
 from core.config import get_settings
 from core.db import connection, require_schema
 from core.run_context import RunContext, ensure_external_retrieval_allowed
+from core.safe_fetch import SafeOutboundFetcher
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 from simulation.sources import _parse_rss, _strip_html, _trigrams, validate_external_url
 
@@ -92,12 +93,9 @@ def _hash(text: str) -> str:
 def _fetch_rss_items(feed_url: str) -> list[tuple[str, str]]:
     """คืน [(title, content)] จาก feed — แยกราย item เพื่อ PII gate เป็นชิ้นๆ"""
     safe_url = validate_external_url(feed_url)
-    resp = httpx.get(
-        safe_url, timeout=15.0, follow_redirects=True, headers={"User-Agent": "chimlang/1.0"}
-    )
-    resp.raise_for_status()
+    text = SafeOutboundFetcher().fetch(safe_url).text
     out: list[tuple[str, str]] = []
-    for block in _parse_rss(resp.text).split("\n\n"):
+    for block in _parse_rss(text).split("\n\n"):
         lines = block.strip().split("\n", 1)
         if lines and lines[0]:
             out.append((lines[0][:200], block.strip()[:MAX_CONTENT_CHARS]))

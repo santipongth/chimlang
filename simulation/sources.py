@@ -15,12 +15,11 @@ import math
 import re
 from urllib.parse import urlparse
 
-import httpx
-
 from core.config import get_settings
 from core.db import connection, require_schema
 from core.llm.adapter import LLMAdapter
 from core.observability import observe_retrieval, traced
+from core.safe_fetch import SafeOutboundFetcher
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 
 MAX_SOURCES = 10
@@ -150,11 +149,14 @@ def _fetch_text(kind: str, label: str, url: str | None, text: str | None) -> str
     if kind == "text":
         return (text or "")[:MAX_TEXT_CHARS]
     safe_url = validate_external_url(url or "")
-    resp = httpx.get(
-        safe_url, timeout=15.0, follow_redirects=True, headers={"User-Agent": "chimlang/1.0"}
+    raw = (
+        SafeOutboundFetcher(
+            max_compressed_bytes=MAX_TEXT_CHARS,
+            max_bytes=MAX_TEXT_CHARS,
+        )
+        .fetch(safe_url)
+        .text[:MAX_TEXT_CHARS]
     )
-    resp.raise_for_status()
-    raw = resp.text[:MAX_TEXT_CHARS]
     return _parse_rss(raw) if kind == "rss" else _strip_html(raw)
 
 

@@ -5,7 +5,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 - คู่มือ agent ทุกโมเดล + protocol ส่งมอบงานข้ามโมเดล: @AGENTS.md | สถานะล่าสุด: @docs/STATE.md (**อัปเดตก่อนจบทุก session**)
 - Spec ฉบับเต็ม: @docs/PRD-SANAM.md (PRD v1.1 — ชื่อชั่วคราวเดิม "SANAM" = ชิมลาง)
 - การตัดสินใจทางเทคนิค: @docs/TECH-DECISIONS.md (อ่านก่อนเลือก library/framework ใดๆ)
-- Scope ปัจจุบัน: **Phase 8 (Prediction Experience + Trusted Agent Runtime)** — ดู @docs/PHASE8-BRIEF.md; Phase 7 ปิดแล้ว
+- Scope ปัจจุบัน: **Phase 9 (Pilot-ready Trust & Productized Workflow)** — ดู @docs/PHASE9-BRIEF.md และ ADR-0014; Phase 8 ปิดแล้ว
 
 ## โครงสร้าง repo (เป้าหมาย)
 

@@ -109,9 +109,9 @@ def test_submit_persistent_run_async_eager(client):
         "/runs/async",
         json={"engine": "fabric", "subject": "ทดสอบ persistent run ผ่าน queue", "agents": 20},
     )
-    assert r.status_code == 200
+    assert r.status_code == 202
     body = r.json()
-    assert body["status"] == "SUCCESS"
+    assert body["status"] == "complete"
     assert body["job_id"]
     rid = body["result"]["run_id"]
     detail = client.get(f"/runs/{rid}.json").json()
@@ -158,7 +158,7 @@ def test_async_run_precreates_queued_row(client, monkeypatch):
         )
     finally:
         celery_app.conf.task_always_eager = old_eager
-    assert r.status_code == 200
+    assert r.status_code == 202
     body = r.json()
     assert body["job_id"] == "queued-job-1"
     assert body["run_id"]

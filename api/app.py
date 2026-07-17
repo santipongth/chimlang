@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -25,7 +25,15 @@ from api.dashboard import (
     build_executive_brief,
     build_risk_heatmap,
 )
-from api.models import RunBody
+from api.models import (
+    ApiError,
+    AsyncRunAccepted,
+    CancelRunResponse,
+    ManifestResponse,
+    RerunBody,
+    RunBody,
+    SnapshotResponse,
+)
 from api.render import render_dashboard_html
 from api.routers.experiments import router as experiments_router
 from api.routers.ops import router as ops_router
@@ -529,6 +537,134 @@ def _register_run_result(
     return "prediction"
 
 
+def _run_urls(run_id: str) -> dict[str, str]:
+    return {
+        "status_url": f"/runs/{run_id}.json",
+        "events_url": f"/runs/{run_id}/events/stream",
+        "manifest_url": f"/runs/{run_id}/manifest",
+        "snapshot_url": f"/runs/{run_id}/snapshot",
+    }
+
+
+def _prepare_run_spec(
+    body: RunBody,
+    *,
+    agents: int,
+    rounds: int,
+    seed: int,
+):
+    from core.run_manifest import (
+        RunManifestStore,
+        build_run_spec,
+        model_and_pricing_snapshot,
+        normalize_run_request,
+        version_snapshot,
+    )
+    from governance.pii import PIIDetector, load_allowlist
+    from simulation.persona import PersonaFactory
+
+    detector = PIIDetector(load_allowlist())
+    for source in body.sources:
+        source_text = "\n".join(str(source.get(name) or "") for name in ("label", "url", "text"))
+        if detector.check(source_text).blocked:
+            raise HTTPException(
+                status_code=422,
+                detail="พบ PII ใน source input — ปฏิเสธก่อนเข้าคิว (GOV-01)",
+            )
+    source_run_id = body.source_run_id.strip()
+    if body.input_mode == "frozen":
+        if not source_run_id:
+            raise HTTPException(status_code=422, detail="frozen input ต้องมี source_run_id")
+        try:
+            source_manifest = RunManifestStore(get_settings().postgres_url).get(source_run_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if source_manifest.get("schema_version") != 1 or not source_manifest.get("complete"):
+            raise HTTPException(
+                status_code=409,
+                detail="run เดิมไม่มี manifest V1 ที่ครบ จึงรันด้วย frozen input ไม่ได้",
+            )
+        population_segments = (
+            source_manifest.get("spec", {}).get("population_snapshot", {}).get("segments", [])
+        )
+        if not population_segments:
+            raise HTTPException(status_code=409, detail="manifest เดิมไม่มี population snapshot")
+    else:
+        factory = _load_pack_factory(body.pack_id) or PersonaFactory()
+        population_segments = factory.segments
+    normalized = normalize_run_request(
+        body.model_dump(),
+        agents=agents,
+        rounds=rounds,
+        seed=seed,
+    )
+    spec = build_run_spec(
+        normalized,
+        seed=seed,
+        population_segments=population_segments,
+        input_mode=body.input_mode,
+        source_run_id=source_run_id,
+    )
+    model_config, pricing = model_and_pricing_snapshot(body.engine)
+    versions = version_snapshot(body.engine)
+    versions["model"] = model_config
+    election_active = ElectionPolicy(classify_scenario(body.subject)).active
+    governance = {
+        "pii_detector": "passed",
+        "election_mode": election_active,
+        "output_granularity": "aggregate",
+        "external_retrieval": (
+            "frozen-snapshot"
+            if body.input_mode == "frozen"
+            else "latest-governed"
+            if body.live_news or body.sources
+            else "disabled"
+        ),
+        "watermark_required": True,
+    }
+    return spec, versions, pricing, governance
+
+
+def _persist_run_manifest(run_id: str) -> dict | None:
+    from core.run_manifest import (
+        RunManifestStore,
+        build_manifest,
+        capture_run_snapshots,
+        spec_from_run,
+    )
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    store = RunStore(settings.postgres_url)
+    detail = store.get(run_id)
+    spec = spec_from_run(detail)
+    if spec is None:
+        return None
+    config = detail.get("config") or {}
+    snapshots = capture_run_snapshots(settings.postgres_url, run_id, detail)
+    governance = dict(config.get("manifest_governance") or {})
+    payload = detail.get("payload") or {}
+    governance["source_decisions"] = [
+        {"label": item.get("label", ""), "status": item.get("status", "")}
+        for item in payload.get("sources") or []
+    ]
+    governance["news_decisions"] = [
+        {"provider": item.get("provider", ""), "status": item.get("status", "")}
+        for item in (payload.get("news") or {}).get("items") or []
+    ]
+    manifest = build_manifest(
+        run_id=run_id,
+        status=detail["status"],
+        spec=spec,
+        versions=config.get("manifest_versions") or {},
+        pricing=config.get("manifest_pricing") or {},
+        governance=governance,
+        snapshots=snapshots,
+    )
+    RunManifestStore(settings.postgres_url).insert(manifest)
+    return manifest.model_dump(mode="json")
+
+
 @app.post("/runs")
 def run_create(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
     return _run_create_impl(body, principal=principal)
@@ -572,13 +708,51 @@ def _run_create_impl(
     rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
     run_id = run_id or new_run_id(body.engine)
     run_seed = body.seed if body.seed is not None else settings.default_seed
-    factory = _load_pack_factory(body.pack_id)
 
     try:
         rstore = RunStore(settings.postgres_url)
         gov = GovernanceStore(settings.postgres_url)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
+
+    from core.run_manifest import RunManifestStore, spec_from_run
+    from simulation.persona import PersonaFactory
+
+    if precreated:
+        queued = rstore.get(run_id)
+        run_spec = spec_from_run(queued)
+        if run_spec is None:
+            raise HTTPException(status_code=409, detail="queued run ไม่มี RunSpecV1")
+        queued_config = queued.get("config") or {}
+        manifest_versions = queued_config.get("manifest_versions") or {}
+        manifest_pricing = queued_config.get("manifest_pricing") or {}
+        manifest_governance = queued_config.get("manifest_governance") or {}
+    else:
+        run_spec, manifest_versions, manifest_pricing, manifest_governance = _prepare_run_spec(
+            body,
+            agents=n,
+            rounds=rounds,
+            seed=run_seed,
+        )
+    factory = PersonaFactory(segments=run_spec.population_snapshot["segments"])
+    effective_sources = list(body.sources)
+    frozen_news_snapshot: list[dict] = []
+    if run_spec.input_mode == "frozen":
+        source_manifest = RunManifestStore(settings.postgres_url).get(run_spec.source_run_id)
+        grouped: dict[str, list[tuple[int, str]]] = {}
+        for item in source_manifest.get("snapshots", {}).get("evidence", []):
+            grouped.setdefault(str(item.get("source_label") or "snapshot"), []).append(
+                (int(item.get("seq") or 0), str(item.get("content") or ""))
+            )
+        effective_sources = [
+            {
+                "kind": "text",
+                "label": label,
+                "text": "\n".join(content for _, content in sorted(chunks)),
+            }
+            for label, chunks in grouped.items()
+        ]
+        frozen_news_snapshot = list(source_manifest.get("snapshots", {}).get("news") or [])
 
     valid_views = {"overview", "debate", "canvas", "evidence"}
     views = [v for v in body.views if v in valid_views] or list(valid_views)
@@ -594,6 +768,10 @@ def _run_create_impl(
     config["parent_run_id"] = body.parent_run_id
     config["experiment_id"] = body.experiment_id
     config["seed"] = run_seed
+    config["run_spec"] = run_spec.model_dump(mode="json")
+    config["manifest_versions"] = manifest_versions
+    config["manifest_pricing"] = manifest_pricing
+    config["manifest_governance"] = manifest_governance
     if precreated:
         if not rstore.mark_running(run_id, "เริ่มรันใน worker"):
             raise HTTPException(
@@ -614,16 +792,23 @@ def _run_create_impl(
             parent_run_id=body.parent_run_id,
             progress_message="เริ่มรัน",
         )
+    from core.run_manifest import canonical_hash
+    from core.runstore import RunCanceledError
+
+    def _stage(progress: int, message: str) -> None:
+        if not rstore.update_progress(run_id, progress, message):
+            raise RunCanceledError(f"run {run_id} ถูกหยุดก่อน stage {message}")
+
     gov.append_audit(
         actor=principal.user_id,
         action="run_started",
         run_id=run_id,
-        config_hash="-",
+        config_hash=canonical_hash(run_spec),
         detail=f"engine={body.engine} agents={n} subject={subject[:60]}",
     )
     try:
         if body.engine == "fabric":
-            rstore.update_progress(run_id, 35, "กำลังรัน fabric multiverse")
+            _stage(35, "กำลังรัน fabric multiverse")
             payload = _run_dashboard(
                 subject, "aggregate", n, factory=factory, base_seed=run_seed
             ).to_dict()
@@ -635,7 +820,7 @@ def _run_create_impl(
             from simulation.sources import retrieve_evidence
 
             # Budget/model readiness must fail before source or News Desk I/O.
-            rstore.update_progress(run_id, 10, "กำลังตรวจงบและโมเดล")
+            _stage(10, "กำลังตรวจงบและโมเดล")
             if body.reflection:
                 debate_adapter = make_debate_adapter(
                     n,
@@ -657,13 +842,13 @@ def _run_create_impl(
             if body.red_team:
                 personas = inject_red_team(personas)
             source_status: list[dict] = []
-            if body.sources:
+            if effective_sources:
                 from simulation.sources import ingest_sources
 
-                rstore.update_progress(run_id, 20, "กำลัง ingest หลักฐาน")
-                source_status = ingest_sources(settings.postgres_url, run_id, body.sources)
+                _stage(20, "กำลัง ingest หลักฐาน")
+                source_status = ingest_sources(settings.postgres_url, run_id, effective_sources)
             else:
-                rstore.update_progress(run_id, 20, "ไม่มีหลักฐานแนบ")
+                _stage(20, "ไม่มีหลักฐานแนบ")
             embedding_status: dict = {"status": "not_requested"}
             if body.retrieval_mode in {"hybrid", "vector"}:
                 from simulation.sources import index_run_embeddings
@@ -690,9 +875,8 @@ def _run_create_impl(
             news_status: dict = {"enabled": False}
             if body.live_news:
                 from core.run_context import RunContext
-                from simulation.newsdesk import gather, load_items, segment_feed
+                from simulation.newsdesk import NewsItem, gather, load_items, segment_feed
 
-                ctx = RunContext(run_id=run_id, seed=run_seed)
                 seg_mixes = {p.segment_name: p.channel_mix for p in personas}
 
                 def _diet(items) -> dict[str, tuple[str, ...]]:
@@ -704,18 +888,39 @@ def _run_create_impl(
                         for seg, mix in seg_mixes.items()
                     }
 
-                rstore.update_progress(run_id, 35, "กำลังดึงข่าวสด")
-                gather(settings.postgres_url, ctx, queries=[subject])
-                all_items = load_items(settings.postgres_url, run_id)
+                if run_spec.input_mode == "frozen":
+                    _stage(35, "กำลังเปิด frozen news snapshot")
+                    all_items = [
+                        NewsItem(
+                            provider=str(item.get("provider") or "rss"),
+                            url=str(item.get("url") or ""),
+                            title=str(item.get("title") or ""),
+                            content=str(item.get("content") or ""),
+                            fetched_at=str(item.get("fetched_at") or ""),
+                            channel_tags=dict(item.get("channel_tags") or {}),
+                            status=str(item.get("status") or "ready"),
+                            error=str(item.get("error") or ""),
+                            pii_redactions=dict(item.get("pii_redactions") or {}),
+                        )
+                        for item in frozen_news_snapshot
+                    ]
+                else:
+                    ctx = RunContext(run_id=run_id, seed=run_seed)
+                    _stage(35, "กำลังดึงข่าวสด")
+                    gather(settings.postgres_url, ctx, queries=[subject])
+                    all_items = load_items(settings.postgres_url, run_id)
                 segment_news = _diet(all_items)
 
-                def news_fetcher(queries: list[str]) -> dict[str, tuple[str, ...]]:
-                    # intent ระหว่างรอบ: ค้นเพิ่ม (gate+PII+snapshot ใน gather) → diet ใหม่
-                    gather(settings.postgres_url, ctx, feeds=[], queries=queries)
-                    return _diet(load_items(settings.postgres_url, run_id))
+                if run_spec.input_mode != "frozen":
+
+                    def news_fetcher(queries: list[str]) -> dict[str, tuple[str, ...]]:
+                        # intent ระหว่างรอบ: ค้นเพิ่มผ่าน governance แล้ว snapshot
+                        gather(settings.postgres_url, ctx, feeds=[], queries=queries)
+                        return _diet(load_items(settings.postgres_url, run_id))
 
                 news_status = {
                     "enabled": True,
+                    "input_mode": run_spec.input_mode,
                     "items": [
                         {
                             "provider": it.provider,
@@ -725,11 +930,13 @@ def _run_create_impl(
                             "channel_tags": it.channel_tags,
                             "status": it.status,
                             "error": it.error,
+                            "content": it.content,
+                            "pii_redactions": it.pii_redactions,
                         }
                         for it in all_items
                     ],
                 }
-            rstore.update_progress(run_id, 55, "กำลังรัน debate agents")
+            _stage(55, "กำลังรัน debate agents")
             result = run_debate(
                 personas,
                 subject=subject,
@@ -749,7 +956,7 @@ def _run_create_impl(
                 else result.cost_usd
             )
             # อัปเดตรายการข่าวหลังรัน (รวมที่ค้นเพิ่มจาก intent ระหว่างรอบ)
-            if news_status.get("enabled"):
+            if news_status.get("enabled") and run_spec.input_mode != "frozen":
                 from simulation.newsdesk import load_items as _reload_news
 
                 news_status["items"] = [
@@ -776,7 +983,8 @@ def _run_create_impl(
                 "embedding": embedding_status,
                 "news": news_status,
             }
-        rstore.update_progress(run_id, 90, "กำลังบันทึก finding/prediction contract")
+        _stage(90, "กำลังบันทึก finding/prediction contract")
+        rstore.require_running(run_id)
         result_kind = _register_run_result(
             gov,
             run_id,
@@ -791,6 +999,7 @@ def _run_create_impl(
         )
         payload["result_kind"] = result_kind
         if body.engine == "debate":
+            rstore.require_running(run_id)
             synthesis = payload.get("synthesis", {})
             rstore.add_synthesis_revision(
                 run_id,
@@ -801,18 +1010,36 @@ def _run_create_impl(
                 parser_mode=str(synthesis.get("parser_mode", "legacy_parser")),
                 cost_usd=float(payload.get("cost_usd", 0) or 0),
             )
+        rstore.require_running(run_id)
         gov.finalize_run(run_id)
-        rstore.finish(run_id, payload)
+        if not rstore.finish(run_id, payload):
+            raise RunCanceledError(f"run {run_id} ถูกหยุดก่อนเขียนผล")
+        manifest = _persist_run_manifest(run_id)
         gov.append_audit(
-            actor=principal.user_id, action="run_completed", run_id=run_id, config_hash="-"
+            actor=principal.user_id,
+            action="run_completed",
+            run_id=run_id,
+            config_hash=(manifest or {}).get("config_hash", canonical_hash(run_spec)),
         )
+    except RunCanceledError:
+        _persist_run_manifest(run_id)
+        return {
+            "run_id": run_id,
+            "engine": body.engine,
+            "agents": n,
+            "status": "canceled",
+        }
     except HTTPException:
+        if rstore.fail(run_id, "run ถูกปฏิเสธระหว่าง worker stage"):
+            _persist_run_manifest(run_id)
         raise
     except ElectionModeError as e:
-        rstore.fail(run_id, str(e))
+        if rstore.fail(run_id, str(e)):
+            _persist_run_manifest(run_id)
         raise HTTPException(status_code=403, detail=str(e)) from e
     except Exception as e:
-        rstore.fail(run_id, str(e))
+        if rstore.fail(run_id, str(e)):
+            _persist_run_manifest(run_id)
         raise HTTPException(status_code=502, detail=f"รันไม่สำเร็จ: {e}") from e
     finally:
         if body.engine == "debate":
@@ -827,6 +1054,7 @@ def _enqueue_persistent_run(
     principal: Principal,
     *,
     preallocated_run_id: str | None = None,
+    idempotency_key: str = "",
 ) -> dict:
     """ส่ง persistent run เข้า queue — ใช้ code path เดียวกับ /runs ใน worker แล้ว poll ด้วย job id"""
     require(principal, Permission.RUN)
@@ -862,6 +1090,31 @@ def _enqueue_persistent_run(
     run_id = preallocated_run_id or new_run_id(body.engine)
     run_seed = body.seed if body.seed is not None else settings.default_seed
     rstore = RunStore(settings.postgres_url)
+    if idempotency_key and not (8 <= len(idempotency_key) <= 200):
+        raise HTTPException(status_code=422, detail="Idempotency-Key ต้องยาว 8-200 ตัวอักษร")
+    run_spec, manifest_versions, manifest_pricing, manifest_governance = _prepare_run_spec(
+        body,
+        agents=n,
+        rounds=rounds,
+        seed=run_seed,
+    )
+    from core.run_manifest import request_hash
+
+    body_hash = request_hash(run_spec)
+    existing = rstore.find_by_idempotency(idempotency_key)
+    if existing:
+        if existing["request_hash"] != body_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="Idempotency-Key นี้ถูกใช้กับ request อื่นแล้ว",
+            )
+        return {
+            "run_id": existing["run_id"],
+            "job_id": existing["job_id"],
+            "status": existing["status"],
+            "reused": True,
+            **_run_urls(existing["run_id"]),
+        }
     try:
         rstore.create(
             run_id=run_id,
@@ -882,12 +1135,32 @@ def _enqueue_persistent_run(
                 "seed": run_seed,
                 "reflection": body.reflection,
                 "experiment_id": body.experiment_id,
+                "run_spec": run_spec.model_dump(mode="json"),
+                "manifest_versions": manifest_versions,
+                "manifest_pricing": manifest_pricing,
+                "manifest_governance": manifest_governance,
             },
             status="queued",
             parent_run_id=body.parent_run_id,
             progress_message="รอ worker",
+            idempotency_key=idempotency_key,
+            idempotency_request_hash=body_hash,
         )
     except Exception as e:
+        existing = rstore.find_by_idempotency(idempotency_key)
+        if existing:
+            if existing["request_hash"] != body_hash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency-Key นี้ถูกใช้กับ request อื่นแล้ว",
+                ) from e
+            return {
+                "run_id": existing["run_id"],
+                "job_id": existing["job_id"],
+                "status": existing["status"],
+                "reused": True,
+                **_run_urls(existing["run_id"]),
+            }
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
     payload = body.model_dump()
     from core.observability import inject_trace_headers
@@ -900,7 +1173,14 @@ def _enqueue_persistent_run(
             throw=True,
         )
         rstore.attach_job(run_id, res.id)
-        return {"job_id": res.id, "run_id": run_id, "status": "SUCCESS", "result": res.get()}
+        result = res.get()
+        return {
+            "job_id": res.id,
+            "run_id": run_id,
+            "status": rstore.state(run_id),
+            "result": result,
+            **_run_urls(run_id),
+        }
     try:
         res = persistent_run_task.apply_async(
             args=(payload, principal.user_id, principal.election_verified, run_id),
@@ -911,14 +1191,33 @@ def _enqueue_persistent_run(
     except Exception as e:
         rstore.fail(run_id, f"queue ไม่พร้อม (redis?): {e}")
         raise HTTPException(status_code=503, detail=f"queue ไม่พร้อม (redis?): {e}") from e
-    return {"job_id": res.id, "run_id": run_id, "status": res.status}
+    return {
+        "job_id": res.id,
+        "run_id": run_id,
+        "status": "queued",
+        **_run_urls(run_id),
+    }
 
 
-@app.post("/runs/async")
-def run_create_async(body: RunBody, principal: Principal = Depends(get_principal)) -> dict:
+@app.post(
+    "/runs/async",
+    status_code=202,
+    response_model=AsyncRunAccepted,
+    responses={409: {"model": ApiError}, 422: {"model": ApiError}},
+)
+def run_create_async(
+    body: RunBody,
+    principal: Principal = Depends(get_principal),
+    idempotency_key: str = Header("", alias="Idempotency-Key"),
+) -> dict:
     """Queue one persistent run after governance checks."""
 
-    return _enqueue_persistent_run(body, principal)
+    key_value = idempotency_key if isinstance(idempotency_key, str) else ""
+    return _enqueue_persistent_run(
+        body,
+        principal,
+        idempotency_key=key_value.strip(),
+    )
 
 
 @app.get("/run-jobs/{job_id}")
@@ -948,7 +1247,11 @@ def run_job_status(job_id: str, principal: Principal = Depends(get_principal)) -
     return body
 
 
-@app.post("/runs/{run_id}/cancel")
+@app.post(
+    "/runs/{run_id}/cancel",
+    response_model=CancelRunResponse,
+    responses={404: {"model": ApiError}},
+)
 def run_cancel(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
     require(principal, Permission.RUN)
     from core.runstore import RunStore
@@ -958,19 +1261,28 @@ def run_cancel(run_id: str, principal: Principal = Depends(get_principal)) -> di
     try:
         store = RunStore(settings.postgres_url)
         detail = store.get(run_id)
-        store.cancel(run_id, "ยกเลิกโดยผู้ใช้")
-        if detail.get("job_id"):
+        transitioned = store.cancel(run_id, "ยกเลิกโดยผู้ใช้")
+        if transitioned and detail.get("job_id"):
             try:
                 from core.tasks import celery_app
 
                 celery_app.control.revoke(detail["job_id"], terminate=True)
             except Exception:
                 pass
-        gov = GovernanceStore(settings.postgres_url)
-        gov.append_audit(
-            actor=principal.user_id, action="run_canceled", run_id=run_id, config_hash="-"
-        )
-        return {"ok": True}
+        manifest = _persist_run_manifest(run_id) if transitioned else None
+        if transitioned:
+            gov = GovernanceStore(settings.postgres_url)
+            gov.append_audit(
+                actor=principal.user_id,
+                action="run_canceled",
+                run_id=run_id,
+                config_hash=(manifest or {}).get("config_hash", ""),
+            )
+        return {
+            "ok": True,
+            "status": store.state(run_id),
+            "transitioned": transitioned,
+        }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
@@ -1013,6 +1325,211 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
     except Exception:
         pass
     return out
+
+
+@app.post(
+    "/runs/{run_id}/rerun",
+    status_code=202,
+    response_model=AsyncRunAccepted,
+    responses={404: {"model": ApiError}, 409: {"model": ApiError}},
+)
+def run_rerun(
+    run_id: str,
+    body: RerunBody,
+    principal: Principal = Depends(get_principal),
+    idempotency_key: str = Header("", alias="Idempotency-Key"),
+) -> dict:
+    """Rerun with frozen captured inputs or with the latest external data."""
+    require(principal, Permission.RUN)
+    from core.run_manifest import RunManifestStore
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    try:
+        old = RunStore(settings.postgres_url).get(run_id)
+        manifest = RunManifestStore(settings.postgres_url).get(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if body.input_mode == "frozen" and (
+        manifest.get("schema_version") != 1 or not manifest.get("complete")
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="legacy/incomplete run ไม่มี frozen inputs ที่เชื่อถือได้",
+        )
+    request_snapshot = manifest.get("spec", {}).get("request") or {
+        "engine": old["engine"],
+        "subject": old["subject"],
+        "domain": old["domain"],
+        "agents": old["agents"],
+        "rounds": old["rounds"],
+        "seed": old["seed"],
+    }
+    request_snapshot = dict(request_snapshot)
+    if old["engine"] == "fabric":
+        # Fabric stores its effective 20 rounds; the public request contract remains <= 10.
+        request_snapshot["rounds"] = min(int(request_snapshot.get("rounds") or 3), 10)
+    request_snapshot.update(
+        {
+            "parent_run_id": run_id,
+            "source_run_id": run_id,
+            "input_mode": body.input_mode,
+        }
+    )
+    rerun_body = RunBody.model_validate(request_snapshot)
+    key_value = idempotency_key if isinstance(idempotency_key, str) else ""
+    return _enqueue_persistent_run(
+        rerun_body,
+        principal,
+        idempotency_key=key_value.strip(),
+    )
+
+
+@app.get(
+    "/runs/{run_id}/manifest",
+    response_model=ManifestResponse,
+    response_model_exclude_unset=True,
+    responses={404: {"model": ApiError}},
+)
+def run_manifest(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.run_manifest import RunManifestStore
+
+    try:
+        return RunManifestStore(get_settings().postgres_url).get(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get(
+    "/runs/{run_id}/snapshot",
+    response_model=SnapshotResponse,
+    responses={404: {"model": ApiError}, 409: {"model": ApiError}},
+)
+def run_snapshot(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
+    require(principal, Permission.RUN)
+    from core.run_manifest import RunManifestStore
+    from core.runstore import RunStore
+
+    try:
+        detail = RunStore(get_settings().postgres_url).get(run_id)
+        manifest = RunManifestStore(get_settings().postgres_url).get(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if detail["status"] != "complete":
+        raise HTTPException(status_code=409, detail="snapshot ผลพร้อมเมื่อ run complete")
+    return {
+        "run_id": run_id,
+        "manifest_hash": manifest.get("manifest_hash", ""),
+        "config_hash": manifest.get("config_hash", ""),
+        "status": detail["status"],
+        "engine": detail["engine"],
+        "subject": detail["subject"],
+        "payload": manifest.get("snapshots", {}).get("result") or detail.get("payload") or {},
+    }
+
+
+def _stored_export_data(run_id: str) -> tuple[dict, dict, dict]:
+    from core.run_manifest import RunManifestStore
+    from core.runstore import RunStore
+
+    settings = get_settings()
+    detail = RunStore(settings.postgres_url).get(run_id)
+    manifest = RunManifestStore(settings.postgres_url).get(run_id)
+    if detail["status"] != "complete":
+        raise HTTPException(status_code=409, detail="export ได้เมื่อ run complete")
+    payload = manifest.get("snapshots", {}).get("result") or detail.get("payload") or {}
+    return detail, manifest, payload
+
+
+@app.get("/runs/{run_id}/export.json")
+def run_export_json(run_id: str, principal: Principal = Depends(get_principal)):
+    require(principal, Permission.EXPORT)
+    from fastapi.responses import Response
+
+    from governance.store import GovernanceStore
+    from governance.watermark import watermark_payload
+
+    settings = get_settings()
+    try:
+        detail, manifest, payload = _stored_export_data(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    exported = watermark_payload(
+        {
+            "run_id": run_id,
+            "engine": detail["engine"],
+            "subject": detail["subject"],
+            "status": detail["status"],
+            "config_hash": manifest.get("config_hash", ""),
+            "manifest": manifest,
+            "result": payload,
+        },
+        run_id=run_id,
+        manifest_hash=manifest.get("manifest_hash", "legacy-incomplete"),
+        enabled=settings.watermark_enabled,
+    )
+    GovernanceStore(settings.postgres_url).append_audit(
+        actor=principal.user_id,
+        action="run_snapshot_exported",
+        run_id=run_id,
+        config_hash=manifest.get("config_hash", ""),
+        detail="format=json stored_snapshot=true",
+    )
+    return Response(
+        json.dumps(exported, ensure_ascii=False, sort_keys=True),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="chimlang-{run_id}.json"'},
+    )
+
+
+@app.get("/runs/{run_id}/export.pdf")
+def run_export_pdf(
+    run_id: str,
+    lang: str = Query("th", pattern="^(th|en)$"),
+    principal: Principal = Depends(get_principal),
+):
+    require(principal, Permission.EXPORT)
+    from fastapi.responses import FileResponse
+
+    from governance.store import GovernanceStore
+    from governance.watermark import export_report
+
+    settings = get_settings()
+    try:
+        detail, manifest, payload = _stored_export_data(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    th = lang == "th"
+    title = "ผลจำลองจาก snapshot ที่บันทึกไว้" if th else "Stored simulation snapshot"
+    lines = [
+        f"# {title}: {detail['subject']}",
+        "",
+        f"- run_id: {run_id}",
+        f"- engine: {detail['engine']}",
+        f"- manifest_hash: {manifest.get('manifest_hash', 'legacy-incomplete')}",
+        f"- config_hash: {manifest.get('config_hash', '')}",
+        "- determinism: provider-best-effort",
+        "",
+        "## ผลลัพธ์" if th else "## Result",
+        "",
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2),
+    ]
+    content = ElectionPolicy(classify_scenario(detail["subject"])).apply_labels("\n".join(lines))
+    out = export_report(
+        content,
+        Path(__file__).resolve().parents[1] / ".tmp" / f"export-{run_id}.pdf",
+        run_id=run_id,
+        enabled=settings.watermark_enabled,
+    )
+    GovernanceStore(settings.postgres_url).append_audit(
+        actor=principal.user_id,
+        action="run_snapshot_exported",
+        run_id=run_id,
+        config_hash=manifest.get("config_hash", ""),
+        detail="format=pdf stored_snapshot=true",
+    )
+    return FileResponse(out, media_type="application/pdf", filename=f"chimlang-{run_id}.pdf")
 
 
 def _validation_report(parent_run_id: str, children: list[dict]) -> dict:
@@ -1380,6 +1897,17 @@ def run_detail_json(run_id: str, principal: Principal = Depends(get_principal)) 
         gstore = GalleryStore(settings.postgres_url)
         detail["share_token"] = gstore.find_by_run(run_id)
         try:
+            from core.run_manifest import RunManifestStore
+
+            detail["manifest"] = RunManifestStore(settings.postgres_url).get(run_id)
+        except ValueError:
+            detail["manifest"] = {
+                "run_id": run_id,
+                "schema_version": 0,
+                "complete": False,
+                "reproducibility": "legacy-incomplete",
+            }
+        try:
             from core.run_quality import build_trust_scorecard
 
             detail["trust_scorecard"] = build_trust_scorecard(detail)
@@ -1500,7 +2028,7 @@ def run_share(run_id: str, principal: Principal = Depends(get_principal)) -> dic
         gstore = GalleryStore(settings.postgres_url)
         existing = gstore.find_by_run(run_id)
         if existing:
-            return {"share_token": existing, "url": f"/app/#gallery/{existing}"}
+            return {"share_token": existing, "url": f"/app/#/gallery/{existing}"}
         payload = {**(detail.get("payload") or {}), "engine": detail.get("engine", "fabric")}
         token = gstore.share(
             subject=detail["subject"],
@@ -1519,7 +2047,7 @@ def run_share(run_id: str, principal: Principal = Depends(get_principal)) -> dic
         )
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    return {"share_token": token, "url": f"/app/#gallery/{token}"}
+    return {"share_token": token, "url": f"/app/#/gallery/{token}"}
 
 
 @app.delete("/runs/{run_id}/share")
@@ -1619,7 +2147,7 @@ def gallery_share(body: ShareBody, principal: Principal = Depends(get_principal)
         )
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    return {"share_token": token, "url": f"/app/#gallery/{token}"}
+    return {"share_token": token, "url": f"/app/#/gallery/{token}"}
 
 
 @app.get("/gallery.json")

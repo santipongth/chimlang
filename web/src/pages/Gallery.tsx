@@ -20,7 +20,15 @@ function VoteBar({ votes }: { votes: { agree: number; disagree: number } }) {
   );
 }
 
-export default function Gallery() {
+export default function Gallery({
+  shareToken = "",
+  onBackToList,
+  onSelectToken,
+}: {
+  shareToken?: string;
+  onBackToList?: () => void;
+  onSelectToken?: (token: string) => void;
+}) {
   const { t } = useLang();
   const [items, setItems] = useState<GalleryListItem[]>([]);
   const [detail, setDetail] = useState<GalleryDetail | null>(null);
@@ -37,6 +45,15 @@ export default function Gallery() {
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    if (!shareToken) {
+      setDetail(null);
+      return;
+    }
+    fetchGalleryDetail(shareToken)
+      .then(setDetail)
+      .catch((e) => setError(String(e.message ?? e)));
+  }, [shareToken]);
 
   const card = "bg-card border border-border rounded-2xl p-5";
 
@@ -73,7 +90,13 @@ export default function Gallery() {
               </div>
               <h2 className="mt-1 font-display text-2xl font-semibold">{detail.subject}</h2>
             </div>
-            <button onClick={() => setDetail(null)} className="text-sm text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => {
+                setDetail(null);
+                onBackToList?.();
+              }}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
               ← {t("gal_back")}
             </button>
           </div>
@@ -134,7 +157,10 @@ export default function Gallery() {
           {items.map((i) => (
             <button
               key={i.share_token}
-              onClick={() => fetchGalleryDetail(i.share_token).then(setDetail).catch((e) => setError(String(e.message ?? e)))}
+              onClick={() => {
+                if (onSelectToken) onSelectToken(i.share_token);
+                else fetchGalleryDetail(i.share_token).then(setDetail).catch((e) => setError(String(e.message ?? e)));
+              }}
               className={card + " block w-full text-left hover:bg-muted/40 transition"}
             >
               <div className="flex items-center justify-between gap-3 flex-wrap">

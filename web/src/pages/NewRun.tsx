@@ -14,7 +14,6 @@ import {
   fetchPacks,
   fetchPool,
   fetchRunReadiness,
-  fetchRunJob,
   fetchSettings,
   pct,
   RunReadiness,
@@ -204,6 +203,7 @@ export default function NewRun({
     setError("");
     setProgress(t("run_queued"));
     try {
+      const idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `run-${Date.now()}-${Math.random()}`;
       const job = await createRunAsync({
         engine,
         subject: subject.trim(),
@@ -220,31 +220,8 @@ export default function NewRun({
         claim,
         measurement,
         due_days: dueDays,
-      });
-      if (job.result?.run_id) {
-        onCreated(job.result.run_id);
-        return;
-      }
-      setProgress(t("run_running"));
-      for (let i = 0; i < 240; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const status = await fetchRunJob(job.job_id);
-        if (status.result?.run_id) {
-          onCreated(status.result.run_id);
-          return;
-        }
-        if (status.status === "FAILURE") {
-          throw new Error(status.error || "run failed");
-        }
-        setProgress(
-          status.progress_message
-            ? `${status.progress ?? 0}% · ${status.progress_message}`
-            : status.status === "STARTED"
-              ? t("run_running")
-              : t("run_queued"),
-        );
-      }
-      throw new Error(t("run_timeout"));
+      }, idempotencyKey);
+      onCreated(job.run_id);
     } catch (e: any) {
       setError(String(e.message ?? e));
     } finally {

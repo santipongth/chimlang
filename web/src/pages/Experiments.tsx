@@ -67,9 +67,15 @@ function Analysis({ detail }: { detail: ExperimentDetail }) {
   );
 }
 
-export default function Experiments() {
+export default function Experiments({
+  initialExperimentId = "",
+  onSelect,
+}: {
+  initialExperimentId?: string;
+  onSelect?: (experimentId: string) => void;
+}) {
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(initialExperimentId);
   const [mode, setMode] = useState<"comparison" | "sweep">("comparison");
   const [name, setName] = useState("วิเคราะห์ความไวของผลจำลอง");
   const [runIds, setRunIds] = useState("");
@@ -91,6 +97,7 @@ export default function Experiments() {
     mutationFn: () => createExperimentComparison(name, parseList(runIds)),
     onSuccess: (detail) => {
       setSelected(detail.workspace.experiment_id);
+      onSelect?.(detail.workspace.experiment_id);
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
       queryClient.setQueryData(["experiment", detail.workspace.experiment_id], detail);
     },
@@ -107,6 +114,7 @@ export default function Experiments() {
     },
     onSuccess: (created) => {
       setSelected(created.experiment_id);
+      onSelect?.(created.experiment_id);
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
       queryClient.invalidateQueries({ queryKey: ["experiment", created.experiment_id] });
     },
@@ -155,7 +163,7 @@ export default function Experiments() {
             <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">Workspaces</div>
             <div className="mt-1 max-h-80 space-y-1 overflow-y-auto">
               {(listQuery.data ?? []).map((item) => (
-                <button key={item.experiment_id} onClick={() => setSelected(item.experiment_id)} className={`w-full rounded-lg px-3 py-2 text-left text-xs ${selected === item.experiment_id ? "bg-primary/10 text-primary-strong" : "hover:bg-muted"}`}><div className="font-medium">{item.name}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{item.kind} · {item.run_count} runs</div></button>
+                <button key={item.experiment_id} onClick={() => { setSelected(item.experiment_id); onSelect?.(item.experiment_id); }} className={`w-full rounded-lg px-3 py-2 text-left text-xs ${selected === item.experiment_id ? "bg-primary/10 text-primary-strong" : "hover:bg-muted"}`}><div className="font-medium">{item.name}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{item.kind} · {item.run_count} runs</div></button>
               ))}
               {listQuery.data?.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">ยังไม่มี experiment</p>}
             </div>

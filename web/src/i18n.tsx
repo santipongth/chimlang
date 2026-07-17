@@ -18,7 +18,13 @@ const DICT: Record<string, { th: string; en: string }> = {
   nav_insights: { th: "ภาพรวมสถิติ (Insights)", en: "Insights" },
   nav_watchlist: { th: "รายการติดตาม (Watchlist)", en: "Watchlist" },
   nav_gallery: { th: "แกลเลอรีสาธารณะ", en: "Public Gallery" },
+  nav_experiments: { th: "การทดลอง", en: "Experiments" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
+  nav_main: { th: "เมนูหลัก", en: "Main navigation" },
+  nav_open: { th: "เปิดเมนู", en: "Open navigation" },
+  nav_close: { th: "ปิดเมนู", en: "Close navigation" },
+  route_not_found: { th: "ไม่พบหน้าที่ต้องการ", en: "Page not found" },
+  route_home: { th: "กลับหน้าหลัก", en: "Back home" },
   // Landing
   landing_eyebrow: { th: "DIGITAL SANDBOX", en: "DIGITAL SANDBOX" },
   landing_title: { th: "ซ้อมอนาคต ก่อนตัดสินใจจริง", en: "Rehearse the future before you decide" },

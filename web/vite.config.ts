@@ -16,11 +16,13 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          charts: ["echarts/core", "echarts/charts", "echarts/components", "echarts/renderers"],
-          graph: ["cytoscape"],
-          query: ["@tanstack/react-query", "openapi-fetch"],
-          vendor: ["react", "react-dom", "lucide-react"],
+        onlyExplicitManualChunks: true,
+        manualChunks(id) {
+          if (/node_modules\/(react|react-dom|lucide-react)\//.test(id)) return "vendor";
+          if (/node_modules\/(react-router|react-router-dom|@remix-run\/router)\//.test(id)) return "router";
+          if (/node_modules\/(@tanstack\/react-query|openapi-fetch)\//.test(id)) return "query";
+          if (id.includes("/node_modules/cytoscape/")) return "graph";
+          if (id.includes("/node_modules/echarts/")) return "charts";
         },
       },
     },
@@ -32,8 +34,8 @@ export default defineConfig({
         "/runs", "/run-jobs", "/run-metrics.json", "/simruns.json", "/settings",
         "/experiments", "/engines.json", "/personas", "/gallery", "/watchlists",
         "/alerts", "/calibration.json", "/predictions", "/observability.json", "/compare.json",
-      ].map((p) => [
-        p,
+      ].map((path) => [
+        path,
         { target: "http://localhost:8000", changeOrigin: true },
       ]),
     ),

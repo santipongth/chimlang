@@ -68,6 +68,10 @@ CREATE INDEX IF NOT EXISTS run_events_run ON run_events (run_id, created_at);
 """
 
 
+class RunCanceledError(RuntimeError):
+    pass
+
+
 class RunStore:
     def __init__(self, dsn: str):
         self._dsn = dsn
@@ -95,16 +99,17 @@ class RunStore:
         progress_message: str = "",
         parent_run_id: str = "",
         idempotency_key: str = "",
+        idempotency_request_hash: str = "",
     ) -> None:
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO sim_runs "
                 "(run_id, engine, subject, domain, agents, rounds, seed, config, status, "
                 "job_id, started_at, progress, progress_message, parent_run_id, "
-                "heartbeat_at, idempotency_key) "
+                "heartbeat_at, idempotency_key, idempotency_request_hash) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
                 "CASE WHEN %s = 'running' THEN now() ELSE NULL END, %s, %s, %s, "
-                "CASE WHEN %s = 'running' THEN now() ELSE NULL END, %s)",
+                "CASE WHEN %s = 'running' THEN now() ELSE NULL END, %s, %s)",
                 (
                     run_id,
                     engine,
@@ -122,6 +127,7 @@ class RunStore:
                     parent_run_id,
                     status,
                     idempotency_key,
+                    idempotency_request_hash,
                 ),
             )
         self.add_event(
@@ -162,14 +168,16 @@ class RunStore:
         self.add_event(run_id, "running", stage="start", progress=5, message=message)
         return True
 
-    def update_progress(self, run_id: str, progress: int, message: str) -> None:
+    def update_progress(self, run_id: str, progress: int, message: str) -> bool:
         with self._conn() as conn:
-            conn.execute(
+            row = conn.execute(
                 "UPDATE sim_runs SET progress = %s, progress_message = %s, heartbeat_at = now() "
                 "WHERE run_id = %s "
-                "AND status IN ('queued', 'running')",
+                "AND status IN ('queued', 'running') RETURNING run_id",
                 (max(0, min(99, progress)), message[:200], run_id),
-            )
+            ).fetchone()
+        if row is None:
+            return False
         self.add_event(
             run_id,
             "progress",
@@ -177,6 +185,7 @@ class RunStore:
             progress=max(0, min(99, progress)),
             message=message,
         )
+        return True
 
     def heartbeat(self, run_id: str, message: str = "worker heartbeat") -> bool:
         with self._conn() as conn:
@@ -187,14 +196,16 @@ class RunStore:
             ).fetchone()
         return row is not None
 
-    def finish(self, run_id: str, payload: dict) -> None:
+    def finish(self, run_id: str, payload: dict) -> bool:
         with self._conn() as conn:
-            conn.execute(
+            row = conn.execute(
                 "UPDATE sim_runs SET status = 'complete', payload = %s, progress = 100, "
                 "progress_message = 'complete', finished_at = now(), heartbeat_at = now() "
-                "WHERE run_id = %s",
+                "WHERE run_id = %s AND status = 'running' RETURNING run_id",
                 (json.dumps(payload, ensure_ascii=False), run_id),
-            )
+            ).fetchone()
+        if row is None:
+            return False
         self.add_event(
             run_id,
             "completed",
@@ -204,6 +215,7 @@ class RunStore:
             cost_usd=float(payload.get("cost_usd", 0) or 0),
             message="complete",
         )
+        return True
 
     def update_payload(self, run_id: str, payload: dict, message: str = "updated") -> None:
         with self._conn() as conn:
@@ -213,17 +225,19 @@ class RunStore:
             )
         self.add_event(run_id, "payload_updated", stage="repair", message=message)
 
-    def fail(self, run_id: str, error: str) -> None:
+    def fail(self, run_id: str, error: str) -> bool:
         with self._conn() as conn:
             row = conn.execute(
                 "UPDATE sim_runs SET status = 'error', error = %s, progress_message = 'error', "
-                "finished_at = now() WHERE run_id = %s RETURNING engine",
+                "finished_at = now() WHERE run_id = %s "
+                "AND status IN ('queued', 'running') RETURNING engine",
                 (safe_event_message(error), run_id),
             ).fetchone()
-        if row:
-            from core.observability import RUN_FAILURES
+        if row is None:
+            return False
+        from core.observability import RUN_FAILURES
 
-            RUN_FAILURES.labels(str(row[0]), "run_failed").inc()
+        RUN_FAILURES.labels(str(row[0]), "run_failed").inc()
         self.add_event(
             run_id,
             "failed",
@@ -231,21 +245,47 @@ class RunStore:
             call_status="failed",
             message=error,
         )
+        return True
 
-    def cancel(self, run_id: str, reason: str = "canceled") -> None:
+    def cancel(self, run_id: str, reason: str = "canceled") -> bool:
         with self._conn() as conn:
-            conn.execute(
+            row = conn.execute(
                 "UPDATE sim_runs SET status = 'canceled', error = %s, "
                 "progress_message = 'canceled', "
-                "finished_at = now() WHERE run_id = %s AND status IN ('queued', 'running')",
+                "finished_at = now() WHERE run_id = %s AND status IN ('queued', 'running') "
+                "RETURNING run_id",
                 (reason[:500], run_id),
-            )
+            ).fetchone()
+        if row is None:
+            return False
         self.add_event(run_id, "canceled", stage="canceled", message=reason)
+        return True
+
+    def state(self, run_id: str) -> str:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT status FROM sim_runs WHERE run_id = %s",
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"ไม่พบ run {run_id}")
+        return str(row[0])
+
+    def require_running(self, run_id: str) -> None:
+        status = self.state(run_id)
+        if status != "running":
+            raise RunCanceledError(f"run {run_id} หยุดแล้ว: {status}")
 
     def add_posts(self, run_id: str, posts: list[dict]) -> None:
         if not posts:
             return
         with self._conn() as conn:
+            state = conn.execute(
+                "SELECT status FROM sim_runs WHERE run_id = %s FOR UPDATE",
+                (run_id,),
+            ).fetchone()
+            if state is None or state[0] != "running":
+                raise RunCanceledError(f"run {run_id} ไม่รับ posts เพิ่มแล้ว")
             conn.cursor().executemany(
                 "INSERT INTO debate_posts "
                 "(run_id, round_no, agent_idx, segment, content, stance, sentiment, "
@@ -558,6 +598,24 @@ class RunStore:
             "progress": row[2],
             "progress_message": row[3],
             "error": row[4],
+        }
+
+    def find_by_idempotency(self, key: str) -> dict | None:
+        if not key:
+            return None
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT run_id, status, job_id, idempotency_request_hash "
+                "FROM sim_runs WHERE idempotency_key = %s",
+                (key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "run_id": row[0],
+            "status": row[1],
+            "job_id": row[2],
+            "request_hash": row[3],
         }
 
     def children(self, parent_run_id: str) -> list[dict]:

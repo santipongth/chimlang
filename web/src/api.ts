@@ -1,6 +1,7 @@
 // ตัวช่วยเรียก API ของชิมลาง — type ตรงกับ response ฝั่ง FastAPI
 
 import { apiClient } from "./openapi-client";
+import type { components } from "./openapi.generated";
 
 function openApiError(error: unknown, status: number): Error {
   if (error && typeof error === "object" && "detail" in error) {
@@ -140,6 +141,8 @@ function toRunRequest(body: CreateRunBody) {
     parent_run_id: body.parent_run_id ?? "",
     reflection: body.reflection ?? false,
     experiment_id: "",
+    input_mode: "latest" as const,
+    source_run_id: "",
   };
 }
 
@@ -190,18 +193,26 @@ export interface RunJobStatus {
   job_id: string;
   run_id?: string;
   status: string;
+  reused?: boolean;
+  status_url?: string;
+  events_url?: string;
+  manifest_url?: string;
+  snapshot_url?: string;
   progress?: number;
   progress_message?: string;
   result?: RunJobResult;
   error?: string;
 }
 
-export async function createRunAsync(body: CreateRunBody): Promise<RunJobStatus> {
+export type AsyncRunAccepted = components["schemas"]["AsyncRunAccepted"];
+
+export async function createRunAsync(body: CreateRunBody, idempotencyKey: string): Promise<AsyncRunAccepted> {
   const { data, error, response } = await apiClient.POST("/runs/async", {
+    params: { header: { "Idempotency-Key": idempotencyKey } },
     body: toRunRequest(body),
   });
   if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as RunJobStatus;
+  return data;
 }
 
 export async function fetchRunJob(jobId: string): Promise<RunJobStatus> {
@@ -348,6 +359,13 @@ interface SimRunDetailBase extends Omit<SimRunSummary, "engine"> {
       weight?: number;
     }[];
   };
+  manifest?: {
+    schema_version: number;
+    complete: boolean;
+    reproducibility: string;
+    manifest_hash?: string;
+    config_hash?: string;
+  };
 }
 
 export type SimRunDetail =
@@ -471,6 +489,22 @@ export async function cancelRun(runId: string): Promise<void> {
     params: { path: { run_id: runId } },
   });
   if (!response.ok) throw openApiError(error, response.status);
+}
+
+export async function rerunRun(
+  runId: string,
+  inputMode: "frozen" | "latest",
+  idempotencyKey: string,
+): Promise<AsyncRunAccepted> {
+  const { data, error, response } = await apiClient.POST("/runs/{run_id}/rerun", {
+    params: {
+      path: { run_id: runId },
+      header: { "Idempotency-Key": idempotencyKey },
+    },
+    body: { input_mode: inputMode },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
 }
 
 export async function retryRun(runId: string): Promise<RunJobStatus> {
@@ -1100,27 +1134,7 @@ export async function createExperimentSweep(
   const { data, error, response } = await apiClient.POST("/experiments/sweep", {
     body: {
       name,
-      base_run: {
-        engine: baseRun.engine,
-        subject: baseRun.subject,
-        domain: baseRun.domain,
-        agents: baseRun.agents,
-        rounds: baseRun.rounds ?? 3,
-        pack_id: baseRun.pack_id ?? null,
-        red_team: baseRun.red_team ?? false,
-        sources: (baseRun.sources ?? []).map((source) => ({ ...source })),
-        claim: baseRun.claim ?? "",
-        measurement: baseRun.measurement ?? "",
-        due_days: baseRun.due_days ?? 30,
-        probability: baseRun.probability ?? null,
-        seed: baseRun.seed ?? null,
-        views: baseRun.views ?? [],
-        live_news: baseRun.live_news ?? false,
-        retrieval_mode: baseRun.retrieval_mode ?? "hybrid",
-        parent_run_id: baseRun.parent_run_id ?? "",
-        reflection: baseRun.reflection ?? false,
-        experiment_id: "",
-      },
+      base_run: toRunRequest(baseRun),
       parameters,
     },
   });

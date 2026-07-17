@@ -46,6 +46,28 @@ def apply_watermark(content: str, *, run_id: str, enabled: bool = True) -> str:
     return f"{machine}\n{visible_top}\n\n{content}\n\n---\n{visible_bottom}\n"
 
 
+def watermark_payload(
+    payload: dict,
+    *,
+    run_id: str,
+    manifest_hash: str,
+    enabled: bool = True,
+) -> dict:
+    """Wrap a JSON snapshot with visible and machine-readable provenance."""
+    if not enabled:
+        raise WatermarkDisabledError()
+    return {
+        "watermark": {
+            "label": WATERMARK_LABEL,
+            "note": "ผลจำลองโดย AI (ชิมลาง) ไม่ใช่โพลจริง",
+            "run_id": run_id,
+            "manifest_hash": manifest_hash,
+            "exported_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        },
+        "snapshot": payload,
+    }
+
+
 def verify_watermark(text: str) -> WatermarkInfo | None:
     """อ่าน machine-readable watermark กลับ — None ถ้าไม่พบ (ใช้ตรวจใน test/pipeline)"""
     m = _MACHINE_RE.search(text)

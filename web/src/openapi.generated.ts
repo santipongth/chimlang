@@ -685,6 +685,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{run_id}/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Rerun
+         * @description Rerun with frozen captured inputs or with the latest external data.
+         */
+        post: operations["run_rerun_runs__run_id__rerun_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Manifest */
+        get: operations["run_manifest_runs__run_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Snapshot */
+        get: operations["run_snapshot_runs__run_id__snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/export.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Export Json */
+        get: operations["run_export_json_runs__run_id__export_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/export.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Export Pdf */
+        get: operations["run_export_pdf_runs__run_id__export_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs/{run_id}/validate": {
         parameters: {
             query?: never;
@@ -1216,6 +1304,49 @@ export interface components {
              */
             all: boolean;
         };
+        /** ApiError */
+        ApiError: {
+            /** Detail */
+            detail: string;
+        };
+        /** AsyncRunAccepted */
+        AsyncRunAccepted: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Job Id
+             * @default
+             */
+            job_id: string;
+            /** Status */
+            status: string;
+            /**
+             * Reused
+             * @default false
+             */
+            reused: boolean;
+            /** Status Url */
+            status_url: string;
+            /** Events Url */
+            events_url: string;
+            /** Manifest Url */
+            manifest_url: string;
+            /** Snapshot Url */
+            snapshot_url: string;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** CancelRunResponse */
+        CancelRunResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Status */
+            status: string;
+            /** Transitioned */
+            transitioned: boolean;
+        };
         /** CitizenFeedbackRequest */
         CitizenFeedbackRequest: {
             /** Segment Id */
@@ -1268,6 +1399,70 @@ export interface components {
              */
             agents: number;
         };
+        /** ManifestResponse */
+        ManifestResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Status
+             * @default legacy
+             */
+            status: string;
+            /** Complete */
+            complete: boolean;
+            /** Reproducibility */
+            reproducibility: string;
+            /** Incomplete Reasons */
+            incomplete_reasons?: string[];
+            /**
+             * Determinism
+             * @default provider-best-effort
+             */
+            determinism: string;
+            /** Spec */
+            spec?: components["schemas"]["RunSpecResponse"] | {
+                [key: string]: unknown;
+            };
+            /** Versions */
+            versions?: {
+                [key: string]: unknown;
+            };
+            /** Pricing */
+            pricing?: {
+                [key: string]: unknown;
+            };
+            /** Governance */
+            governance?: {
+                [key: string]: unknown;
+            };
+            /** Snapshots */
+            snapshots?: {
+                [key: string]: unknown;
+            };
+            /** Artifact Hashes */
+            artifact_hashes?: {
+                [key: string]: string;
+            };
+            /**
+             * Config Hash
+             * @default
+             */
+            config_hash: string;
+            /**
+             * Manifest Hash
+             * @default
+             */
+            manifest_hash: string;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /** OOSRequest */
         OOSRequest: {
             /** Feature Series */
@@ -1319,6 +1514,14 @@ export interface components {
              * @default binary
              */
             forecast_type: string;
+        };
+        /** RerunBody */
+        RerunBody: {
+            /**
+             * Input Mode
+             * @enum {string}
+             */
+            input_mode: "frozen" | "latest";
         };
         /** ResolveBody */
         ResolveBody: {
@@ -1422,6 +1625,17 @@ export interface components {
              * @default
              */
             experiment_id: string;
+            /**
+             * Input Mode
+             * @default latest
+             * @enum {string}
+             */
+            input_mode: "latest" | "frozen";
+            /**
+             * Source Run Id
+             * @default
+             */
+            source_run_id: string;
         };
         /** RunReadinessBody */
         RunReadinessBody: {
@@ -1503,6 +1717,28 @@ export interface components {
              */
             reflection: boolean;
         };
+        /** RunSpecResponse */
+        RunSpecResponse: {
+            /** Schema Version */
+            schema_version: number;
+            /** Request */
+            request: {
+                [key: string]: unknown;
+            };
+            /** Seed */
+            seed: number;
+            /** Population Snapshot */
+            population_snapshot: {
+                [key: string]: unknown;
+            };
+            /**
+             * Input Mode
+             * @enum {string}
+             */
+            input_mode: "latest" | "frozen";
+            /** Source Run Id */
+            source_run_id: string;
+        };
         /** SecretKeyBody */
         SecretKeyBody: {
             /** Api Key */
@@ -1517,6 +1753,25 @@ export interface components {
              * @default 100
              */
             agents: number;
+        };
+        /** SnapshotResponse */
+        SnapshotResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Manifest Hash */
+            manifest_hash: string;
+            /** Config Hash */
+            config_hash: string;
+            /** Status */
+            status: string;
+            /** Engine */
+            engine: string;
+            /** Subject */
+            subject: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
         };
         /** SweepBody */
         SweepBody: {
@@ -2880,6 +3135,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "Idempotency-Key"?: string;
                 "x-api-key"?: string | null;
             };
             path?: never;
@@ -2892,23 +3148,30 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AsyncRunAccepted"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -2967,9 +3230,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CancelRunResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description Validation Error */
@@ -3005,6 +3275,223 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_rerun_runs__run_id__rerun_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RerunBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AsyncRunAccepted"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_manifest_runs__run_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManifestResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_snapshot_runs__run_id__snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_export_json_runs__run_id__export_json_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_export_pdf_runs__run_id__export_pdf_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

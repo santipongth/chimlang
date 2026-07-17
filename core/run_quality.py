@@ -257,11 +257,24 @@ def build_trust_scorecard(detail: dict) -> dict:
         "pass" if payload.get("cost_usd", 0) is not None else "warn",
         f"${float(payload.get('cost_usd') or 0):.4f}",
     )
+    manifest = detail.get("manifest") or {}
+    try:
+        from core.run_manifest import verify_manifest_hash
+
+        manifest_valid = verify_manifest_hash(manifest)
+    except Exception:
+        manifest_valid = False
     add(
         "reproducibility",
         "Reproducibility",
-        "pass" if detail.get("seed") is not None and detail.get("run_id") else "warn",
-        f"seed={detail.get('seed')}",
+        "pass"
+        if manifest.get("schema_version") == 1 and manifest.get("complete") and manifest_valid
+        else "warn",
+        (
+            f"manifest={str(manifest.get('manifest_hash', ''))[:12]} · provider-best-effort"
+            if manifest_valid and manifest.get("complete")
+            else str(manifest.get("reproducibility") or "legacy-incomplete")
+        ),
     )
     verifier = (payload.get("protocol") or {}).get("verifier") or {}
     add(

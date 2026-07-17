@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ElementType } from "react";
 import {
   BarChart3,
   Bell,
@@ -7,9 +7,22 @@ import {
   Globe,
   History,
   Languages,
+  Menu,
   Plus,
   Settings as SettingsIcon,
-  Target } from "lucide-react";
+  Target,
+  X,
+} from "lucide-react";
+import {
+  HashRouter,
+  Link,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { LangProvider, useLang } from "./i18n";
 import { fetchWatchlists } from "./api";
 
@@ -25,181 +38,294 @@ const Gallery = lazy(() => import("./pages/Gallery"));
 const RunDetail = lazy(() => import("./pages/RunDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
 
-export type Page =
-  | "home"
-  | "new"
-  | "run"
-  | "compare"
-  | "history"
-  | "insights"
-  | "experiments"
-  | "calibration"
-  | "watchlist"
-  | "gallery"
-  | "settings";
+export const ROUTES = {
+  home: "/",
+  new: "/new",
+  compare: "/compare",
+  history: "/history",
+  insights: "/insights",
+  experiments: "/experiments",
+  calibration: "/calibration",
+  watchlist: "/watchlist",
+  gallery: "/gallery",
+  settings: "/settings",
+  run: (runId: string) => `/runs/${encodeURIComponent(runId)}`,
+  galleryItem: (token: string) => `/gallery/${encodeURIComponent(token)}`,
+  experiment: (experimentId: string) => `/experiments/${encodeURIComponent(experimentId)}`,
+} as const;
 
 export interface RunRequest {
   subject: string;
   agents: number;
-  redTeam?: boolean; // fabric A/B → หน้า Compare
+  redTeam?: boolean;
   packId?: number | null;
 }
 
-// Sidebar ตาม studio ต้นทาง (route.tsx ของ swarm-visionary-forge): lucide icons +
-// ลำดับเมนูเดียวกัน + Settings อยู่ท้าย nav
-function Sidebar({
-  page,
-  setPage,
-  badges = {},
-}: {
-  page: Page;
-  setPage: (p: Page) => void;
-  badges?: Partial<Record<Page, number>>;
-}) {
+type NavigationItem = {
+  to: string;
+  icon: ElementType;
+  label: string;
+  badge?: number;
+};
+
+function LanguageControl() {
   const { lang, setLang, t } = useLang();
-  const items: { id: Page; icon: React.ElementType; label: string }[] = [
-    { id: "new", icon: Plus, label: t("nav_new_run") },
-    { id: "history", icon: History, label: t("nav_history") },
-    { id: "insights", icon: BarChart3, label: t("nav_insights") },
-    { id: "experiments", icon: FlaskConical, label: "Experiments" },
-    { id: "calibration", icon: Target, label: t("nav_calibration") },
-    { id: "gallery", icon: Globe, label: t("nav_gallery") },
-    { id: "watchlist", icon: Bell, label: t("nav_watchlist") },
-    { id: "settings", icon: SettingsIcon, label: t("nav_settings") },
+  return (
+    <div className="mt-4 flex items-center justify-between border-t border-border px-1 pt-3">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Languages className="h-3.5 w-3.5" /> {t("lang_label")}
+      </span>
+      <div className="flex overflow-hidden rounded-lg border border-border text-[11px]">
+        {(["th", "en"] as const).map((candidate) => (
+          <button
+            key={candidate}
+            type="button"
+            onClick={() => setLang(candidate)}
+            className={`px-2.5 py-1 transition ${
+              lang === candidate
+                ? "bg-primary font-medium text-white"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {candidate === "th" ? "ไทย" : "EN"}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Navigation({ unread, onNavigate }: { unread: number; onNavigate?: () => void }) {
+  const { t } = useLang();
+  const items: NavigationItem[] = [
+    { to: ROUTES.new, icon: Plus, label: t("nav_new_run") },
+    { to: ROUTES.history, icon: History, label: t("nav_history") },
+    { to: ROUTES.insights, icon: BarChart3, label: t("nav_insights") },
+    { to: ROUTES.experiments, icon: FlaskConical, label: t("nav_experiments") },
+    { to: ROUTES.calibration, icon: Target, label: t("nav_calibration") },
+    { to: ROUTES.gallery, icon: Globe, label: t("nav_gallery") },
+    { to: ROUTES.watchlist, icon: Bell, label: t("nav_watchlist"), badge: unread },
+    { to: ROUTES.settings, icon: SettingsIcon, label: t("nav_settings") },
   ];
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex min-h-screen">
-      <button onClick={() => setPage("home")} className="mb-6 flex items-center gap-2 px-2 text-left">
+    <>
+      <Link to={ROUTES.home} onClick={onNavigate} className="mb-6 flex items-center gap-2 px-2 text-left">
         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
           <Fish className="h-5 w-5" />
         </div>
         <span className="font-display text-lg font-semibold">ชิมลาง</span>
-      </button>
-      <nav className="flex flex-1 flex-col gap-1 text-sm">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            onClick={() => setPage(it.id)}
-            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
-              page === it.id
-                ? "bg-sidebar-accent font-medium text-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60"
-            }`}
+      </Link>
+      <nav aria-label={t("nav_main")} className="flex flex-1 flex-col gap-1 text-sm">
+        {items.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
+                isActive
+                  ? "bg-sidebar-accent font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent/60"
+              }`
+            }
           >
-            <it.icon className="h-4 w-4 shrink-0" />
-            {it.label}
-            {(badges[it.id] ?? 0) > 0 && (
+            <item.icon className="h-4 w-4 shrink-0" />
+            {item.label}
+            {(item.badge ?? 0) > 0 && (
               <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">
-                {badges[it.id]}
+                {item.badge}
               </span>
             )}
-          </button>
+          </NavLink>
         ))}
       </nav>
-      {/* ตัวสลับภาษา — mini segmented control มุมล่าง (redesign 12 ก.ค.) */}
-      <div className="mt-4 flex items-center justify-between border-t border-border px-1 pt-3">
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Languages className="h-3.5 w-3.5" /> {t("lang_label")}
-        </span>
-        <div className="flex overflow-hidden rounded-lg border border-border text-[11px]">
-          {(["th", "en"] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => setLang(l)}
-              className={`px-2.5 py-1 transition ${
-                lang === l ? "bg-primary font-medium text-white" : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {l === "th" ? "ไทย" : "EN"}
-            </button>
-          ))}
-        </div>
-      </div>
-    </aside>
+      <LanguageControl />
+    </>
+  );
+}
+
+function RunRoute() {
+  const navigate = useNavigate();
+  const { runId } = useParams<{ runId: string }>();
+  if (!runId) return <NotFound />;
+  return (
+    <RunDetail
+      runId={runId}
+      onBack={() => navigate(ROUTES.history)}
+      onOpenRun={(nextRunId) => navigate(ROUTES.run(nextRunId))}
+    />
+  );
+}
+
+function GalleryRoute() {
+  const navigate = useNavigate();
+  const { token } = useParams<{ token: string }>();
+  return (
+    <Gallery
+      shareToken={token}
+      onBackToList={() => navigate(ROUTES.gallery)}
+      onSelectToken={(nextToken) => navigate(ROUTES.galleryItem(nextToken))}
+    />
+  );
+}
+
+function ExperimentRoute() {
+  const navigate = useNavigate();
+  const { experimentId } = useParams<{ experimentId: string }>();
+  return (
+    <Experiments
+      initialExperimentId={experimentId}
+      onSelect={(id) => navigate(id ? ROUTES.experiment(id) : ROUTES.experiments)}
+    />
+  );
+}
+
+function NotFound() {
+  const { t } = useLang();
+  return (
+    <section className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-8 text-center">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">404</p>
+      <h1 className="mt-2 font-display text-2xl font-semibold">{t("route_not_found")}</h1>
+      <Link to={ROUTES.home} className="mt-5 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white">
+        {t("route_home")}
+      </Link>
+    </section>
   );
 }
 
 function Shell() {
-  const initialHash = window.location.hash.replace(/^#\/?/, "");
-  const initialRun = initialHash.match(/^runs\/([^/]+)$/)?.[1] ?? null;
-  const initialPage = (initialRun ? "run" : initialHash || "home") as Page;
-  const [page, setPage] = useState<Page>(initialPage);
+  const { t } = useLang();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [request, setRequest] = useState<RunRequest | null>(null);
-  const [runId, setRunId] = useState<string | null>(initialRun);
   const [unread, setUnread] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const openButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  const dismissDrawer = () => {
+    setDrawerOpen(false);
+    window.setTimeout(() => openButtonRef.current?.focus(), 0);
+  };
 
   const refreshUnread = () =>
     fetchWatchlists()
-      .then((d) => setUnread(d.unread))
+      .then((data) => setUnread(data.unread))
       .catch(() => {});
+
   useEffect(() => {
     refreshUnread();
-    const timer = setInterval(refreshUnread, 60_000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(refreshUnread, 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => setDrawerOpen(false), [location.pathname]);
   useEffect(() => {
-    const syncRoute = () => {
-      const hash = window.location.hash.replace(/^#\/?/, "");
-      const matchedRun = hash.match(/^runs\/([^/]+)$/)?.[1];
-      if (matchedRun) {
-        setRunId(matchedRun);
-        setPage("run");
-      } else if (hash) {
-        setPage(hash as Page);
-      } else {
-        setPage("home");
+    if (!drawerOpen) return;
+    closeButtonRef.current?.focus();
+    const handleDrawerKeys = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        dismissDrawer();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = closeButtonRef.current?.closest<HTMLElement>("[role='dialog']");
+      const focusable = Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
-    window.addEventListener("hashchange", syncRoute);
-    return () => window.removeEventListener("hashchange", syncRoute);
-  }, []);
-
-  const goPage = (next: Page) => {
-    window.location.hash = `/${next}`;
-    setPage(next);
-  };
-  const goRun = (id: string) => {
-    setRunId(id);
-    window.location.hash = `/runs/${encodeURIComponent(id)}`;
-    setPage("run");
-  };
+    window.addEventListener("keydown", handleDrawerKeys);
+    return () => window.removeEventListener("keydown", handleDrawerKeys);
+  }, [drawerOpen]);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar page={page} setPage={goPage} badges={{ watchlist: unread }} />
-      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
-        <div className="w-full">
-          <Suspense fallback={<div className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">กำลังโหลดหน้า…</div>}>
-          {page === "home" && <Landing onStart={() => goPage("new")} />}
-          {page === "new" && (
-            <NewRun
-              onCompare={(req) => {
-                setRequest(req);
-                goPage("compare");
-              }}
-              onCreated={(id) => {
-                goRun(id);
-              }}
-            />
-          )}
-          {page === "run" && runId && <RunDetail runId={runId} onBack={() => goPage("history")} />}
-          {page === "compare" && <Compare request={request} />}
-          {page === "history" && (
-            <Runs
-              onOpen={(id) => {
-                goRun(id);
-              }}
-            />
-          )}
-          {page === "insights" && <Insights />}
-          {page === "experiments" && <Experiments />}
-          {page === "calibration" && <Calibration />}
-          {page === "watchlist" && <Watchlist onChanged={refreshUnread} />}
-          {page === "gallery" && <Gallery />}
-          {page === "settings" && <Settings />}
-          </Suspense>
+    <div className="min-h-screen bg-background md:flex">
+      <aside className="hidden min-h-screen w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex">
+        <Navigation unread={unread} />
+      </aside>
+
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:hidden">
+        <Link to={ROUTES.home} className="flex items-center gap-2 font-display font-semibold">
+          <Fish className="h-5 w-5 text-primary" /> ชิมลาง
+        </Link>
+        <button
+          ref={openButtonRef}
+          type="button"
+          aria-label={t("nav_open")}
+          aria-expanded={drawerOpen}
+          aria-controls="mobile-navigation"
+          onClick={() => setDrawerOpen(true)}
+          className="grid h-11 w-11 place-items-center rounded-lg border border-border"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </header>
+
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label={t("nav_main")}>
+          <button
+            type="button"
+            aria-label={t("nav_close")}
+            className="absolute inset-0 bg-black/40"
+            onClick={dismissDrawer}
+          />
+          <aside id="mobile-navigation" className="relative flex h-full w-[min(20rem,85vw)] flex-col bg-sidebar p-4 shadow-xl">
+            <button
+              ref={closeButtonRef}
+              type="button"
+              aria-label={t("nav_close")}
+              onClick={dismissDrawer}
+              className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-lg border border-border"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <Navigation unread={unread} onNavigate={() => setDrawerOpen(false)} />
+          </aside>
         </div>
+      )}
+
+      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
+        <Suspense fallback={<div className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">กำลังโหลดหน้า…</div>}>
+          <Routes>
+            <Route path={ROUTES.home} element={<Landing onStart={() => navigate(ROUTES.new)} />} />
+            <Route
+              path={ROUTES.new}
+              element={
+                <NewRun
+                  onCompare={(nextRequest) => {
+                    setRequest(nextRequest);
+                    navigate(ROUTES.compare);
+                  }}
+                  onCreated={(runId) => navigate(ROUTES.run(runId))}
+                />
+              }
+            />
+            <Route path="/runs/:runId" element={<RunRoute />} />
+            <Route path={ROUTES.compare} element={<Compare request={request} />} />
+            <Route path={ROUTES.history} element={<Runs onOpen={(runId) => navigate(ROUTES.run(runId))} />} />
+            <Route path={ROUTES.insights} element={<Insights />} />
+            <Route path={ROUTES.experiments} element={<ExperimentRoute />} />
+            <Route path="/experiments/:experimentId" element={<ExperimentRoute />} />
+            <Route path={ROUTES.calibration} element={<Calibration />} />
+            <Route path={ROUTES.watchlist} element={<Watchlist onChanged={refreshUnread} />} />
+            <Route path={ROUTES.gallery} element={<GalleryRoute />} />
+            <Route path="/gallery/:token" element={<GalleryRoute />} />
+            <Route path={ROUTES.settings} element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
@@ -208,7 +334,9 @@ function Shell() {
 export default function App() {
   return (
     <LangProvider>
-      <Shell />
+      <HashRouter>
+        <Shell />
+      </HashRouter>
     </LangProvider>
   );
 }
