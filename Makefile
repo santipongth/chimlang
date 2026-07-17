@@ -11,7 +11,7 @@ api:
 	uv run uvicorn api.app:app --reload --port 8000
 
 worker:
-	uv run celery -A core.tasks.celery_app worker --pool=solo -l info
+	uv run celery -A core.tasks.celery_app worker --pool=solo -l info -Q fabric,debate,maintenance
 
 dev-down:
 	docker compose down

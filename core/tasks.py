@@ -9,6 +9,7 @@ Governance: election guard ถูกตรวจ 2 ชั้น — ที่ en
 
 from contextlib import contextmanager, nullcontext
 from threading import Event, Thread
+from time import time
 
 from celery import Celery, signals
 
@@ -35,6 +36,67 @@ celery_app.conf.update(
         "chimlang.detect_stale_runs": {"queue": "maintenance"},
     },
 )
+
+WORKER_HEARTBEAT_KEY = "chimlang:worker:heartbeat"
+WORKER_HEARTBEAT_TTL_S = 20
+_worker_heartbeat_stop = Event()
+_worker_heartbeat_thread: Thread | None = None
+
+
+def _worker_heartbeat_loop() -> None:
+    import redis
+
+    client = redis.Redis.from_url(_settings.redis_url, decode_responses=True)
+    while not _worker_heartbeat_stop.is_set():
+        try:
+            client.set(
+                WORKER_HEARTBEAT_KEY,
+                str(time()),
+                ex=WORKER_HEARTBEAT_TTL_S,
+            )
+        except Exception:
+            pass
+        _worker_heartbeat_stop.wait(5)
+    client.close()
+
+
+def worker_available(*, max_age_s: float = WORKER_HEARTBEAT_TTL_S) -> bool:
+    """Return true only when a worker process recently published a live heartbeat."""
+
+    try:
+        import redis
+
+        client = redis.Redis.from_url(_settings.redis_url, decode_responses=True)
+        try:
+            raw = client.get(WORKER_HEARTBEAT_KEY)
+        finally:
+            client.close()
+        age_s = time() - float(raw) if raw is not None else -1
+        return 0 <= age_s <= max_age_s
+    except Exception:
+        return False
+
+
+@signals.worker_ready.connect
+def _start_worker_heartbeat(**_kwargs) -> None:
+    global _worker_heartbeat_thread
+
+    if _worker_heartbeat_thread and _worker_heartbeat_thread.is_alive():
+        return
+    _worker_heartbeat_stop.clear()
+    _worker_heartbeat_thread = Thread(
+        target=_worker_heartbeat_loop,
+        name="chimlang-worker-heartbeat",
+        daemon=True,
+    )
+    _worker_heartbeat_thread.start()
+
+
+@signals.worker_shutdown.connect
+def _stop_worker_heartbeat(**_kwargs) -> None:
+    _worker_heartbeat_stop.set()
+    if _worker_heartbeat_thread:
+        _worker_heartbeat_thread.join(timeout=2)
 
 
 @signals.worker_process_init.connect

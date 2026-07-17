@@ -1136,7 +1136,7 @@ def _enqueue_persistent_run(
         require_election(principal)
     if body.sources and body.engine != "debate":
         raise HTTPException(status_code=422, detail="sources ใช้ได้กับ engine debate เท่านั้น")
-    from core.tasks import celery_app, persistent_run_task
+    from core.tasks import celery_app, persistent_run_task, worker_available
 
     n = min(body.agents, engine.max_agents)
     rounds = max(1, min(body.rounds, 10)) if body.engine == "debate" else 20
@@ -1170,6 +1170,11 @@ def _enqueue_persistent_run(
             "reused": True,
             **_run_urls(existing["run_id"]),
         }
+    if not celery_app.conf.task_always_eager and not worker_available():
+        raise HTTPException(
+            status_code=503,
+            detail="worker ไม่พร้อม — ยังไม่สร้าง run กรุณาเปิด Celery worker แล้วลองใหม่",
+        )
     try:
         rstore.create(
             run_id=run_id,
@@ -1264,7 +1269,7 @@ def _enqueue_persistent_run(
     "/runs/async",
     status_code=202,
     response_model=AsyncRunAccepted,
-    responses={409: {"model": ApiError}, 422: {"model": ApiError}},
+    responses={409: {"model": ApiError}, 422: {"model": ApiError}, 503: {"model": ApiError}},
 )
 def run_create_async(
     body: RunBody,

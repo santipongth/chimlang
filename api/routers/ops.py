@@ -38,6 +38,12 @@ def health_deep() -> dict:
     except Exception as exc:
         components["redis"] = f"down: {type(exc).__name__}"
     try:
+        from core.tasks import worker_available
+
+        components["worker"] = "ok" if worker_available() else "offline"
+    except Exception as exc:
+        components["worker"] = f"down: {type(exc).__name__}"
+    try:
         from graphlayer.store import Neo4jStore
 
         Neo4jStore(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password).verify()

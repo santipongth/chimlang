@@ -141,6 +141,7 @@ def test_run_job_status_reports_failure(client, monkeypatch):
 
 @needs_pg
 def test_async_run_precreates_queued_row(client, monkeypatch):
+    from core import tasks
     from core.runstore import RunStore
     from core.tasks import persistent_run_task
 
@@ -150,6 +151,7 @@ def test_async_run_precreates_queued_row(client, monkeypatch):
 
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
+    monkeypatch.setattr(tasks, "worker_available", lambda: True)
     monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         r = client.post(
@@ -174,6 +176,7 @@ def test_async_run_precreates_queued_row(client, monkeypatch):
 
 @needs_pg
 def test_cancel_queued_run_updates_status(client, monkeypatch):
+    from core import tasks
     from core.runstore import RunStore
     from core.tasks import persistent_run_task
 
@@ -183,6 +186,7 @@ def test_cancel_queued_run_updates_status(client, monkeypatch):
 
     old_eager = celery_app.conf.task_always_eager
     celery_app.conf.task_always_eager = False
+    monkeypatch.setattr(tasks, "worker_available", lambda: True)
     monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
     try:
         r = client.post(
@@ -199,6 +203,89 @@ def test_cancel_queued_run_updates_status(client, monkeypatch):
     assert store.mark_running(rid, "worker received stale task") is False
     assert store.get(rid)["status"] == "canceled"
     client.delete(f"/runs/{rid}")
+
+
+@needs_pg
+def test_async_run_rejects_before_persist_when_worker_is_offline(client, monkeypatch):
+    from core import tasks
+    from core.runstore import RunStore
+
+    subject = "ทดสอบปฏิเสธเมื่อ worker offline " + uuid4().hex[:8]
+    old_eager = celery_app.conf.task_always_eager
+    celery_app.conf.task_always_eager = False
+    monkeypatch.setattr(tasks, "worker_available", lambda: False)
+    try:
+        response = client.post(
+            "/runs/async",
+            json={"engine": "fabric", "subject": subject, "agents": 20},
+        )
+    finally:
+        celery_app.conf.task_always_eager = old_eager
+    assert response.status_code == 503
+    assert "worker ไม่พร้อม" in response.json()["detail"]
+    assert RunStore(DSN).list_runs(search=subject) == []
+
+
+@needs_pg
+def test_async_run_reuses_accepted_idempotency_key_when_worker_goes_offline(client, monkeypatch):
+    from core import tasks
+    from core.runstore import RunStore
+    from core.tasks import persistent_run_task
+
+    class _QueuedResult:
+        id = "task-worker-offline-reuse"
+
+    suffix = uuid4().hex[:8]
+    key = f"worker-reuse-{suffix}"
+    body = {
+        "engine": "fabric",
+        "subject": f"ทดสอบ idempotency worker offline {suffix}",
+        "agents": 20,
+    }
+    old_eager = celery_app.conf.task_always_eager
+    celery_app.conf.task_always_eager = False
+    monkeypatch.setattr(tasks, "worker_available", lambda: True)
+    monkeypatch.setattr(persistent_run_task, "apply_async", lambda *args, **kwargs: _QueuedResult())
+    try:
+        first = client.post("/runs/async", json=body, headers={"Idempotency-Key": key})
+        assert first.status_code == 202
+        monkeypatch.setattr(tasks, "worker_available", lambda: False)
+        reused = client.post("/runs/async", json=body, headers={"Idempotency-Key": key})
+    finally:
+        celery_app.conf.task_always_eager = old_eager
+    assert reused.status_code == 202
+    assert reused.json()["reused"] is True
+    assert reused.json()["run_id"] == first.json()["run_id"]
+    RunStore(DSN).delete(first.json()["run_id"])
+
+
+def test_worker_available_requires_a_fresh_valid_heartbeat(monkeypatch):
+    import redis
+
+    from core import tasks
+
+    class _RedisClient:
+        value: str | None = None
+
+        def get(self, _key):
+            return self.value
+
+        def close(self):
+            return None
+
+    client = _RedisClient()
+    monkeypatch.setattr(redis.Redis, "from_url", lambda *args, **kwargs: client)
+    monkeypatch.setattr(tasks, "time", lambda: 100.0)
+
+    for value, expected in (
+        (None, False),
+        ("invalid", False),
+        ("79.9", False),
+        ("80", True),
+        ("101", False),
+    ):
+        client.value = value
+        assert tasks.worker_available() is expected
 
 
 @needs_pg

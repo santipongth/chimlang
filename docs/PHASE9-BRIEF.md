@@ -8,6 +8,7 @@
 - [x] manifest/read snapshot/frozen rerun/latest rerun API พร้อมคำอธิบาย best-effort determinism
 - [x] run lifecycle compare-and-set, terminal cancel และ worker cancellation checkpoints ทุก stage
 - [x] `POST /runs/async` ตอบ 202 + `Idempotency-Key` conflict/reuse contract + run-centric URLs
+- [x] worker readiness แบบ TTL heartbeat + fail-fast 503 ก่อน persist เพื่อไม่สร้าง queued row ที่ไม่มี worker
 - [x] `SafeOutboundFetcher` กลาง: DNS A/AAAA, non-global block, redirect hop validation,
   protocol/content type/size/decompression limits และ fail-closed
 - [x] React Router `HashRouter`, typed route tree, 404, run/gallery/experiment deep links

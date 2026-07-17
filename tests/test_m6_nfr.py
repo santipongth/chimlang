@@ -25,7 +25,7 @@ def test_health_deep_reports_components(client):
     r = client.get("/health/deep")
     assert r.status_code == 200
     body = r.json()
-    assert set(body["components"]) == {"postgres", "redis", "neo4j"}
+    assert set(body["components"]) == {"postgres", "redis", "worker", "neo4j"}
     assert body["status"] in ("ok", "degraded")
     if all(v == "ok" for v in body["components"].values()):
         assert body["status"] == "ok"  # ทุกตัว ok = overall ok
