@@ -421,6 +421,366 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Projects */
+        get: operations["list_projects_projects_get"];
+        put?: never;
+        /** Create Project */
+        post: operations["create_project_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Project */
+        patch: operations["update_project_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Evidence */
+        post: operations["preview_evidence_projects__project_id__evidence_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Evidence */
+        get: operations["list_evidence_projects__project_id__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Text Evidence */
+        post: operations["add_text_evidence_projects__project_id__evidence_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Url Evidence */
+        post: operations["add_url_evidence_projects__project_id__evidence_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Evidence */
+        post: operations["upload_evidence_projects__project_id__evidence_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze Evidence */
+        post: operations["freeze_evidence_projects__project_id__evidence_sets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project_id}/evidence-sets/{set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Evidence Set */
+        get: operations["get_evidence_set_projects__project_id__evidence_sets__set_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/validation/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Validation Overview */
+        get: operations["validation_overview_validation_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/validation/datasets/human-panel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Human Panel */
+        post: operations["import_human_panel_validation_datasets_human_panel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/validation/resolution-inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolution Inbox */
+        get: operations["resolution_inbox_validation_resolution_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/validation/predictions/{prediction_id}/owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assign Resolution Owner */
+        post: operations["assign_resolution_owner_validation_predictions__prediction_id__owner_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/validation/robustness/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Robustness Preflight */
+        post: operations["robustness_preflight_validation_robustness_preflight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rehearsals */
+        get: operations["list_rehearsals_rehearsals_get"];
+        put?: never;
+        /** Create Rehearsal */
+        post: operations["create_rehearsal_rehearsals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Rehearsal */
+        get: operations["get_rehearsal_rehearsals__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals/{session_id}/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Next Question */
+        post: operations["next_question_rehearsals__session_id__next_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals/{session_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer Question */
+        post: operations["answer_question_rehearsals__session_id__answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals/{session_id}/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Control Rehearsal */
+        post: operations["control_rehearsal_rehearsals__session_id__control_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals/{session_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Log Decision */
+        post: operations["log_decision_rehearsals__session_id__decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rehearsals/{session_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish Rehearsal */
+        post: operations["finish_rehearsal_rehearsals__session_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/graph/indirect.json": {
         parameters: {
             query?: never;
@@ -1338,6 +1698,21 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** Body_upload_evidence_projects__project_id__evidence_upload_post */
+        Body_upload_evidence_projects__project_id__evidence_upload_post: {
+            /** File */
+            file: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Item Id
+             * @default
+             */
+            item_id: string;
+        };
         /** CancelRunResponse */
         CancelRunResponse: {
             /** Ok */
@@ -1379,10 +1754,181 @@ export interface components {
             /** Run Ids */
             run_ids: string[];
         };
+        /** EvidenceFreezeBody */
+        EvidenceFreezeBody: {
+            /**
+             * Name
+             * @default Frozen evidence
+             */
+            name: string;
+            /** Version Ids */
+            version_ids?: string[];
+        };
+        /** EvidenceListResponse */
+        EvidenceListResponse: {
+            /** Evidence */
+            evidence: components["schemas"]["EvidenceVersionResponse"][];
+        };
+        /** EvidencePreviewBody */
+        EvidencePreviewBody: {
+            /** Text */
+            text: string;
+        };
+        /** EvidencePreviewResponse */
+        EvidencePreviewResponse: {
+            /** Safe To Store */
+            safe_to_store: boolean;
+            /** Pii Counts */
+            pii_counts: {
+                [key: string]: number;
+            };
+            /** Policy */
+            policy: string;
+        };
+        /** EvidenceSetResponse */
+        EvidenceSetResponse: {
+            /** Set Id */
+            set_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Created At */
+            created_at: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Name */
+            name: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Created By */
+            created_by: string;
+            /** Hash Valid */
+            hash_valid: boolean;
+            /** Versions */
+            versions: components["schemas"]["EvidenceVersionResponse"][];
+        };
+        /** EvidenceTextBody */
+        EvidenceTextBody: {
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+            /**
+             * Kind
+             * @default text
+             * @enum {string}
+             */
+            kind: "text" | "txt" | "csv";
+            /**
+             * Item Id
+             * @default
+             */
+            item_id: string;
+        };
+        /** EvidenceUrlBody */
+        EvidenceUrlBody: {
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+            /**
+             * Kind
+             * @default url
+             * @enum {string}
+             */
+            kind: "url" | "rss";
+            /**
+             * Item Id
+             * @default
+             */
+            item_id: string;
+        };
+        /** EvidenceVersionResponse */
+        EvidenceVersionResponse: {
+            /** Version Id */
+            version_id: string;
+            /** Item Id */
+            item_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Label */
+            label: string;
+            /** Kind */
+            kind: string;
+            /** Source Url */
+            source_url: string;
+            /** Version No */
+            version_no: number;
+            /** Created At */
+            created_at: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Byte Size */
+            byte_size: number;
+            /** Media Type */
+            media_type: string;
+            /** Status */
+            status: string;
+            /** Source Health */
+            source_health: string;
+            /** Duplicate Of */
+            duplicate_of: string;
+            /** Pii Redactions */
+            pii_redactions: {
+                [key: string]: number;
+            };
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HumanPanelCase */
+        HumanPanelCase: {
+            /**
+             * Case Id
+             * @default
+             */
+            case_id: string;
+            /** Prompt */
+            prompt: string;
+            /** Expected */
+            expected: unknown;
+            /** Observed */
+            observed?: {
+                [key: string]: unknown;
+            };
+            /** Slice */
+            slice?: {
+                [key: string]: unknown;
+            };
+        };
+        /** HumanPanelImportBody */
+        HumanPanelImportBody: {
+            /** Name */
+            name: string;
+            /** Consent Confirmed */
+            consent_confirmed: boolean;
+            /** Consent Basis */
+            consent_basis: string;
+            /**
+             * Collected At
+             * Format: date-time
+             */
+            collected_at: string;
+            /** Rows */
+            rows: components["schemas"]["HumanPanelCase"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** JobRequest */
         JobRequest: {
@@ -1470,6 +2016,22 @@ export interface components {
             /** Target Series */
             target_series: number[];
         };
+        /** OwnerAssignBody */
+        OwnerAssignBody: {
+            /** Owner */
+            owner: string;
+        };
+        /** OwnerAssignResponse */
+        OwnerAssignResponse: {
+            /** Prediction Id */
+            prediction_id: number;
+            /** Owner */
+            owner: string;
+            /** Assigned At */
+            assigned_at: string;
+            /** Actor */
+            actor: string;
+        };
         /** PackBody */
         PackBody: {
             /** Label */
@@ -1515,6 +2077,203 @@ export interface components {
              */
             forecast_type: string;
         };
+        /** ProjectCreateBody */
+        ProjectCreateBody: {
+            /** Name */
+            name: string;
+            /**
+             * Brief
+             * @default
+             */
+            brief: string;
+        };
+        /** ProjectListResponse */
+        ProjectListResponse: {
+            /** Projects */
+            projects: components["schemas"]["ProjectSummary"][];
+        };
+        /** ProjectResponse */
+        ProjectResponse: {
+            /** Project Id */
+            project_id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Name */
+            name: string;
+            /** Stage */
+            stage: string;
+            /** Stage Index */
+            stage_index: number;
+            /** Brief */
+            brief: string;
+            /** Population */
+            population: {
+                [key: string]: unknown;
+            };
+            /** Assumptions */
+            assumptions: unknown[];
+            /** Decision */
+            decision: string;
+            /** Resolution */
+            resolution: string;
+            /** Created By */
+            created_by: string;
+            /** Evidence Count */
+            evidence_count: number;
+            /** Runs */
+            runs: {
+                [key: string]: unknown;
+            }[];
+            /** Evidence Sets */
+            evidence_sets: {
+                [key: string]: unknown;
+            }[];
+            /** Workflow */
+            workflow: {
+                [key: string]: string;
+            }[];
+        };
+        /** ProjectSummary */
+        ProjectSummary: {
+            /** Project Id */
+            project_id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Name */
+            name: string;
+            /** Stage */
+            stage: string;
+            /** Brief */
+            brief: string;
+        };
+        /** ProjectUpdateBody */
+        ProjectUpdateBody: {
+            /** Stage */
+            stage?: ("brief" | "evidence" | "population" | "assumptions" | "run" | "compare" | "decision" | "resolution") | null;
+            /** Brief */
+            brief?: string | null;
+            /** Population */
+            population?: {
+                [key: string]: unknown;
+            } | null;
+            /** Assumptions */
+            assumptions?: ({
+                [key: string]: unknown;
+            } | string)[] | null;
+            /** Decision */
+            decision?: string | null;
+            /** Resolution */
+            resolution?: string | null;
+        };
+        /** RehearsalAnswerBody */
+        RehearsalAnswerBody: {
+            /** Answer */
+            answer: string;
+        };
+        /** RehearsalControlBody */
+        RehearsalControlBody: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "pause" | "resume";
+        };
+        /** RehearsalCreateBody */
+        RehearsalCreateBody: {
+            /** Title */
+            title: string;
+            /** Scenario */
+            scenario: string;
+            /** Seed */
+            seed?: number | null;
+            /**
+             * Netizens
+             * @default 4
+             */
+            netizens: number;
+            /**
+             * Max Turns
+             * @default 8
+             */
+            max_turns: number;
+            /**
+             * Reactions Per Turn
+             * @default 2
+             */
+            reactions_per_turn: number;
+        };
+        /** RehearsalDecisionBody */
+        RehearsalDecisionBody: {
+            /** Decision */
+            decision: string;
+        };
+        /** RehearsalListResponse */
+        RehearsalListResponse: {
+            /** Rehearsals */
+            rehearsals: components["schemas"]["RehearsalSummaryResponse"][];
+        };
+        /** RehearsalResponse */
+        RehearsalResponse: {
+            /** Session Id */
+            session_id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Title */
+            title: string;
+            /** Scenario */
+            scenario: string;
+            /** Status */
+            status: string;
+            /** Seed */
+            seed: number;
+            /** Netizens */
+            netizens: number;
+            /** Max Turns */
+            max_turns: number;
+            /** Reactions Per Turn */
+            reactions_per_turn: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Created By */
+            created_by: string;
+            /** Turns */
+            turns: {
+                [key: string]: unknown;
+            }[];
+            /** Decisions */
+            decisions: {
+                [key: string]: unknown;
+            }[];
+            /** Scorecard */
+            scorecard: {
+                [key: string]: unknown;
+            } | null;
+            /** Events */
+            events: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** RehearsalSummaryResponse */
+        RehearsalSummaryResponse: {
+            /** Session Id */
+            session_id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Cost Usd */
+            cost_usd: number;
+        };
         /** RerunBody */
         RerunBody: {
             /**
@@ -1522,6 +2281,29 @@ export interface components {
              * @enum {string}
              */
             input_mode: "frozen" | "latest";
+        };
+        /** ResolutionInboxResponse */
+        ResolutionInboxResponse: {
+            /** As Of */
+            as_of: string;
+            /** Due */
+            due: {
+                [key: string]: unknown;
+            }[];
+            /** Upcoming */
+            upcoming: {
+                [key: string]: unknown;
+            }[];
+            /** Resolved */
+            resolved: {
+                [key: string]: unknown;
+            }[];
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Resolution Requires Evidence */
+            resolution_requires_evidence: boolean;
         };
         /** ResolveBody */
         ResolveBody: {
@@ -1541,6 +2323,44 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /** RobustnessPreflightBody */
+        RobustnessPreflightBody: {
+            /** Models */
+            models: string[];
+            /** Sample Size */
+            sample_size: number;
+            /**
+             * Avg Input Tokens
+             * @default 1200
+             */
+            avg_input_tokens: number;
+            /**
+             * Avg Output Tokens
+             * @default 400
+             */
+            avg_output_tokens: number;
+        };
+        /** RobustnessPreflightResponse */
+        RobustnessPreflightResponse: {
+            /** Models */
+            models: string[];
+            /** Sample Size */
+            sample_size: number;
+            /** Estimated Usd */
+            estimated_usd: number;
+            /** Breakdown */
+            breakdown: {
+                [key: string]: number;
+            };
+            /** Run Cap Usd */
+            run_cap_usd: number;
+            /** Monthly Cap Usd */
+            monthly_cap_usd: number;
+            /** Opt In Required */
+            opt_in_required: boolean;
+            /** Execution Started */
+            execution_started: boolean;
         };
         /** RunBody */
         RunBody: {
@@ -1625,6 +2445,16 @@ export interface components {
              * @default
              */
             experiment_id: string;
+            /**
+             * Project Id
+             * @default
+             */
+            project_id: string;
+            /**
+             * Evidence Set Id
+             * @default
+             */
+            evidence_set_id: string;
             /**
              * Input Mode
              * @default latest
@@ -1792,6 +2622,31 @@ export interface components {
             /** Question */
             question: string;
         };
+        /** ValidationDatasetResponse */
+        ValidationDatasetResponse: {
+            /** Dataset Id */
+            dataset_id: string;
+            /** Created At */
+            created_at: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Revision */
+            revision: string;
+            /** License */
+            license: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Created By */
+            created_by: string;
+            /** Case Count */
+            case_count: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1804,6 +2659,42 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** ValidationOverviewResponse */
+        ValidationOverviewResponse: {
+            /** Datasets */
+            datasets: components["schemas"]["ValidationDatasetResponse"][];
+            /** Reports */
+            reports: components["schemas"]["ValidationReportResponse"][];
+            /** Trust Claims */
+            trust_claims: {
+                [key: string]: boolean;
+            };
+        };
+        /** ValidationReportResponse */
+        ValidationReportResponse: {
+            /** Report Id */
+            report_id: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /** Created At */
+            created_at: string;
+            /** Kind */
+            kind: string;
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Raw Result Hash */
+            raw_result_hash: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Created By */
+            created_by: string;
+            /** Trust Status */
+            trust_status: string;
         };
         /** VoteBody */
         VoteBody: {
@@ -2773,6 +3664,1032 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_projects_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_project_projects_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_project_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    preview_evidence_projects__project_id__evidence_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidencePreviewBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidencePreviewResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    list_evidence_projects__project_id__evidence_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceListResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_text_evidence_projects__project_id__evidence_text_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceTextBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceVersionResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    add_url_evidence_projects__project_id__evidence_url_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceUrlBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceVersionResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    upload_evidence_projects__project_id__evidence_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_evidence_projects__project_id__evidence_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceVersionResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    freeze_evidence_projects__project_id__evidence_sets_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceFreezeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceSetResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_evidence_set_projects__project_id__evidence_sets__set_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                project_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceSetResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validation_overview_validation_overview_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationOverviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_human_panel_validation_datasets_human_panel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HumanPanelImportBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationDatasetResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    resolution_inbox_validation_resolution_inbox_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolutionInboxResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_resolution_owner_validation_predictions__prediction_id__owner_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                prediction_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerAssignBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerAssignResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    robustness_preflight_validation_robustness_preflight_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RobustnessPreflightBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobustnessPreflightResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    list_rehearsals_rehearsals_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_rehearsal_rehearsals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehearsalCreateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_rehearsal_rehearsals__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    next_question_rehearsals__session_id__next_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    answer_question_rehearsals__session_id__answer_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehearsalAnswerBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    control_rehearsal_rehearsals__session_id__control_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehearsalControlBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    log_decision_rehearsals__session_id__decisions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehearsalDecisionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    finish_rehearsal_rehearsals__session_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };

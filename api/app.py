@@ -39,8 +39,11 @@ from api.routers.experiments import router as experiments_router
 from api.routers.ops import router as ops_router
 from api.routers.personas import router as personas_router
 from api.routers.policy import router as policy_router
+from api.routers.projects import router as projects_router
+from api.routers.rehearsals import router as rehearsals_router
 from api.routers.runs import router as runs_router
 from api.routers.settings import router as settings_router
+from api.routers.validation import router as validation_router
 from api.routers.watchlists import router as watchlists_router
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
@@ -76,6 +79,9 @@ app.include_router(settings_router)
 app.include_router(personas_router)
 app.include_router(policy_router)
 app.include_router(watchlists_router)
+app.include_router(projects_router)
+app.include_router(validation_router)
+app.include_router(rehearsals_router)
 
 _WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 if _WEB_DIST.exists():
@@ -546,6 +552,34 @@ def _run_urls(run_id: str) -> dict[str, str]:
     }
 
 
+def _materialize_evidence_set(body: RunBody) -> tuple[RunBody, dict]:
+    if not body.evidence_set_id.strip():
+        return body, {}
+    if body.engine != "debate":
+        raise HTTPException(status_code=422, detail="EvidenceSetV1 ใช้กับ debate engine เท่านั้น")
+    from core.project_store import EvidenceStore
+
+    try:
+        sources, provenance = EvidenceStore(get_settings().postgres_url).sources_for_set(
+            body.evidence_set_id.strip()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if body.project_id and body.project_id != provenance["project_id"]:
+        raise HTTPException(status_code=422, detail="evidence set อยู่นอก project ที่ระบุ")
+    if len(body.sources) + len(sources) > 10:
+        raise HTTPException(status_code=422, detail="sources รวมจาก EvidenceSetV1 เกิน 10 รายการ")
+    return (
+        body.model_copy(
+            update={
+                "project_id": provenance["project_id"],
+                "sources": [*body.sources, *sources],
+            }
+        ),
+        provenance,
+    )
+
+
 def _prepare_run_spec(
     body: RunBody,
     *,
@@ -622,6 +656,17 @@ def _prepare_run_spec(
         ),
         "watermark_required": True,
     }
+    if body.evidence_set_id:
+        from core.project_store import EvidenceStore
+
+        frozen = EvidenceStore(get_settings().postgres_url).get_set(body.evidence_set_id)
+        governance["evidence_set"] = {
+            "set_id": frozen["set_id"],
+            "project_id": frozen["project_id"],
+            "schema_version": frozen["schema_version"],
+            "content_hash": frozen["content_hash"],
+            "hash_valid": frozen["hash_valid"],
+        }
     return spec, versions, pricing, governance
 
 
@@ -689,6 +734,8 @@ def _run_create_impl(
         engine = get_engine(body.engine)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    if not precreated:
+        body, _ = _materialize_evidence_set(body)
     subject = body.subject.strip()
     if len(subject) < 4:
         raise HTTPException(status_code=422, detail="หัวข้อสั้นเกินไป")
@@ -735,7 +782,7 @@ def _run_create_impl(
             seed=run_seed,
         )
     factory = PersonaFactory(segments=run_spec.population_snapshot["segments"])
-    effective_sources = list(body.sources)
+    effective_sources = list(run_spec.request.get("sources") or body.sources)
     frozen_news_snapshot: list[dict] = []
     if run_spec.input_mode == "frozen":
         source_manifest = RunManifestStore(settings.postgres_url).get(run_spec.source_run_id)
@@ -767,6 +814,8 @@ def _run_create_impl(
     config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
     config["experiment_id"] = body.experiment_id
+    config["project_id"] = body.project_id
+    config["evidence_set_id"] = body.evidence_set_id
     config["seed"] = run_seed
     config["run_spec"] = run_spec.model_dump(mode="json")
     config["manifest_versions"] = manifest_versions
@@ -792,6 +841,10 @@ def _run_create_impl(
             parent_run_id=body.parent_run_id,
             progress_message="เริ่มรัน",
         )
+        if body.project_id:
+            from core.project_store import ProjectStore
+
+            ProjectStore(settings.postgres_url).attach_run(body.project_id, run_id)
     from core.run_manifest import canonical_hash
     from core.runstore import RunCanceledError
 
@@ -1063,10 +1116,12 @@ def _enqueue_persistent_run(
     from simulation.engines import get_engine
 
     settings = get_settings()
+    task_body = body
     try:
         engine = get_engine(body.engine)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    body, _ = _materialize_evidence_set(body)
     subject = body.subject.strip()
     if len(subject) < 4:
         raise HTTPException(status_code=422, detail="หัวข้อสั้นเกินไป")
@@ -1135,6 +1190,8 @@ def _enqueue_persistent_run(
                 "seed": run_seed,
                 "reflection": body.reflection,
                 "experiment_id": body.experiment_id,
+                "project_id": body.project_id,
+                "evidence_set_id": body.evidence_set_id,
                 "run_spec": run_spec.model_dump(mode="json"),
                 "manifest_versions": manifest_versions,
                 "manifest_pricing": manifest_pricing,
@@ -1146,6 +1203,10 @@ def _enqueue_persistent_run(
             idempotency_key=idempotency_key,
             idempotency_request_hash=body_hash,
         )
+        if body.project_id:
+            from core.project_store import ProjectStore
+
+            ProjectStore(settings.postgres_url).attach_run(body.project_id, run_id)
     except Exception as e:
         existing = rstore.find_by_idempotency(idempotency_key)
         if existing:
@@ -1162,7 +1223,7 @@ def _enqueue_persistent_run(
                 **_run_urls(existing["run_id"]),
             }
         raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-    payload = body.model_dump()
+    payload = task_body.model_dump()
     from core.observability import inject_trace_headers
 
     trace_headers = inject_trace_headers()

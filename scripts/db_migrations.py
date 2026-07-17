@@ -305,6 +305,30 @@ def _apply_run_manifests_v1(conn: Connection) -> None:
     )
 
 
+def _apply_project_evidence_v1(conn: Connection) -> None:
+    from core.project_store import _SCHEMA as project_schema
+
+    conn.execute(project_schema)
+
+
+def _apply_validation_lab_v1(conn: Connection) -> None:
+    from core.validation_store import _SCHEMA as validation_schema
+
+    conn.execute(validation_schema)
+
+
+def _apply_rehearsal_sessions_v1(conn: Connection) -> None:
+    from core.rehearsal_store import _SCHEMA as rehearsal_schema
+
+    conn.execute(rehearsal_schema)
+
+
+def _apply_rehearsal_leases_v1(conn: Connection) -> None:
+    from core.rehearsal_store import _SCHEMA as rehearsal_schema
+
+    conn.execute(rehearsal_schema)
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -367,6 +391,26 @@ MIGRATIONS: list[Migration] = [
         "2026-07-17-run-manifests-v1",
         "immutable run specs/manifests and idempotent async request hashes",
         _apply_run_manifests_v1,
+    ),
+    (
+        "2026-07-17-project-evidence-v1",
+        "project workflow, append-only evidence versions and immutable evidence sets",
+        _apply_project_evidence_v1,
+    ),
+    (
+        "2026-07-17-validation-lab-v1",
+        "append-only validation datasets/reports and resolution ownership",
+        _apply_validation_lab_v1,
+    ),
+    (
+        "2026-07-17-rehearsal-sessions-v1",
+        "event-sourced rehearsal sessions, checkpoints and decision logs",
+        _apply_rehearsal_sessions_v1,
+    ),
+    (
+        "2026-07-17-rehearsal-leases-v1",
+        "expiring operation leases prevent duplicate rehearsal provider calls",
+        _apply_rehearsal_leases_v1,
     ),
 ]
 

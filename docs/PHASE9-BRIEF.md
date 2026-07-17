@@ -17,25 +17,26 @@
 - [x] regression: backend, lint, OpenAPI/Vitest/build, Playwright desktop/mobile, migration no-op
 - [x] รายงาน migration/concurrency/SSRF/UX screenshots แล้วหยุดรอมติผู้ใช้
 
-ผล gate: ผ่านเมื่อ 17 ก.ค. 2569 — ดู `docs/reports/P9-M1-trust-foundation.md`; **หยุดรอมติ M2**
+ผล gate: ผ่านเมื่อ 17 ก.ค. 2569 — ดู `docs/reports/P9-M1-trust-foundation.md`; ผู้ใช้อนุมัติ M2/M3 ในวันเดียวกัน
 
 ## P9-M2 — Project, Evidence และ Validation Lab (ห้ามเริ่มก่อนมติหลัง M1)
 
-- [ ] Project/Case workflow: Brief → Evidence → Population → Assumptions → Run → Compare → Decision
-- [ ] Evidence Library + immutable `EvidenceSetV1`, version/dedup/health/PII preview
-- [ ] GraphRAG provenance จาก evidence set ที่ freeze และยังผ่าน BudgetGuard
-- [ ] รวม Compare/Experiments เป็น Validation Lab + robustness/calibration failure drill-down
-- [ ] Resolution Inbox/Forecast Calendar พร้อม owner/evidence/Brier/reliability/ECE/CI
-- [ ] MIRACL Thai จริงแบบ pin revision/hash/license + raw metrics/cost/latency
-- [ ] consent-based Thai human panel import contract โดยไม่ fabricate outcome
+- [x] Project/Case workflow: Brief → Evidence → Population → Assumptions → Run → Compare → Decision
+- [x] Evidence Library + immutable `EvidenceSetV1`, version/dedup/health/PII preview
+- [x] GraphRAG provenance จาก evidence set ที่ freeze และยังผ่าน BudgetGuard
+- [x] รวม Compare/Experiments เป็น Validation Lab + calibration/raw-failure drill-down
+- [x] Resolution Inbox/Forecast Calendar พร้อม owner/evidence/Brier/reliability/ECE/CI
+- [x] MIRACL Thai จริงแบบ pin revision/hash/license + raw metrics/cost/latency
+- [x] consent-based Thai human panel import contract โดยไม่ fabricate outcome
+- [ ] multi-model robustness execution 2–3 models — มี aggregate preflight/opt-in contract แล้ว แต่ยังไม่รันหรือคิดเงินโดยไม่มี model/sample ที่ผู้ใช้เลือก
 
 ## P9-M3 — Productize capability เดิม (ห้ามเริ่มก่อน M2 ผ่าน)
 
-- [ ] Rehearsal UI: turn-by-turn, pause/resume, operator prompt, scorecard/transcript/decision log
-- [ ] checkpoint/stage control ในสถาปัตยกรรมเดิมโดยไม่เพิ่ม Concordia dependency
-- [ ] Run Detail status shell + Result/Evidence/Uncertainty/Validation/Audit tabs
-- [ ] TH/EN parity, locale-aware formatting และ WCAG 2.2 AA target
-- [ ] usability test ผู้ใช้ไทยอย่างน้อย 5 คน; task completion ≥80%
+- [x] Rehearsal UI: turn-by-turn, pause/resume, operator prompt, scorecard/transcript/decision log
+- [x] checkpoint/stage control ในสถาปัตยกรรมเดิมโดยไม่เพิ่ม Concordia dependency
+- [x] Run Detail status shell + Result/Evidence/Uncertainty/Validation/Audit tabs
+- [ ] TH/EN parity และ WCAG 2.2 AA ทั้งแอป — route ใหม่มี bilingual/locale/reflow/keyboard E2E แล้ว แต่ยังไม่ผ่าน full-string/accessibility audit
+- [ ] usability test ผู้ใช้ไทยอย่างน้อย 5 คน; protocol พร้อม แต่ยังไม่มีผลจริง (`docs/reports/P9-M3-usability-protocol.md`)
 
 ## Acceptance gates ร่วม
 

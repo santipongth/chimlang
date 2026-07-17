@@ -84,6 +84,8 @@ export interface CreateRunBody {
   retrieval_mode?: "hybrid" | "bm25" | "vector";
   parent_run_id?: string;
   reflection?: boolean;
+  project_id?: string;
+  evidence_set_id?: string;
 }
 
 export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadiness> {
@@ -141,6 +143,8 @@ function toRunRequest(body: CreateRunBody) {
     parent_run_id: body.parent_run_id ?? "",
     reflection: body.reflection ?? false,
     experiment_id: "",
+    project_id: body.project_id ?? "",
+    evidence_set_id: body.evidence_set_id ?? "",
     input_mode: "latest" as const,
     source_run_id: "",
   };
@@ -1140,6 +1144,264 @@ export async function createExperimentSweep(
   });
   if (!response.ok || !data) throw openApiError(error, response.status);
   return data as unknown as SweepCreated;
+}
+
+// ---- Project workspace + Evidence Library (P9-M2) ----
+
+export type ProjectSummary = components["schemas"]["ProjectSummary"];
+export type Project = components["schemas"]["ProjectResponse"];
+export type EvidenceVersion = components["schemas"]["EvidenceVersionResponse"];
+export type EvidenceSet = components["schemas"]["EvidenceSetResponse"];
+export type EvidencePreview = components["schemas"]["EvidencePreviewResponse"];
+
+export async function fetchProjects(): Promise<ProjectSummary[]> {
+  const { data, error, response } = await apiClient.GET("/projects");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data.projects;
+}
+
+export async function createProject(name: string, brief: string): Promise<Project> {
+  const { data, error, response } = await apiClient.POST("/projects", {
+    body: { name, brief },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function fetchProject(projectId: string): Promise<Project> {
+  const { data, error, response } = await apiClient.GET("/projects/{project_id}", {
+    params: { path: { project_id: projectId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function updateProject(
+  projectId: string,
+  body: components["schemas"]["ProjectUpdateBody"],
+): Promise<Project> {
+  const { data, error, response } = await apiClient.PATCH("/projects/{project_id}", {
+    params: { path: { project_id: projectId } },
+    body,
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function addTextEvidence(
+  projectId: string,
+  label: string,
+  text: string,
+  itemId = "",
+): Promise<EvidenceVersion> {
+  const { data, error, response } = await apiClient.POST(
+    "/projects/{project_id}/evidence/text",
+    {
+      params: { path: { project_id: projectId } },
+      body: { label, text, kind: "text", item_id: itemId },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function previewEvidence(projectId: string, text: string): Promise<EvidencePreview> {
+  const { data, error, response } = await apiClient.POST(
+    "/projects/{project_id}/evidence/preview",
+    {
+      params: { path: { project_id: projectId } },
+      body: { text },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function addUrlEvidence(
+  projectId: string,
+  label: string,
+  url: string,
+  kind: "url" | "rss",
+): Promise<EvidenceVersion> {
+  const { data, error, response } = await apiClient.POST(
+    "/projects/{project_id}/evidence/url",
+    {
+      params: { path: { project_id: projectId } },
+      body: { label, url, kind, item_id: "" },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function uploadEvidence(
+  projectId: string,
+  label: string,
+  file: File,
+): Promise<EvidenceVersion> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("label", label);
+  form.append("item_id", "");
+  const { data, error, response } = await apiClient.POST(
+    "/projects/{project_id}/evidence/upload",
+    {
+      params: { path: { project_id: projectId } },
+      body: { file: file.name, label, item_id: "" },
+      bodySerializer: () => form,
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function fetchEvidence(projectId: string): Promise<EvidenceVersion[]> {
+  const { data, error, response } = await apiClient.GET(
+    "/projects/{project_id}/evidence",
+    { params: { path: { project_id: projectId } } },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data.evidence;
+}
+
+export async function freezeEvidence(
+  projectId: string,
+  name: string,
+  versionIds: string[] = [],
+): Promise<EvidenceSet> {
+  const { data, error, response } = await apiClient.POST(
+    "/projects/{project_id}/evidence-sets",
+    {
+      params: { path: { project_id: projectId } },
+      body: { name, version_ids: versionIds },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+// ---- Validation Lab + Resolution Inbox (P9-M2) ----
+
+export type ValidationOverview = components["schemas"]["ValidationOverviewResponse"];
+export type ResolutionInbox = components["schemas"]["ResolutionInboxResponse"];
+
+export async function fetchValidationOverview(): Promise<ValidationOverview> {
+  const { data, error, response } = await apiClient.GET("/validation/overview");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function fetchResolutionInbox(): Promise<ResolutionInbox> {
+  const { data, error, response } = await apiClient.GET("/validation/resolution-inbox");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function assignResolutionOwner(
+  predictionId: number,
+  owner: string,
+): Promise<components["schemas"]["OwnerAssignResponse"]> {
+  const { data, error, response } = await apiClient.POST(
+    "/validation/predictions/{prediction_id}/owner",
+    {
+      params: { path: { prediction_id: predictionId } },
+      body: { owner },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+// ---- Press-room Rehearsal (P9-M3) ----
+
+export type RehearsalSummary = components["schemas"]["RehearsalSummaryResponse"];
+export type RehearsalDetail = components["schemas"]["RehearsalResponse"];
+
+export async function fetchRehearsals(): Promise<RehearsalSummary[]> {
+  const { data, error, response } = await apiClient.GET("/rehearsals");
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data.rehearsals;
+}
+
+export async function createRehearsal(
+  body: components["schemas"]["RehearsalCreateBody"],
+): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.POST("/rehearsals", { body });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function fetchRehearsal(sessionId: string): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.GET("/rehearsals/{session_id}", {
+    params: { path: { session_id: sessionId } },
+  });
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function nextRehearsalQuestion(
+  sessionId: string,
+): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.POST(
+    "/rehearsals/{session_id}/next",
+    { params: { path: { session_id: sessionId } } },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function finishRehearsal(sessionId: string): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.POST(
+    "/rehearsals/{session_id}/finish",
+    { params: { path: { session_id: sessionId } } },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function answerRehearsal(
+  sessionId: string,
+  answer: string,
+): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.POST(
+    "/rehearsals/{session_id}/answer",
+    {
+      params: { path: { session_id: sessionId } },
+      body: { answer },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function controlRehearsal(
+  sessionId: string,
+  action: "pause" | "resume",
+): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.POST(
+    "/rehearsals/{session_id}/control",
+    {
+      params: { path: { session_id: sessionId } },
+      body: { action },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
+}
+
+export async function logRehearsalDecision(
+  sessionId: string,
+  decision: string,
+): Promise<RehearsalDetail> {
+  const { data, error, response } = await apiClient.POST(
+    "/rehearsals/{session_id}/decisions",
+    {
+      params: { path: { session_id: sessionId } },
+      body: { decision },
+    },
+  );
+  if (!response.ok || !data) throw openApiError(error, response.status);
+  return data;
 }
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`;

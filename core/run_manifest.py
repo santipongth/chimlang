@@ -118,6 +118,8 @@ def normalize_run_request(
         "parent_run_id": str(raw.get("parent_run_id", "") or ""),
         "reflection": bool(raw.get("reflection")),
         "experiment_id": str(raw.get("experiment_id", "") or ""),
+        "project_id": str(raw.get("project_id", "") or ""),
+        "evidence_set_id": str(raw.get("evidence_set_id", "") or ""),
     }
 
 

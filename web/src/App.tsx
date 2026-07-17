@@ -3,14 +3,15 @@ import {
   BarChart3,
   Bell,
   Fish,
-  FlaskConical,
+  FolderKanban,
   Globe,
   History,
   Languages,
   Menu,
+  Mic2,
   Plus,
   Settings as SettingsIcon,
-  Target,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import {
@@ -24,7 +25,7 @@ import {
   useParams,
 } from "react-router-dom";
 import { LangProvider, useLang } from "./i18n";
-import { fetchWatchlists } from "./api";
+import { fetchShellUnread } from "./api-shell";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const NewRun = lazy(() => import("./pages/NewRun"));
@@ -37,6 +38,9 @@ const Experiments = lazy(() => import("./pages/Experiments"));
 const Gallery = lazy(() => import("./pages/Gallery"));
 const RunDetail = lazy(() => import("./pages/RunDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Projects = lazy(() => import("./pages/Projects"));
+const ValidationLab = lazy(() => import("./pages/ValidationLab"));
+const Rehearsals = lazy(() => import("./pages/Rehearsals"));
 
 export const ROUTES = {
   home: "/",
@@ -45,6 +49,9 @@ export const ROUTES = {
   history: "/history",
   insights: "/insights",
   experiments: "/experiments",
+  projects: "/projects",
+  validation: "/validation",
+  rehearsals: "/rehearsals",
   calibration: "/calibration",
   watchlist: "/watchlist",
   gallery: "/gallery",
@@ -52,6 +59,8 @@ export const ROUTES = {
   run: (runId: string) => `/runs/${encodeURIComponent(runId)}`,
   galleryItem: (token: string) => `/gallery/${encodeURIComponent(token)}`,
   experiment: (experimentId: string) => `/experiments/${encodeURIComponent(experimentId)}`,
+  project: (projectId: string) => "/projects/" + encodeURIComponent(projectId),
+  rehearsal: (sessionId: string) => "/rehearsals/" + encodeURIComponent(sessionId),
 } as const;
 
 export interface RunRequest {
@@ -98,11 +107,12 @@ function LanguageControl() {
 function Navigation({ unread, onNavigate }: { unread: number; onNavigate?: () => void }) {
   const { t } = useLang();
   const items: NavigationItem[] = [
+    { to: ROUTES.projects, icon: FolderKanban, label: t("nav_projects") },
     { to: ROUTES.new, icon: Plus, label: t("nav_new_run") },
     { to: ROUTES.history, icon: History, label: t("nav_history") },
     { to: ROUTES.insights, icon: BarChart3, label: t("nav_insights") },
-    { to: ROUTES.experiments, icon: FlaskConical, label: t("nav_experiments") },
-    { to: ROUTES.calibration, icon: Target, label: t("nav_calibration") },
+    { to: ROUTES.validation, icon: ShieldCheck, label: t("nav_validation") },
+    { to: ROUTES.rehearsals, icon: Mic2, label: t("nav_rehearsals") },
     { to: ROUTES.gallery, icon: Globe, label: t("nav_gallery") },
     { to: ROUTES.watchlist, icon: Bell, label: t("nav_watchlist"), badge: unread },
     { to: ROUTES.settings, icon: SettingsIcon, label: t("nav_settings") },
@@ -180,6 +190,29 @@ function ExperimentRoute() {
   );
 }
 
+function ProjectRoute() {
+  const navigate = useNavigate();
+  const { projectId } = useParams<{ projectId: string }>();
+  return (
+    <Projects
+      initialProjectId={projectId}
+      onSelect={(id) => navigate(id ? ROUTES.project(id) : ROUTES.projects)}
+      onOpenRun={(runId) => navigate(ROUTES.run(runId))}
+    />
+  );
+}
+
+function RehearsalRoute() {
+  const navigate = useNavigate();
+  const { sessionId } = useParams<{ sessionId: string }>();
+  return (
+    <Rehearsals
+      initialSessionId={sessionId}
+      onSelect={(id) => navigate(id ? ROUTES.rehearsal(id) : ROUTES.rehearsals)}
+    />
+  );
+}
+
 function NotFound() {
   const { t } = useLang();
   return (
@@ -209,8 +242,8 @@ function Shell() {
   };
 
   const refreshUnread = () =>
-    fetchWatchlists()
-      .then((data) => setUnread(data.unread))
+    fetchShellUnread()
+      .then(setUnread)
       .catch(() => {});
 
   useEffect(() => {
@@ -316,6 +349,14 @@ function Shell() {
             <Route path={ROUTES.compare} element={<Compare request={request} />} />
             <Route path={ROUTES.history} element={<Runs onOpen={(runId) => navigate(ROUTES.run(runId))} />} />
             <Route path={ROUTES.insights} element={<Insights />} />
+            <Route path={ROUTES.projects} element={<ProjectRoute />} />
+            <Route path="/projects/:projectId" element={<ProjectRoute />} />
+            <Route
+              path={ROUTES.validation}
+              element={<ValidationLab onOpenCalibration={() => navigate(ROUTES.calibration)} />}
+            />
+            <Route path={ROUTES.rehearsals} element={<RehearsalRoute />} />
+            <Route path="/rehearsals/:sessionId" element={<RehearsalRoute />} />
             <Route path={ROUTES.experiments} element={<ExperimentRoute />} />
             <Route path="/experiments/:experimentId" element={<ExperimentRoute />} />
             <Route path={ROUTES.calibration} element={<Calibration />} />

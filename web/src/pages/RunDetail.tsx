@@ -45,7 +45,7 @@ import { InfoTip, PageHeader, Tabs } from "../ui";
 
 // Run detail (P6-M2) — หน้าเดียวรองรับทั้ง fabric (dashboard payload) และ debate (posts+replay)
 
-type Tab = "overview" | "debate" | "canvas" | "evidence" | "report";
+type Tab = "overview" | "debate" | "evidence" | "canvas" | "validation" | "report";
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "ready") return <CheckCircle2 className="inline h-3.5 w-3.5 text-primary" />;
@@ -711,17 +711,6 @@ export default function RunDetail({
                 </button>
               </div>
             )}
-            {validation && (
-              <div className="mt-4">
-                <div className="grid gap-2 text-xs sm:grid-cols-4">
-                  <div>Sign agreement {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
-                  <div>Dispersion {validation.between_run_dispersion.toFixed(3)}</div>
-                  <div>Failure {pct(validation.failure_rate)}</div>
-                  <div>Cost ${validation.total_cost_usd.toFixed(4)}</div>
-                </div>
-                <StabilityMatrix report={validation} />
-              </div>
-            )}
           </section>
           <TrustScorecard scorecard={data.trust_scorecard} />
           {canRepair && (
@@ -753,11 +742,12 @@ export default function RunDetail({
           )}
           <Tabs<Tab>
             tabs={[
-              { id: "overview" as Tab, label: t("rd_tab_overview") },
+              { id: "overview" as Tab, label: lang === "th" ? "ผลลัพธ์" : "Result" },
               ...(isDebate && showView("debate") ? [{ id: "debate" as Tab, label: t("rd_tab_debate") }] : []),
-              ...(showView("canvas") ? [{ id: "canvas" as Tab, label: t("rd_tab_canvas") }] : []),
               ...(showView("evidence") ? [{ id: "evidence" as Tab, label: t("rd_tab_evidence") }] : []),
-              { id: "report" as Tab, label: t("rd_tab_report") },
+              ...(showView("canvas") ? [{ id: "canvas" as Tab, label: lang === "th" ? "ความไม่แน่นอน" : "Uncertainty" }] : []),
+              { id: "validation" as Tab, label: lang === "th" ? "การตรวจสอบ" : "Validation" },
+              { id: "report" as Tab, label: lang === "th" ? "บันทึกตรวจสอบ" : "Audit" },
             ]}
             active={tab}
             onChange={setTab}
@@ -1027,6 +1017,58 @@ export default function RunDetail({
                     <p className="text-sm text-muted-foreground">{t("tipping_none")}</p>
                   )}
                   <p className="text-xs text-muted-foreground">🔗 {t("rd_evidence_trace")}</p>
+                </>
+              )}
+            </section>
+          )}
+
+          {tab === "validation" && (
+            <section className={card + " space-y-4"} aria-live="polite">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold">
+                    {lang === "th" ? "ความเสถียรของผลจำลอง" : "Simulation stability"}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {lang === "th"
+                      ? "เปรียบเทียบหลาย seed จาก run ใหม่ ผลนี้ไม่ใช่ความแม่นยำต่อโลกจริง"
+                      : "Compares fresh runs across seeds; this is not real-world accuracy."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={contractBusy || validationQuery.isFetching}
+                  onClick={startValidation}
+                  className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  {validationQuery.isFetching
+                    ? lang === "th"
+                      ? "กำลังตรวจสอบ…"
+                      : "Validating…"
+                    : lang === "th"
+                      ? "ตรวจ 3 seed"
+                      : "Validate 3 seeds"}
+                </button>
+              </div>
+              {!validation && !validationQuery.isFetching && (
+                <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">
+                  {lang === "th" ? "ยังไม่มีรายงาน validation สำหรับ run นี้" : "No validation report exists for this run yet."}
+                </p>
+              )}
+              {validationQuery.error && (
+                <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  {String((validationQuery.error as Error).message ?? validationQuery.error)}
+                </p>
+              )}
+              {validation && (
+                <>
+                  <div className="grid gap-2 text-xs sm:grid-cols-4">
+                    <div>Sign agreement {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
+                    <div>Dispersion {validation.between_run_dispersion.toFixed(3)}</div>
+                    <div>Failure {pct(validation.failure_rate)}</div>
+                    <div>Cost ${validation.total_cost_usd.toFixed(4)}</div>
+                  </div>
+                  <StabilityMatrix report={validation} />
                 </>
               )}
             </section>
