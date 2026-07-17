@@ -298,11 +298,15 @@ export interface EvidenceMatch extends EvidenceSourceItem {
 export interface DebateRunPayload {
   result_kind?: "simulation_finding" | "prediction";
   synthesis: {
+    status?: "analyst_failed";
     summary: string;
     confidence: number;
     distribution: { bucket: string; pct: number }[];
     key_drivers: string[];
     risks: string[];
+    failure_reason?: string;
+    analyst_attempts?: number;
+    parser_mode?: string;
     judge?: {
       verdict: "pass" | "warn" | "fail";
       citation_assessment: string;

@@ -18,6 +18,9 @@ import statistics
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from random import Random
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from core.config import get_settings
 from core.llm.adapter import LLMAdapter, ModelTier
@@ -64,49 +67,38 @@ POST_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYNTHESIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "summary": {"type": "string"},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "distribution": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "bucket": {"type": "string"},
-                    "pct": {"type": "number", "minimum": 0, "maximum": 100},
-                },
-                "required": ["bucket", "pct"],
-                "additionalProperties": False,
-            },
-        },
-        "key_drivers": {"type": "array", "items": {"type": "string"}},
-        "risks": {"type": "array", "items": {"type": "string"}},
-        "judge": {
-            "type": "object",
-            "properties": {
-                "verdict": {"type": "string", "enum": ["pass", "warn", "fail"]},
-                "citation_assessment": {"type": "string"},
-                "contradiction_assessment": {"type": "string"},
-                "schema_assessment": {"type": "string"},
-                "unsupported_claims": {"type": "array", "items": {"type": "string"}},
-                "notes": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": [
-                "verdict",
-                "citation_assessment",
-                "contradiction_assessment",
-                "schema_assessment",
-                "unsupported_claims",
-                "notes",
-            ],
-            "additionalProperties": False,
-        },
-    },
-    "required": ["summary", "confidence", "distribution", "key_drivers", "risks", "judge"],
-    "additionalProperties": False,
-}
+NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class _SynthesisDistribution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bucket: NonEmptyText
+    pct: float = Field(ge=0, le=100)
+
+
+class _SynthesisJudge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Annotated[str, Field(pattern="^(pass|warn|fail)$")]
+    citation_assessment: NonEmptyText
+    contradiction_assessment: NonEmptyText
+    schema_assessment: NonEmptyText
+    unsupported_claims: list[str]
+    notes: list[str]
+
+
+class _SynthesisContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    summary: NonEmptyText
+    confidence: float = Field(ge=0, le=1)
+    distribution: list[_SynthesisDistribution] = Field(min_length=1)
+    key_drivers: list[NonEmptyText] = Field(min_length=1)
+    risks: list[NonEmptyText] = Field(min_length=1)
+    judge: _SynthesisJudge
+
+
+SYNTHESIS_SCHEMA = _SynthesisContract.model_json_schema()
 
 
 class DebateUnavailableError(RuntimeError):
@@ -186,7 +178,8 @@ def make_debate_adapter(
     pricing = effective_pricing()
     loads = [
         TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
-        TierLoad(settings.llm_model_analyst, 1 + max(0, reflection_calls), 1500, 800),
+        # Reserve one bounded contract-repair retry for the Executive Readout.
+        TierLoad(settings.llm_model_analyst, 2 + max(0, reflection_calls), 1500, 800),
     ]
     if include_embedding and settings.llm_model_embedding.strip():
         # One bounded document batch plus one query. Conservative Thai char/token estimate.
@@ -628,45 +621,79 @@ def run_debate(
     verifier_digest = json.dumps(
         compact_verifier_report(verifier), ensure_ascii=False, separators=(",", ":")
     )
+    analyst_attempts = 0
     try:
         structured_kwargs = (
             {"response_schema": SYNTHESIS_SCHEMA, "schema_name": "debate_synthesis"}
             if getattr(adapter, "supports_structured_outputs", lambda: False)()
             else {}
         )
+        analyst_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "คุณคือนักวิเคราะห์และ judge สรุปผลดีเบตจำลอง ตอบภาษาไทยเท่านั้น "
+                    "ตอบ JSON ล้วน ห้ามลดทอนข้อผิดพลาดที่ deterministic verifier รายงาน"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"หัวข้อ: {subject}\nรอบดีเบต: {rounds}\n\n"
+                f"จุดยืนสุดท้ายของ agents:\n{digest}\n\n"
+                f"รายงาน verifier:\n{verifier_digest}\n\n"
+                'ตอบ JSON: {"summary": "2-3 ประโยค", "confidence": 0..1, '
+                '"distribution": [{"bucket": "ชื่อกลุ่มความเห็น", "pct": %}], '
+                '"key_drivers": ["ปัจจัย 3-5 ข้อ"], "risks": ["ความเสี่ยง 2-4 ข้อ"], '
+                '"judge": {"verdict": "pass|warn|fail", '
+                '"citation_assessment": "...", "contradiction_assessment": "...", '
+                '"schema_assessment": "...", '
+                '"unsupported_claims": ["..."], "notes": ["..."]}}',
+            },
+        ]
+        analyst_attempts = 1
         result = adapter.chat(
             ModelTier.ANALYST,
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "คุณคือนักวิเคราะห์และ judge สรุปผลดีเบตจำลอง ตอบภาษาไทยเท่านั้น "
-                        "ตอบ JSON ล้วน ห้ามลดทอนข้อผิดพลาดที่ deterministic verifier รายงาน"
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"หัวข้อ: {subject}\nรอบดีเบต: {rounds}\n\n"
-                    f"จุดยืนสุดท้ายของ agents:\n{digest}\n\n"
-                    f"รายงาน verifier:\n{verifier_digest}\n\n"
-                    'ตอบ JSON: {"summary": "2-3 ประโยค", "confidence": 0..1, '
-                    '"distribution": [{"bucket": "ชื่อกลุ่มความเห็น", "pct": %}], '
-                    '"key_drivers": ["ปัจจัย 3-5 ข้อ"], "risks": ["ความเสี่ยง 2-4 ข้อ"], '
-                    '"judge": {"verdict": "pass|warn|fail", '
-                    '"citation_assessment": "...", "contradiction_assessment": "...", '
-                    '"schema_assessment": "...", '
-                    '"unsupported_claims": ["..."], "notes": ["..."]}}',
-                },
-            ],
+            analyst_messages,
             max_tokens=900,
             temperature=0,
             seed=seed,
             **structured_kwargs,
         )
-        synthesis = _load_json_object(result.text)
+        try:
+            synthesis = _SynthesisContract.model_validate(
+                _load_json_object(result.text)
+            ).model_dump()
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            # Some provider/model combinations acknowledge json_schema but return a nested
+            # fragment. Retry once without provider-side structured output, then apply the
+            # exact same local contract. This remains fail-closed and BudgetGuard-metered.
+            analyst_attempts = 2
+            retry_messages = [
+                {
+                    "role": "system",
+                    "content": analyst_messages[0]["content"]
+                    + " คำตอบก่อนหน้าไม่ครบ contract กรุณาส่ง object หลักให้ครบทุก field",
+                },
+                analyst_messages[1],
+            ]
+            result = adapter.chat(
+                ModelTier.ANALYST,
+                retry_messages,
+                max_tokens=900,
+                temperature=0,
+                seed=seed + 1,
+            )
+            synthesis = _SynthesisContract.model_validate(
+                _load_json_object(result.text)
+            ).model_dump()
         synthesis["confidence"] = max(0.0, min(1.0, float(synthesis.get("confidence", 0.5))))
         synthesis["fallback"] = False
-        synthesis["parser_mode"] = getattr(result, "structured_mode", "parser_fallback_capability")
+        synthesis["analyst_attempts"] = analyst_attempts
+        synthesis["parser_mode"] = (
+            "contract_retry_parser"
+            if analyst_attempts == 2
+            else getattr(result, "structured_mode", "parser_fallback_capability")
+        )
         synthesis["model_version"] = getattr(result, "model", "")
         judge = synthesis.get("judge")
         if not isinstance(judge, dict):
@@ -698,6 +725,7 @@ def run_debate(
             "fallback": False,
             "parser_mode": "analyst_failed",
             "failure_reason": _failure_reason(exc),
+            "analyst_attempts": analyst_attempts,
         }
         synthesis["judge"] = {
             "verdict": "fail",

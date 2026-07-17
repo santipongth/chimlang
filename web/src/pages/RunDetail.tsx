@@ -118,7 +118,79 @@ function RedactionSummary({ counts, t }: { counts?: Record<string, number>; t: (
 
 type RunPayloadView = Partial<DebateRunPayload & FabricRunPayload>;
 
-function ExecutiveReadout({ data, p, isDebate, t }: { data: SimRunDetail; p: RunPayloadView; isDebate: boolean; t: (k: string) => string }) {
+export function hasUsableExecutiveSynthesis(
+  synthesis: DebateRunPayload["synthesis"] | undefined,
+): boolean {
+  return Boolean(
+    synthesis
+    && synthesis.status !== "analyst_failed"
+    && typeof synthesis.summary === "string"
+    && synthesis.summary.trim().length > 0
+    && typeof synthesis.confidence === "number"
+    && Number.isFinite(synthesis.confidence)
+    && synthesis.confidence >= 0
+    && synthesis.confidence <= 1
+    && Array.isArray(synthesis.distribution)
+    && synthesis.distribution.length > 0
+    && synthesis.distribution.every(
+      (item) => item
+        && typeof item.bucket === "string"
+        && item.bucket.trim().length > 0
+        && typeof item.pct === "number"
+        && Number.isFinite(item.pct)
+        && item.pct >= 0
+        && item.pct <= 100,
+    )
+    && Array.isArray(synthesis.key_drivers)
+    && synthesis.key_drivers.length > 0
+    && synthesis.key_drivers.every(
+      (item) => typeof item === "string" && item.trim().length > 0,
+    )
+    && Array.isArray(synthesis.risks)
+    && synthesis.risks.length > 0
+    && synthesis.risks.every(
+      (item) => typeof item === "string" && item.trim().length > 0,
+    ),
+  );
+}
+
+export function ExecutiveReadout({
+  data,
+  p,
+  isDebate,
+  t,
+  onRerunFrozen,
+  rerunBusy = false,
+}: {
+  data: SimRunDetail;
+  p: RunPayloadView;
+  isDebate: boolean;
+  t: (k: string) => string;
+  onRerunFrozen?: () => void;
+  rerunBusy?: boolean;
+}) {
+  if (isDebate && !hasUsableExecutiveSynthesis(p.synthesis)) {
+    return (
+      <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5" role="alert" aria-live="polite">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-800">
+          <AlertTriangle className="h-4 w-4" /> Executive Readout
+        </div>
+        <h2 className="mt-2 text-xl font-semibold text-amber-950">{t("rd_synthesis_unavailable")}</h2>
+        <p className="mt-2 text-sm text-amber-900">{t("rd_synthesis_unavailable_desc")}</p>
+        {data.manifest?.complete && onRerunFrozen && (
+          <button
+            type="button"
+            disabled={rerunBusy}
+            onClick={onRerunFrozen}
+            className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-amber-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${rerunBusy ? "animate-spin" : ""}`} />
+            {t("rd_rerun_frozen_for_readout")}
+          </button>
+        )}
+      </section>
+    );
+  }
   const summary = isDebate
     ? p.synthesis?.summary
     : p.brief?.lines?.[0]?.text || data.subject;
@@ -497,6 +569,7 @@ export default function RunDetail({
   const card = "bg-card border border-border rounded-2xl p-6";
   const isDebate = data?.engine === "debate";
   const p = (data?.payload ?? {}) as RunPayloadView;
+  const hasExecutiveSynthesis = !isDebate || hasUsableExecutiveSynthesis(p.synthesis);
   // มุมมองที่ผู้ใช้เลือกเปิดตอนสั่งรัน (P6-M6) — ว่าง = ครบทุกมุม
   const configuredViews = data?.config?.views;
   const enabledViews = Array.isArray(configuredViews)
@@ -636,7 +709,14 @@ export default function RunDetail({
 
       {data && (data.status === "complete" || data.status === "error") && (
         <>
-          <ExecutiveReadout data={data} p={p} isDebate={isDebate} t={t} />
+          <ExecutiveReadout
+            data={data}
+            p={p}
+            isDebate={isDebate}
+            t={t}
+            onRerunFrozen={() => rerun("frozen")}
+            rerunBusy={runActionBusy === "frozen"}
+          />
           <section className="rounded-2xl border border-border bg-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -757,8 +837,13 @@ export default function RunDetail({
             <>
               <section className={card + " space-y-3"}>
                 <h2 className="font-semibold">{t("rd_synthesis")}</h2>
-                <p className="text-sm">{p.synthesis?.summary}</p>
-                <div className="flex flex-wrap items-center gap-3 text-sm">
+                {!hasExecutiveSynthesis ? (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+                    {t("rd_synthesis_unavailable_desc")}
+                  </p>
+                ) : (<>
+                  <p className="text-sm">{p.synthesis?.summary}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
                   <span className="rounded-full bg-primary-soft px-3 py-1 text-primary-strong">
                     {t("rd_confidence")} {((p.synthesis?.confidence ?? 0) * 100).toFixed(0)}% <InfoTip text={t("tip_debate_conf")} />
                   </span>
@@ -768,15 +853,15 @@ export default function RunDetail({
                     </span>
                   )}
                   {p.cost_usd != null && <span className="text-xs text-muted-foreground">{t("rd_cost")} ${p.cost_usd}</span>}
-                </div>
-                <div className="flex flex-wrap gap-2">
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                   {(p.synthesis?.distribution ?? []).map((d: any) => (
                     <span key={d.bucket} className="rounded-full bg-muted px-3 py-1 text-xs">
                       {d.bucket}: {d.pct}%
                     </span>
                   ))}
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 text-sm">
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 text-sm">
                   <div>
                     <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("rd_drivers")}</div>
                     <ul className="mt-1 list-disc pl-5 text-muted-foreground">
@@ -789,7 +874,8 @@ export default function RunDetail({
                       {(p.synthesis?.risks ?? []).map((k: string, i: number) => <li key={i}>{k}</li>)}
                     </ul>
                   </div>
-                </div>
+                  </div>
+                </>)}
               </section>
               <section className={card}>
                 <h2 className="font-semibold mb-2">

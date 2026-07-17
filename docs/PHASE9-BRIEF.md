@@ -8,6 +8,8 @@
   Usability study จาก production ทั้ง UI, API, runtime code และฐานข้อมูล
 - [x] migration ลบ 14 operational tables; immutable run/prediction/finding/audit/financial records คงไว้
 - [x] production workflow ปัจจุบันเป็น PopulationSet → Run → Result → Export และ live smoke ผ่านจริง
+- [x] Executive Readout validate analyst root contract, retry ได้ 1 ครั้งภายใต้ BudgetGuard และ fail-closed;
+  legacy payload ที่ไม่ครบแสดงคำเตือน+frozen rerun แทนผลว่าง
 - รายการ P9-M2/M3 ด้านล่างเป็นประวัติงานที่เคยส่งมอบ ไม่ใช่ surface ที่ยังเปิดใช้งาน
 
 ## P9-M1 — Trusted Run Foundation + UX blockers (trust gate)

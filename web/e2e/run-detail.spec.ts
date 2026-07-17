@@ -68,6 +68,11 @@ test("opens run detail by URL and renders nonblank visualization canvas", async 
   await page.goto("/app/#/runs/e2e-run");
 
   await expect(page.getByRole("heading", { name: "E2E policy debate" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Most segments support the policy, but rural respondents remain cautious.",
+    }),
+  ).toBeVisible();
   await expect(page.getByTestId("stance-timeline-chart")).toBeVisible();
   await expect(page.getByTestId("contention-graph")).toBeVisible();
 

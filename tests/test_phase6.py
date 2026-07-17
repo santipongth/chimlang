@@ -103,6 +103,14 @@ class _FakeAdapter:
                         "distribution": [{"bucket": "เห็นด้วย", "pct": 100}],
                         "key_drivers": ["ปัจจัยทดสอบ"],
                         "risks": ["ความเสี่ยงทดสอบ"],
+                        "judge": {
+                            "verdict": "pass",
+                            "citation_assessment": "ผ่าน",
+                            "contradiction_assessment": "ผ่าน",
+                            "schema_assessment": "ผ่าน",
+                            "unsupported_claims": [],
+                            "notes": [],
+                        },
                     },
                     ensure_ascii=False,
                 )
@@ -164,7 +172,7 @@ def test_debate_fails_closed_when_every_agent_call_fails():
 
 
 def test_debate_marks_analyst_failure_without_mechanical_fallback():
-    adapter = _FakeAdapter(fail_on={7})
+    adapter = _FakeAdapter(fail_on={7, 8})
     result = run_debate(_personas(), subject="ทดสอบ", rounds=1, seed=3, adapter=adapter)
 
     assert result.metrics["posts_ok"] == 6
@@ -172,6 +180,52 @@ def test_debate_marks_analyst_failure_without_mechanical_fallback():
     assert result.synthesis["fallback"] is False
     assert result.synthesis["summary"] == ""
     assert "mechanical_fallback" not in result.synthesis["parser_mode"]
+
+
+def test_debate_repairs_valid_json_with_wrong_analyst_schema_once():
+    class MalformedAnalystAdapter(_FakeAdapter):
+        def chat(self, tier, messages, **kw):
+            response = super().chat(tier, messages, **kw)
+            if self.calls == 7:
+                return _R(json.dumps({"bucket": "เห็นด้วย", "pct": 65}, ensure_ascii=False))
+            return response
+
+    result = run_debate(
+        _personas(),
+        subject="ทดสอบ schema analyst",
+        rounds=1,
+        seed=3,
+        adapter=MalformedAnalystAdapter(),
+    )
+
+    assert result.metrics["posts_ok"] == 6
+    assert result.synthesis["summary"] == "สรุปทดสอบ"
+    assert result.synthesis["analyst_attempts"] == 2
+    assert result.synthesis["parser_mode"] == "contract_retry_parser"
+    assert result.synthesis["fallback"] is False
+
+
+def test_debate_rejects_wrong_analyst_schema_after_bounded_retry():
+    class AlwaysMalformedAnalystAdapter(_FakeAdapter):
+        def chat(self, tier, messages, **kw):
+            response = super().chat(tier, messages, **kw)
+            if self.calls >= 7:
+                return _R(json.dumps({"bucket": "เห็นด้วย", "pct": 65}, ensure_ascii=False))
+            return response
+
+    result = run_debate(
+        _personas(),
+        subject="ทดสอบ schema analyst",
+        rounds=1,
+        seed=3,
+        adapter=AlwaysMalformedAnalystAdapter(),
+    )
+
+    assert result.synthesis["status"] == "analyst_failed"
+    assert result.synthesis["failure_reason"] == "schema_value_error"
+    assert result.synthesis["analyst_attempts"] == 2
+    assert result.synthesis["summary"] == ""
+    assert result.synthesis["fallback"] is False
 
 
 def test_debate_classifies_llm_transport_failures():
@@ -496,7 +550,45 @@ def test_post_runs_debate_marks_run_error_when_analyst_fails(client, monkeypatch
     monkeypatch.setattr(
         dbt,
         "make_debate_adapter",
-        lambda a, r, **kwargs: _FakeAdapter(fail_on={7}),
+        lambda a, r, **kwargs: _FakeAdapter(fail_on={7, 8}),
+    )
+    response = client.post(
+        "/runs",
+        json={
+            "engine": "debate",
+            "subject": subject,
+            "agents": 6,
+            "rounds": 1,
+            "population_acknowledged": True,
+            "retrieval_mode": "bm25",
+        },
+    )
+
+    assert response.status_code == 502
+    run = RunStore(DSN).list_runs(search=subject, limit=1)[0]
+    detail = RunStore(DSN).get(run["run_id"])
+    assert detail["status"] == "error"
+    assert len(detail["posts"]) == 6
+    assert "mechanical fallback" in detail["error"]
+    client.delete(f"/runs/{run['run_id']}")
+
+
+@needs_pg
+def test_post_runs_debate_marks_error_for_wrong_analyst_schema(client, monkeypatch):
+    import simulation.debate as dbt
+
+    class MalformedAnalystAdapter(_FakeAdapter):
+        def chat(self, tier, messages, **kw):
+            response = super().chat(tier, messages, **kw)
+            if self.calls >= 7:
+                return _R(json.dumps({"bucket": "เห็นด้วย", "pct": 65}, ensure_ascii=False))
+            return response
+
+    subject = f"ทดสอบ analyst schema fail {uuid4().hex}"
+    monkeypatch.setattr(
+        dbt,
+        "make_debate_adapter",
+        lambda a, r, **kwargs: MalformedAnalystAdapter(),
     )
     response = client.post(
         "/runs",

@@ -284,6 +284,18 @@ export const DICT: Record<string, { th: string; en: string }> = {
     en: "Every figure traces to the agent-level reasoning trail (deterministic per seed — reproducible from the run id)",
   },
   rd_synthesis: { th: "บทสรุปจากวงดีเบต", en: "Debate synthesis" },
+  rd_synthesis_unavailable: {
+    th: "ยังไม่มีบทสรุป Executive Readout ที่ตรวจสอบผ่าน",
+    en: "No validated Executive Readout is available",
+  },
+  rd_synthesis_unavailable_desc: {
+    th: "คำตอบจากโมเดล analyst ไม่ครบตามสัญญาข้อมูล จึงไม่แสดงผลที่อาจทำให้เข้าใจผิด กรุณารันใหม่ด้วย input ที่ freeze",
+    en: "The analyst response did not satisfy the data contract, so potentially misleading output is hidden. Rerun with frozen inputs.",
+  },
+  rd_rerun_frozen_for_readout: {
+    th: "รันใหม่ด้วย input ที่ freeze",
+    en: "Rerun frozen inputs",
+  },
   rd_confidence: { th: "ความมั่นใจ", en: "Confidence" },
   tip_debate_conf: {
     th: "ความมั่นใจจาก analyst model ที่อ่านจุดยืนสุดท้ายของทุก agent\nแล้วถูก 'ลดตามสัดส่วน agent ที่ตอบพัง' — คำตอบหาย = ความไม่แน่นอนเพิ่ม (fail-closed)",
