@@ -231,7 +231,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
                         disabled={busyRun === r.run_id}
                         onClick={() => action(r.run_id, () => cancelRun(r.run_id))}
                         className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-amber-50 hover:text-amber-700 disabled:opacity-40"
-                        title="Cancel"
+                        title={t("hist_cancel_action")}
                       >
                         <Square className="h-4 w-4" />
                       </button>
@@ -241,7 +241,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
                         disabled={busyRun === r.run_id}
                         onClick={() => action(r.run_id, () => retryRun(r.run_id))}
                         className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/5 hover:text-primary-strong disabled:opacity-40"
-                        title="Retry"
+                        title={t("hist_retry_action")}
                       >
                         <RotateCcw className="h-4 w-4" />
                       </button>

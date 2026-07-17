@@ -231,7 +231,7 @@ export default function Projects({
                   </button>
                 )}
               </div>
-              <ol className="mt-5 grid gap-2 sm:grid-cols-4" aria-label="Project workflow">
+              <ol className="mt-5 grid gap-2 sm:grid-cols-4" aria-label={th ? "ลำดับงานโปรเจกต์" : "Project workflow"}>
                 {project.workflow.map((item) => (
                   <li
                     key={String(item.stage)}

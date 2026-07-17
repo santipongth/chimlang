@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type ElementType } from "r
 import {
   BarChart3,
   Bell,
+  ClipboardCheck,
   Fish,
   FolderKanban,
   Globe,
@@ -41,6 +42,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ValidationLab = lazy(() => import("./pages/ValidationLab"));
 const Rehearsals = lazy(() => import("./pages/Rehearsals"));
+const UsabilityStudy = lazy(() => import("./pages/UsabilityStudy"));
 
 export const ROUTES = {
   home: "/",
@@ -52,6 +54,7 @@ export const ROUTES = {
   projects: "/projects",
   validation: "/validation",
   rehearsals: "/rehearsals",
+  usability: "/usability",
   calibration: "/calibration",
   watchlist: "/watchlist",
   gallery: "/gallery",
@@ -84,11 +87,17 @@ function LanguageControl() {
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Languages className="h-3.5 w-3.5" /> {t("lang_label")}
       </span>
-      <div className="flex overflow-hidden rounded-lg border border-border text-[11px]">
+      <div
+        className="flex overflow-hidden rounded-lg border border-border text-[11px]"
+        role="group"
+        aria-label={t("language_options")}
+      >
         {(["th", "en"] as const).map((candidate) => (
           <button
             key={candidate}
             type="button"
+            aria-pressed={lang === candidate}
+            aria-label={candidate === "th" ? "ภาษาไทย" : "English"}
             onClick={() => setLang(candidate)}
             className={`px-2.5 py-1 transition ${
               lang === candidate
@@ -113,6 +122,7 @@ function Navigation({ unread, onNavigate }: { unread: number; onNavigate?: () =>
     { to: ROUTES.insights, icon: BarChart3, label: t("nav_insights") },
     { to: ROUTES.validation, icon: ShieldCheck, label: t("nav_validation") },
     { to: ROUTES.rehearsals, icon: Mic2, label: t("nav_rehearsals") },
+    { to: ROUTES.usability, icon: ClipboardCheck, label: t("nav_usability") },
     { to: ROUTES.gallery, icon: Globe, label: t("nav_gallery") },
     { to: ROUTES.watchlist, icon: Bell, label: t("nav_watchlist"), badge: unread },
     { to: ROUTES.settings, icon: SettingsIcon, label: t("nav_settings") },
@@ -235,6 +245,9 @@ function Shell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const previousPathRef = useRef(location.pathname);
+  const [routeAnnouncement, setRouteAnnouncement] = useState("");
 
   const dismissDrawer = () => {
     setDrawerOpen(false);
@@ -252,7 +265,13 @@ function Shell() {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => setDrawerOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (previousPathRef.current === location.pathname) return;
+    previousPathRef.current = location.pathname;
+    setDrawerOpen(false);
+    setRouteAnnouncement(t("route_changed"));
+    window.requestAnimationFrame(() => mainRef.current?.focus());
+  }, [location.pathname, t]);
   useEffect(() => {
     if (!drawerOpen) return;
     closeButtonRef.current?.focus();
@@ -285,6 +304,16 @@ function Shell() {
 
   return (
     <div className="min-h-screen bg-background md:flex">
+      <button
+        type="button"
+        onClick={() => mainRef.current?.focus()}
+        className="skip-link rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background"
+      >
+        {t("skip_main")}
+      </button>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {routeAnnouncement}
+      </div>
       <aside className="hidden min-h-screen w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex">
         <Navigation unread={unread} />
       </aside>
@@ -329,8 +358,13 @@ function Shell() {
         </div>
       )}
 
-      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
-        <Suspense fallback={<div className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">กำลังโหลดหน้า…</div>}>
+      <main
+        id="main-content"
+        ref={mainRef}
+        tabIndex={-1}
+        className="min-w-0 flex-1 px-4 py-8 outline-none sm:px-8 lg:px-12"
+      >
+        <Suspense fallback={<div role="status" className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">{t("loading_page")}</div>}>
           <Routes>
             <Route path={ROUTES.home} element={<Landing onStart={() => navigate(ROUTES.new)} />} />
             <Route
@@ -357,6 +391,7 @@ function Shell() {
             />
             <Route path={ROUTES.rehearsals} element={<RehearsalRoute />} />
             <Route path="/rehearsals/:sessionId" element={<RehearsalRoute />} />
+            <Route path={ROUTES.usability} element={<UsabilityStudy />} />
             <Route path={ROUTES.experiments} element={<ExperimentRoute />} />
             <Route path="/experiments/:experimentId" element={<ExperimentRoute />} />
             <Route path={ROUTES.calibration} element={<Calibration />} />

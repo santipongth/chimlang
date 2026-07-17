@@ -165,5 +165,5 @@ test("Validation Lab only shows a complete MIRACL result as measured", async ({ 
   await expect(page.getByText("MIRACL Thai")).toBeVisible();
   await expect(page.getByText("Measured", { exact: true })).toBeVisible();
   await expect(page.getByText("measured", { exact: true })).toBeVisible();
-  await expect(page.getByText("Claim blocked", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("Claim blocked", { exact: true })).toHaveCount(3);
 });

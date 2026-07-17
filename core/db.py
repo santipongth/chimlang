@@ -12,7 +12,7 @@ from threading import Lock
 from psycopg import Connection
 from psycopg_pool import ConnectionPool
 
-LATEST_SCHEMA_VERSION = "2026-07-17-rehearsal-leases-v1"
+LATEST_SCHEMA_VERSION = "2026-07-17-validation-case-kinds-v1"
 
 
 class SchemaNotReadyError(RuntimeError):

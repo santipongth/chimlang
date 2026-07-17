@@ -34,16 +34,16 @@ function BrierSparkline({ points, lang }: { points: CalibrationData["trend"]; la
       <path d={path} stroke="var(--color-primary)" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((p, i) => (
         <circle key={i} cx={xs(i)} cy={ys(p.brier)} r={3} fill="var(--color-primary)">
-          <title>{`${new Date(p.t * 1000).toLocaleDateString()} — Brier ${p.brier.toFixed(3)} · n=${p.n}`}</title>
+          <title>{`${new Date(p.t * 1000).toLocaleDateString(lang === "th" ? "th-TH" : "en-US")} — Brier ${p.brier.toFixed(3)} · n=${p.n}`}</title>
         </circle>
       ))}
     </svg>
   );
 }
 
-function ReliabilityDiagram({ bins }: { bins: CalibrationData["reliability"] }) {
+function ReliabilityDiagram({ bins, lang }: { bins: CalibrationData["reliability"]; lang: "th" | "en" }) {
   return (
-    <div className="mt-4 grid gap-3 sm:grid-cols-5" role="img" aria-label="Reliability diagram 5 bins">
+    <div className="mt-4 grid gap-3 sm:grid-cols-5" role="img" aria-label={lang === "th" ? "แผนภาพ reliability 5 ช่วง" : "Reliability diagram with 5 bins"}>
       {bins.map((bin) => (
         <div key={bin.lower} className="rounded-xl border border-border bg-background p-3 text-center">
           <div className="flex h-24 items-end justify-center gap-2" aria-hidden="true">
@@ -164,7 +164,7 @@ export default function Calibration() {
             <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Reliability · 5 bins · n={data.sample_size}
             </div>
-            <ReliabilityDiagram bins={data.reliability} />
+            <ReliabilityDiagram bins={data.reliability} lang={lang} />
           </div>
 
           {data.trend.length >= 2 && (
@@ -260,13 +260,13 @@ export default function Calibration() {
                         <input
                           value={evidenceName}
                           onChange={(e) => setEvidenceName(e.target.value)}
-                          placeholder="ชื่อหลักฐาน"
+                          placeholder={lang === "th" ? "ชื่อหลักฐาน" : "Evidence name"}
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
                         />
                         <input
                           value={evidenceUrl}
                           onChange={(e) => setEvidenceUrl(e.target.value)}
-                          placeholder="https://แหล่งหลักฐาน"
+                          placeholder={lang === "th" ? "https://แหล่งหลักฐาน" : "https://evidence-source"}
                           className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs"
                         />
                         <input

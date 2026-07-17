@@ -675,13 +675,13 @@ export default function RunDetail({
                 <input
                   value={predictionDraft.claim}
                   onChange={(e) => setPredictionDraft({ ...predictionDraft, claim: e.target.value })}
-                  placeholder="เหตุการณ์ binary ที่คาดว่าจะเกิด"
+                  placeholder={lang === "th" ? "เหตุการณ์ binary ที่คาดว่าจะเกิด" : "Expected binary event"}
                   className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
                 />
                 <input
                   value={predictionDraft.measurement}
                   onChange={(e) => setPredictionDraft({ ...predictionDraft, measurement: e.target.value })}
-                  placeholder="วิธีวัดผล"
+                  placeholder={lang === "th" ? "วิธีวัดผล" : "Outcome measurement"}
                   className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
                 />
                 <label className="text-xs text-muted-foreground">

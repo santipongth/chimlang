@@ -175,7 +175,7 @@ function KnowledgeGraph({ data, t }: { data: GraphSummary; t: (k: string) => str
 }
 
 export default function Insights() {
-  const { t } = useLang();
+  const { t, formatCurrency, formatNumber } = useLang();
   const [graph, setGraph] = useState<GraphSummary | null>(null);
   const [stats, setStats] = useState<InsightsData | null>(null);
   const [ops, setOps] = useState<ObservabilityData | null>(null);
@@ -260,30 +260,30 @@ export default function Insights() {
         <section className={card + " space-y-4"} aria-labelledby="provider-health-title">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 id="provider-health-title" className="font-semibold">Provider & queue health</h2>
-              <p className="mt-1 text-xs text-muted-foreground">24 ชั่วโมงล่าสุด · เก็บเฉพาะ metadata ไม่เก็บ prompt/response/PII</p>
+              <h2 id="provider-health-title" className="font-semibold">{t("ins_provider_health")}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">{t("ins_provider_note")}</p>
             </div>
-            <a href="/metrics" className="rounded-lg border border-border px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">Prometheus metrics</a>
+            <a href="/metrics" className="rounded-lg border border-border px-3 py-1.5 text-xs text-primary-strong hover:bg-primary/5">{t("ins_metrics_link")}</a>
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">queued</div><div className="text-2xl font-semibold">{ops.queue.queued}</div></div>
-            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">running</div><div className="text-2xl font-semibold">{ops.queue.running}</div></div>
-            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">errors</div><div className="text-2xl font-semibold">{ops.queue.errors}</div></div>
-            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">queue avg</div><div className="text-2xl font-semibold">{ops.queue.avg_latency_seconds.toFixed(1)}s</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">{t("ins_queued")}</div><div className="text-2xl font-semibold">{formatNumber(ops.queue.queued)}</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">{t("ins_running")}</div><div className="text-2xl font-semibold">{formatNumber(ops.queue.running)}</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">{t("ins_errors")}</div><div className="text-2xl font-semibold">{formatNumber(ops.queue.errors)}</div></div>
+            <div className="rounded-xl bg-muted/50 p-3"><div className="text-[10px] uppercase text-muted-foreground">{t("ins_queue_avg")}</div><div className="text-2xl font-semibold">{formatNumber(ops.queue.avg_latency_seconds, { maximumFractionDigits: 1 })}s</div></div>
           </div>
           <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 text-muted-foreground"><tr><th className="px-3 py-2">provider / operation</th><th className="px-3 py-2">success</th><th className="px-3 py-2">latency</th><th className="px-3 py-2">cost</th></tr></thead>
+              <thead className="bg-muted/50 text-muted-foreground"><tr><th className="px-3 py-2">{t("ins_provider_operation")}</th><th className="px-3 py-2">{t("ins_success")}</th><th className="px-3 py-2">{t("ins_latency")}</th><th className="px-3 py-2">{t("ins_cost")}</th></tr></thead>
               <tbody>
                 {ops.providers.map((p) => (
                   <tr key={`${p.provider}-${p.operation}`} className="border-t border-border">
                     <td className="px-3 py-2"><code>{p.provider}</code> · {p.operation} <span className="text-muted-foreground">({p.calls})</span></td>
-                    <td className="px-3 py-2">{(p.success_rate * 100).toFixed(1)}%</td>
-                    <td className="px-3 py-2">{p.avg_latency_ms.toFixed(0)} ms</td>
-                    <td className="px-3 py-2">${p.cost_usd.toFixed(4)}</td>
+                    <td className="px-3 py-2">{formatNumber(p.success_rate * 100, { maximumFractionDigits: 1 })}%</td>
+                    <td className="px-3 py-2">{formatNumber(p.avg_latency_ms, { maximumFractionDigits: 0 })} ms</td>
+                    <td className="px-3 py-2">{formatCurrency(p.cost_usd, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
                   </tr>
                 ))}
-                {ops.providers.length === 0 && <tr><td colSpan={4} className="px-3 py-4 text-muted-foreground">ยังไม่มี provider call ในช่วงนี้</td></tr>}
+                {ops.providers.length === 0 && <tr><td colSpan={4} className="px-3 py-4 text-muted-foreground">{t("ins_no_provider")}</td></tr>}
               </tbody>
             </table>
           </div>

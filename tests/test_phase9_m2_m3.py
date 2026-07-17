@@ -20,6 +20,7 @@ from core.rehearsal_store import RehearsalStore
 from core.validation_store import ValidationStore
 from governance.pii import PIIRedactionError
 from scripts.run_miracl_th import _load_queries, _metrics
+from scripts.run_model_robustness import _metrics as _robustness_metrics
 
 DSN = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
 
@@ -160,7 +161,7 @@ def test_run_materializes_frozen_evidence_set_with_hash_provenance():
 def test_human_panel_import_requires_consent_and_rejects_pii():
     store = ValidationStore(DSN)
     kwargs = {
-        "name": f"pytest panel {uuid4()}",
+        "name": "pytest panel consent fixture",
         "consent_basis": "แบบยินยอมงานวิจัยฉบับทดสอบ",
         "collected_at": datetime.now(UTC),
         "rows": [{"case_id": "case-1", "prompt": "เห็นด้วยกับมาตรการหรือไม่", "expected": True}],
@@ -304,6 +305,99 @@ def test_miracl_sampling_and_metrics_are_deterministic():
         "query_count": 2,
     }
     assert len(rows) == 2
+
+
+def test_model_robustness_metrics_report_agreement_without_claiming_accuracy():
+    models = ["model-a", "model-b", "model-c"]
+    cases = [{"case_id": "case-1"}, {"case_id": "case-2"}]
+    rows = []
+    for model, first, second in (
+        ("model-a", "support", "oppose"),
+        ("model-b", "support", "neutral"),
+        ("model-c", "oppose", "neutral"),
+    ):
+        for case_id, stance in (("case-1", first), ("case-2", second)):
+            rows.append(
+                {
+                    "model": model,
+                    "case_id": case_id,
+                    "status": "ok",
+                    "stance": stance,
+                    "confidence": 0.7,
+                    "thai_rationale": True,
+                    "latency_s": 0.1,
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cost_usd": 0.001,
+                }
+            )
+    metrics = _robustness_metrics(rows, models, cases)
+    assert metrics["parse_success_rate"] == 1.0
+    assert metrics["thai_rationale_rate"] == 1.0
+    assert metrics["pairwise_stance_agreement"] == pytest.approx(2 / 6)
+    assert "accuracy" not in metrics
+
+
+@needs_pg
+def test_model_robustness_dataset_and_report_are_append_only_measured_artifacts():
+    store = ValidationStore(DSN)
+    dataset = store.register_case_dataset(
+        kind="model_robustness",
+        name="pytest robustness fixture",
+        revision="test-v1",
+        license_name="synthetic",
+        rows=[
+            {
+                "case_id": "case-1",
+                "prompt": "ทดสอบความสอดคล้องของท่าที",
+                "expected": {"ground_truth": None},
+                "observed": {"model-a": {"stance": "neutral"}},
+                "slice": {"domain": "policy"},
+            }
+        ],
+        metadata={"no_human_ground_truth": True},
+        actor="pytest",
+    )
+    report = store.register_report(
+        dataset["dataset_id"],
+        kind="model_robustness",
+        metrics={"pairwise_stance_agreement": 1.0},
+        raw_result_hash="a" * 64,
+        metadata={"benchmark_complete": True, "no_human_ground_truth": True},
+        actor="pytest",
+    )
+    assert dataset["case_count"] == 1
+    assert report["trust_status"] == "measured"
+    usability = store.register_case_dataset(
+        kind="usability",
+        name="pytest incomplete usability fixture",
+        revision="test-v1",
+        license_name="consented-aggregate",
+        rows=[
+            {
+                "case_id": "P01-task-1",
+                "prompt": "สร้างโปรเจกต์จาก brief",
+                "observed": {"status": "complete"},
+                "slice": {"task": "project"},
+            }
+        ],
+        metadata={"consent_confirmed_count": 1},
+        actor="pytest",
+    )
+    incomplete = store.register_report(
+        usability["dataset_id"],
+        kind="usability",
+        metrics={"task_completion_rate": 1.0},
+        raw_result_hash="b" * 64,
+        metadata={
+            "benchmark_complete": True,
+            "participant_count": 1,
+            "consent_confirmed_count": 1,
+            "tasks_recorded": 1,
+        },
+        actor="pytest",
+    )
+    assert incomplete["trust_status"] == "unverified"
 
 
 @needs_pg

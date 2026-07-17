@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 // i18n เบา (NFR-09): TH เป็นหลัก สลับ EN ได้ทุกหน้า — จำค่าไว้ใน localStorage
 export type Lang = "th" | "en";
 
-const DICT: Record<string, { th: string; en: string }> = {
+export const DICT: Record<string, { th: string; en: string }> = {
   tagline: { th: "สนามซ้อมอนาคตของสังคมไทย", en: "Rehearse the future of Thai society" },
   watermark: {
     th: "AI simulation — not a real poll | ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง และไม่ใช่คำสัญญาของหน่วยงานใด",
@@ -22,12 +22,18 @@ const DICT: Record<string, { th: string; en: string }> = {
   nav_projects: { th: "โปรเจกต์และหลักฐาน", en: "Projects & Evidence" },
   nav_validation: { th: "ห้องทดลองความน่าเชื่อถือ", en: "Validation Lab" },
   nav_rehearsals: { th: "ซ้อมแถลงข่าว", en: "Rehearsal" },
+  nav_usability: { th: "ทดสอบกับผู้ใช้", en: "Usability study" },
   nav_runs: { th: "การจัดการรัน", en: "Run History" },
   nav_main: { th: "เมนูหลัก", en: "Main navigation" },
   nav_open: { th: "เปิดเมนู", en: "Open navigation" },
   nav_close: { th: "ปิดเมนู", en: "Close navigation" },
+  close: { th: "ปิด", en: "Close" },
   route_not_found: { th: "ไม่พบหน้าที่ต้องการ", en: "Page not found" },
   route_home: { th: "กลับหน้าหลัก", en: "Back home" },
+  skip_main: { th: "ข้ามไปเนื้อหาหลัก", en: "Skip to main content" },
+  loading_page: { th: "กำลังโหลดหน้า…", en: "Loading page…" },
+  language_options: { th: "ตัวเลือกภาษา", en: "Language options" },
+  route_changed: { th: "เปลี่ยนหน้าแล้ว", en: "Page changed" },
   // Landing
   landing_eyebrow: { th: "DIGITAL SANDBOX", en: "DIGITAL SANDBOX" },
   landing_title: { th: "ซ้อมอนาคต ก่อนตัดสินใจจริง", en: "Rehearse the future before you decide" },
@@ -248,6 +254,18 @@ const DICT: Record<string, { th: string; en: string }> = {
     th: "เอกสารที่ป้อนให้ตัวแทนจำลองใช้อ้างอิงระหว่างถกเถียง — PII ในเว็บภายนอกถูกลบและตรวจซ้ำก่อนใช้งาน",
     en: "Documents fed to agents during the debate — PII in external evidence is removed and re-verified before use",
   },
+  wiz_validation_target: { th: "เป้าหมายการตรวจสอบ", en: "Validation target" },
+  wiz_claim_ph: { th: "คำกล่าวอ้างที่วัดผลได้", en: "Measurable claim" },
+  wiz_measurement_ph: { th: "วิธีวัดผลลัพธ์", en: "Outcome measurement" },
+  wiz_readiness: { th: "ความพร้อม", en: "Readiness" },
+  wiz_ready: { th: "พร้อมรัน", en: "Ready to run" },
+  wiz_needs_review: { th: "ต้องตรวจทาน", en: "Needs review" },
+  wiz_checking: { th: "กำลังตรวจสอบ…", en: "Checking…" },
+  wiz_estimated_cost: { th: "ต้นทุนโดยประมาณ", en: "Estimated cost" },
+  wiz_retrieval: { th: "การค้นคืนหลักฐาน", en: "Retrieval" },
+  wiz_redteam_label: { th: "ทีมทดสอบเชิงปฏิปักษ์", en: "Red Team" },
+  hist_cancel_action: { th: "ยกเลิกรัน", en: "Cancel run" },
+  hist_retry_action: { th: "ลองรันใหม่", en: "Retry run" },
   rd_pii_removed: { th: "ลบ PII ก่อนใช้งาน", en: "PII removed before use" },
   rd_evidence_chunks: { th: "ท่อน", en: "chunks" },
   rd_news_head: {
@@ -680,19 +698,106 @@ const DICT: Record<string, { th: string; en: string }> = {
   cal_cancel: { th: "ยกเลิก", en: "Cancel" },
   cal_resolved_list: { th: "ผลที่บันทึกแล้ว (อ่านอย่างเดียว)", en: "Resolved (read-only)" },
   cal_upcoming: { th: "ยังไม่ถึงกำหนด", en: "Not yet due" },
+  exp_analysis: { th: "การวิเคราะห์การทดลอง", en: "Experiment analysis" },
+  exp_complete: { th: "เสร็จ", en: "complete" },
+  exp_total: { th: "รวม", en: "total" },
+  exp_range: { th: "ช่วงของค่าเฉลี่ยกลุ่ม", en: "range of group means" },
+  exp_need_variants: {
+    th: "ต้องมีตัวแปรที่รันเสร็จอย่างน้อยสองค่าต่อพารามิเตอร์ จึงคำนวณ sensitivity ได้",
+    en: "At least two completed variants per parameter are required to calculate sensitivity.",
+  },
+  exp_run: { th: "รัน", en: "Run" },
+  exp_variant: { th: "ตัวแปร", en: "Variant" },
+  exp_status: { th: "สถานะ", en: "Status" },
+  exp_value: { th: "ค่า", en: "Value" },
+  exp_cost: { th: "ต้นทุน", en: "Cost" },
+  exp_votes_note: { th: "ระบบนำคะแนนสาธารณะเข้า engine: ไม่", en: "Public votes used by engine: NO" },
+  exp_eyebrow: { th: "VALIDATION LAB", en: "VALIDATION LAB" },
+  exp_title: { th: "เปรียบเทียบและการทดลอง", en: "Compare & Experiments" },
+  exp_sub: {
+    th: "เทียบรันใดก็ได้ หรือ sweep พารามิเตอร์แบบมี BudgetGuard ก่อนเข้าคิว",
+    en: "Compare arbitrary runs or sweep parameters with BudgetGuard before enqueue.",
+  },
+  exp_compare: { th: "เทียบรัน", en: "Compare runs" },
+  exp_sweep: { th: "วิเคราะห์ความไว", en: "Sensitivity sweep" },
+  exp_name: { th: "ชื่อเวิร์กสเปซ", en: "Workspace name" },
+  exp_run_ids: { th: "Run IDs คั่นด้วย comma หรือขึ้นบรรทัดใหม่", en: "Run IDs separated by commas or new lines" },
+  exp_create_compare: { th: "สร้างการเปรียบเทียบ", en: "Create comparison" },
+  exp_subject: { th: "คำถามหรือสถานการณ์", en: "Question or scenario" },
+  exp_seeds: { th: "Seeds คั่นด้วย comma", en: "Seeds separated by commas" },
+  exp_agents: { th: "Agents คั่นด้วย comma", en: "Agents separated by commas" },
+  exp_create_sweep: { th: "ประเมินงบและเข้าคิววิเคราะห์", en: "Estimate budget and enqueue sweep" },
+  exp_engine: { th: "เครื่องยนต์", en: "Engine" },
+  exp_variant_limit: { th: "สูงสุด {n} แบบ · Fabric: seed/agents", en: "{n} variants maximum · Fabric: seed/agents" },
+  exp_workspaces: { th: "เวิร์กสเปซ", en: "Workspaces" },
+  exp_empty: { th: "ยังไม่มี workspace", en: "No workspace yet" },
+  exp_fabric: { th: "Fabric ($0)", en: "Fabric ($0)" },
+  exp_debate: { th: "Debate (ผ่านงบ LLM)", en: "Debate (LLM budgeted)" },
+  exp_default_name: { th: "วิเคราะห์ความไวของผลจำลอง", en: "Simulation sensitivity analysis" },
+  ins_provider_health: { th: "สุขภาพ provider และคิว", en: "Provider & queue health" },
+  ins_provider_note: { th: "24 ชั่วโมงล่าสุด · เก็บเฉพาะ metadata ไม่เก็บ prompt/response/PII", en: "Last 24 hours · metadata only; no prompt, response, or PII is stored" },
+  ins_metrics_link: { th: "เมตริก Prometheus", en: "Prometheus metrics" },
+  ins_queued: { th: "เข้าคิว", en: "queued" },
+  ins_running: { th: "กำลังรัน", en: "running" },
+  ins_errors: { th: "ข้อผิดพลาด", en: "errors" },
+  ins_queue_avg: { th: "เวลาคิวเฉลี่ย", en: "queue avg" },
+  ins_provider_operation: { th: "provider / งาน", en: "provider / operation" },
+  ins_success: { th: "สำเร็จ", en: "success" },
+  ins_latency: { th: "เวลา", en: "latency" },
+  ins_cost: { th: "ต้นทุน", en: "cost" },
+  ins_no_provider: { th: "ยังไม่มี provider call ในช่วงนี้", en: "No provider calls in this period" },
+  set_policy_title: { th: "นโยบายธุรกิจและสิทธิ์ใช้งานที่มีผลอยู่", en: "Active product policy and usage rights" },
+  set_policy_note: { th: "ค่าเหล่านี้เป็น safety baseline ไม่ใช่ราคาเสนอขายหรือคำวินิจฉัยทางกฎหมาย", en: "These are safety baselines, not commercial pricing or legal advice." },
 };
 
-const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }>({
+type LangContext = {
+  lang: Lang;
+  locale: "th-TH" | "en-US";
+  setLang: (l: Lang) => void;
+  t: (k: string) => string;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  formatCurrency: (value: number, options?: Intl.NumberFormatOptions) => string;
+  formatDate: (value: string | number | Date, options?: Intl.DateTimeFormatOptions) => string;
+};
+
+const LangCtx = createContext<LangContext>({
   lang: "th",
+  locale: "th-TH",
   setLang: () => {},
   t: (k) => k,
+  formatNumber: String,
+  formatCurrency: (value) => String(value),
+  formatDate: String,
 });
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("chimlang-lang") as Lang) || "th");
-  useEffect(() => localStorage.setItem("chimlang-lang", lang), [lang]);
+  const locale = lang === "th" ? "th-TH" : "en-US";
+  useEffect(() => {
+    localStorage.setItem("chimlang-lang", lang);
+    document.documentElement.lang = lang;
+  }, [lang]);
   const t = (k: string) => DICT[k]?.[lang] ?? k;
-  return <LangCtx.Provider value={{ lang, setLang, t }}>{children}</LangCtx.Provider>;
+  const formatNumber = (value: number, options?: Intl.NumberFormatOptions) =>
+    new Intl.NumberFormat(locale, options).format(value);
+  const formatCurrency = (value: number, options?: Intl.NumberFormatOptions) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      currencyDisplay: "narrowSymbol",
+      ...options,
+    }).format(value);
+  const formatDate = (value: string | number | Date, options?: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(locale, options ?? { dateStyle: "medium", timeStyle: "short" }).format(
+      value instanceof Date ? value : new Date(value),
+    );
+  return (
+    <LangCtx.Provider
+      value={{ lang, locale, setLang, t, formatNumber, formatCurrency, formatDate }}
+    >
+      {children}
+    </LangCtx.Provider>
+  );
 }
 
 export const useLang = () => useContext(LangCtx);

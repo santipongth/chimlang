@@ -84,6 +84,7 @@ export default function ValidationLab({
             <div className="mt-4 space-y-3">
               {[
                 ["MIRACL Thai", claims?.miracl_measured],
+                [th ? "ความทนทานข้ามโมเดล" : "Multi-model robustness", claims?.model_robustness_measured],
                 [th ? "Thai human panel" : "Thai human panel", claims?.human_panel_measured],
                 [th ? "Usability pilot" : "Usability pilot", claims?.pilot_usability_measured],
               ].map(([label, measured]) => (

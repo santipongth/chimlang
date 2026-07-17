@@ -42,13 +42,13 @@ test("opens the experiment workspace by URL and compares arbitrary runs", async 
   });
 
   await page.goto("/app/#/experiments");
-  await expect(page.getByRole("heading", { name: "เปรียบเทียบ run และวิเคราะห์ sensitivity" })).toBeVisible();
-  await page.getByPlaceholder("ชื่อ experiment").fill("เปรียบเทียบแคมเปญ");
-  await page.getByPlaceholder("run-id-1, run-id-2").fill("run-a, run-b");
-  await page.getByRole("button", { name: "สร้าง workspace" }).click();
+  await expect(page.getByRole("heading", { name: "เปรียบเทียบและการทดลอง" })).toBeVisible();
+  await page.getByPlaceholder("ชื่อเวิร์กสเปซ").fill("เปรียบเทียบแคมเปญ");
+  await page.getByPlaceholder("Run IDs คั่นด้วย comma หรือขึ้นบรรทัดใหม่").fill("run-a, run-b");
+  await page.getByRole("button", { name: "สร้างการเปรียบเทียบ" }).click();
 
   await expect(page.getByRole("heading", { name: "เปรียบเทียบแคมเปญ" })).toBeVisible();
   await expect(page.getByText("run-a", { exact: true })).toBeVisible();
   await expect(page.getByText("run-b", { exact: true })).toBeVisible();
-  await expect(page.getByText("Public votes used by engine:")).toContainText("NO");
+  await expect(page.getByText("ระบบนำคะแนนสาธารณะเข้า engine: ไม่")).toBeVisible();
 });

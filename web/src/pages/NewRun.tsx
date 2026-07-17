@@ -80,7 +80,7 @@ export default function NewRun({
   onCompare: (r: RunRequest) => void; // fabric + Red Team A/B → หน้า Compare เดิม
   onCreated: (runId: string) => void; // run ถาวร → หน้า Run detail
 }) {
-  const { lang, t } = useLang();
+  const { lang, t, formatCurrency, formatNumber } = useLang();
   const [step, setStep] = useState(0);
   const [subject, setSubject] = useState("");
   const [domain, setDomain] = useState(DOMAINS[0]);
@@ -427,7 +427,7 @@ export default function NewRun({
           <div className="grid sm:grid-cols-3 gap-2">
             {agentChoices.map((n) => (
               <SelectCard key={n} active={agents === n} onClick={() => setAgents(n)}>
-                <span className="text-sm font-medium">{n.toLocaleString()} agents</span>
+                <span className="text-sm font-medium">{formatNumber(n)} agents</span>
               </SelectCard>
             ))}
           </div>
@@ -619,22 +619,22 @@ export default function NewRun({
         <div className={card + " space-y-3 text-sm"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_review")}</div>
           <div className="rounded-xl border border-border bg-background p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Validation target</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_validation_target")}</div>
             <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_110px]">
-              <input value={claim} onChange={(e) => setClaim(e.target.value)} placeholder="Measurable claim" className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
-              <input value={measurement} onChange={(e) => setMeasurement(e.target.value)} placeholder="Outcome measurement" className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
+              <input value={claim} onChange={(e) => setClaim(e.target.value)} placeholder={t("wiz_claim_ph")} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
+              <input value={measurement} onChange={(e) => setMeasurement(e.target.value)} placeholder={t("wiz_measurement_ph")} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
               <input type="number" min={1} max={365} value={dueDays} onChange={(e) => setDueDays(Math.max(1, Math.min(365, Number(e.target.value) || 30)))} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
             </div>
           </div>
           <div className="rounded-xl border border-border bg-background p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Readiness</div>
-                <div className="mt-1 text-sm font-medium">{readiness ? (readiness.can_run ? "Ready to run" : "Needs review") : "Checking..."}</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_readiness")}</div>
+                <div className="mt-1 text-sm font-medium">{readiness ? (readiness.can_run ? t("wiz_ready") : t("wiz_needs_review")) : t("wiz_checking")}</div>
               </div>
               <div className="text-right text-xs text-muted-foreground">
-                <div>Estimated cost</div>
-                <div className="text-base font-semibold text-foreground">${(readiness?.cost?.estimated_usd ?? 0).toFixed(4)}</div>
+                <div>{t("wiz_estimated_cost")}</div>
+                <div className="text-base font-semibold text-foreground">{formatCurrency(readiness?.cost?.estimated_usd ?? 0, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</div>
               </div>
             </div>
             {readiness && (
@@ -650,12 +650,12 @@ export default function NewRun({
           </div>
           <div className="grid grid-cols-[130px_1fr] gap-y-2">
             <span className="text-muted-foreground">{t("wiz_step1")}</span><span className="font-medium">{subject || "—"}</span>
-            <span className="text-muted-foreground">Engine</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : ` · ${t("wiz_universes_short")}`}</span>
-            <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{Math.min(agents, cap).toLocaleString()}</span>
-            {isDebate && <><span className="text-muted-foreground">Retrieval</span><span>{retrievalMode}</span></>}
-            <span className="text-muted-foreground">Personas</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
+            <span className="text-muted-foreground">{t("wiz_step_engine")}</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : ` · ${t("wiz_universes_short")}`}</span>
+            <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{formatNumber(Math.min(agents, cap))}</span>
+            {isDebate && <><span className="text-muted-foreground">{t("wiz_retrieval")}</span><span>{retrievalMode}</span></>}
+            <span className="text-muted-foreground">{t("wiz_persona_title")}</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
             {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
-            <span className="text-muted-foreground">Red Team</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ON`) : "—"}</span>
+            <span className="text-muted-foreground">{t("wiz_redteam_label")}</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ON`) : "—"}</span>
           </div>
           {isDebate && <p className="text-xs text-amber-700">💰 {t("wiz_cost_note")}</p>}
 

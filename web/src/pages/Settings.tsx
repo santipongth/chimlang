@@ -18,11 +18,10 @@ import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 
 // Settings (P6-M4) — ค่า default + จัดการ persona packs + สถานะระบบ (secrets อยู่ .env เท่านั้น)
 
-const usd = (value: number) =>
-  value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-
 export default function Settings() {
-  const { t } = useLang();
+  const { t, formatCurrency } = useLang();
+  const usd = (value: number) =>
+    formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   const [data, setData] = useState<AppSettings | null>(null);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
@@ -436,7 +435,7 @@ export default function Settings() {
                     className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 tabular-nums"
                   />
                   <span className="mt-1 block text-[11px] text-muted-foreground">
-                    {t("set_budget_active")}: ${usd(data.budget.run_cap_effective)} · {t("set_budget_env_default")}: ${usd(data.budget.env_run_cap)}
+                    {t("set_budget_active")}: {usd(data.budget.run_cap_effective)} · {t("set_budget_env_default")}: {usd(data.budget.env_run_cap)}
                   </span>
                 </label>
                 <label className="text-sm">
@@ -453,7 +452,7 @@ export default function Settings() {
                     className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 tabular-nums"
                   />
                   <span className="mt-1 block text-[11px] text-muted-foreground">
-                    {t("set_budget_active")}: ${usd(data.budget.monthly_cap_effective)} · {t("set_budget_env_default")}: ${usd(data.budget.env_monthly_cap)}
+                    {t("set_budget_active")}: {usd(data.budget.monthly_cap_effective)} · {t("set_budget_env_default")}: {usd(data.budget.env_monthly_cap)}
                   </span>
                 </label>
               </div>
@@ -461,7 +460,7 @@ export default function Settings() {
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="text-muted-foreground">{t("set_budget_spent")}</span>
                   <span className="tabular-nums font-medium">
-                    ${usd(data.budget.spent_this_month)} spent + ${usd(data.budget.reserved_this_month)} reserved / ${usd(data.budget.monthly_cap_effective)}
+                    {usd(data.budget.spent_this_month)} spent + {usd(data.budget.reserved_this_month)} reserved / {usd(data.budget.monthly_cap_effective)}
                   </span>
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
@@ -473,7 +472,7 @@ export default function Settings() {
                 <div className={`mt-2 text-xs font-medium ${data.budget.available_this_month <= 0 ? "text-red-600" : "text-emerald-700"}`}>
                   {data.budget.available_this_month <= 0
                     ? `${t("set_budget_over")}: committed budget reached cap`
-                    : `${t("set_budget_remaining")}: $${usd(data.budget.available_this_month)}`}
+                    : `${t("set_budget_remaining")}: ${usd(data.budget.available_this_month)}`}
                 </div>
                 {(data.run_budget_usd_cap === 0 || data.monthly_budget_usd_cap === 0) && (
                   <div className="mt-2 text-[11px] text-muted-foreground">0 = {t("set_budget_from_env")}</div>
@@ -556,10 +555,10 @@ export default function Settings() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 id="active-policy-title" className="font-semibold">
-                    นโยบายธุรกิจและสิทธิ์ใช้งานที่มีผลอยู่
+                    {t("set_policy_title")}
                   </h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    ค่าเหล่านี้เป็น safety baseline ไม่ใช่ราคาเสนอขายหรือคำวินิจฉัยทางกฎหมาย
+                    {t("set_policy_note")}
                   </p>
                 </div>
                 <code className="rounded-lg bg-muted px-2 py-1 text-[11px]">{policy.version}</code>

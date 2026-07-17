@@ -1,6 +1,6 @@
-# P9-M3 — Thai pilot usability protocol (ยังไม่รัน)
+# P9-M3 — Thai pilot usability protocol + in-app mockup
 
-สถานะ 17 ก.ค. 2026: **protocol ready; claim blocked** — ไม่มีการสร้างผู้เข้าร่วมหรือผลลัพธ์จำลอง
+สถานะ 17 ก.ค. 2026: **mockup ready; claim blocked** — route #/usability พร้อม แต่ยังไม่มีผู้เข้าร่วมจริง
 
 ## ผู้เข้าร่วมและ consent
 
@@ -11,17 +11,16 @@
 ## งานทดสอบ
 
 1. สร้าง Project จาก brief ที่กำหนด
-2. เพิ่ม TXT/PDF และ URL fixture ที่ไม่มี PII แล้ว freeze `EvidenceSetV1`
-3. ตั้ง population/assumptions และเริ่ม run จาก frozen evidence
-4. cancel run ที่กำลังทำงาน แล้วเปิด stored snapshot ของ run ที่สำเร็จ
-5. เปิด Validation Lab เปรียบเทียบ sensitivity และตรวจ raw failure
-6. assign owner ให้ forecast ที่ครบกำหนดและอธิบายหลักฐานที่ต้องใช้ก่อน resolve
-7. export JSON/PDF snapshot
-8. สร้าง Rehearsal, ถาม/ตอบหนึ่ง turn, pause/resume, เพิ่ม decision และ finish scorecard
+2. เพิ่มหลักฐาน ตรวจ PII แล้ว freeze EvidenceSetV1
+3. เริ่ม run แล้วหา cancel control ขณะกำลังทำงาน
+4. เปิด Validation Lab และแยก measured claim ออกจาก blocked claim
+5. เปิด stored result แล้ว export JSON/PDF snapshot โดยไม่ rerun
+
+Rehearsal และ Resolution Inbox เป็นงานเสริมสำหรับ session เชิงลึก ไม่รวม denominator หลัก 25 งาน
 
 ## ตัวชี้วัดและ gate
 
-- task completion หลัก = ทำข้อ 1, 2, 3, 4, 5 และ 7 สำเร็จโดยไม่ให้ผู้ดำเนินการทำแทน
+- task completion หลัก = ผู้เข้าร่วมแต่ละคนทำห้าข้อด้านบนโดยไม่ให้ผู้ดำเนินการทำแทน
 - เป้าหมาย aggregate completion ≥80%; รายงานทั้งจำนวนสำเร็จ/ทั้งหมด ไม่ตัด participant ที่ล้มเหลวออก
 - เก็บ time-on-task, critical error, recovery, keyboard-only completion และ TH/EN label mismatch
 - WCAG spot checks: focus visible/restore, status `aria-live`, keyboard drawer/tabs, 390px reflow และ target size
@@ -35,3 +34,11 @@
 
 เมื่อรันจริงให้เพิ่ม dataset/report ใน Validation Lab ด้วย `kind=usability`, ระบุวันที่/ผู้ดำเนินการ,
 hash ของ raw anonymized sheet และ deviations จาก protocol; ห้ามกรอกค่าคาดเดาลงตารางนี้
+
+## วิธีใช้ mockup
+
+1. เปิด #/usability และเลือก P01–P05
+2. ขอ consent ก่อนติ๊ก checkbox; ปุ่มจับเวลาจะ disabled จนยืนยัน
+3. เปิด moderator mode เพื่อดูเกณฑ์สำเร็จและบันทึกเฉพาะ count/score/category
+4. ให้ผู้เข้าร่วมทำงานในแท็บใหม่ กด complete หรือ blocked ตามสิ่งที่เกิดจริง
+5. export anonymized JSON เมื่อจบ session; claim_ready ต้องยัง false จน consent ครบและ 25/25 งานถูกบันทึก

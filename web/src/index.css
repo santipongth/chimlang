@@ -5,8 +5,8 @@
   --color-background: oklch(99% 0.003 240);
   --color-foreground: oklch(20% 0.03 250);
   --color-card: oklch(100% 0 0);
-  --color-primary: oklch(70% 0.15 160);
-  --color-primary-strong: oklch(55% 0.14 160);
+  --color-primary: oklch(50% 0.14 160);
+  --color-primary-strong: oklch(41% 0.12 160);
   --color-primary-soft: oklch(95% 0.04 160);
   --color-secondary: oklch(96% 0.01 240);
   --color-muted: oklch(96.5% 0.008 240);
@@ -17,7 +17,7 @@
   --color-sidebar: oklch(98% 0.005 240);
   --color-sidebar-accent: oklch(95% 0.01 240);
   --color-popover: oklch(100% 0 0);
-  --color-ring: oklch(70% 0.15 160);
+  --color-ring: oklch(50% 0.14 160);
   /* chart palette ตาม studio (hue 160/240/80/30/300) — ใช้กับ canvas/graph/sparkline */
   --color-chart-1: oklch(70% 0.15 160);
   --color-chart-2: oklch(65% 0.18 240);
@@ -31,6 +31,53 @@ body {
   font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans Thai", sans-serif;
   background: var(--color-background);
   color: var(--color-foreground);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-wrap: anywhere;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 0.5rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  transition: transform 120ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-primary-strong);
+  outline-offset: 3px;
+}
+
+:where(button, a, input, select, textarea, summary) {
+  min-block-size: 24px;
+}
+
+@media (max-width: 390px) {
+  table {
+    min-width: 36rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .font-display {

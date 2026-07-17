@@ -329,6 +329,18 @@ def _apply_rehearsal_leases_v1(conn: Connection) -> None:
     conn.execute(rehearsal_schema)
 
 
+def _apply_validation_case_kinds_v1(conn: Connection) -> None:
+    conn.execute(
+        """
+        ALTER TABLE validation_datasets
+            DROP CONSTRAINT IF EXISTS validation_datasets_kind_check;
+        ALTER TABLE validation_datasets
+            ADD CONSTRAINT validation_datasets_kind_check
+            CHECK (kind IN ('miracl_th','human_panel','model_robustness','usability'));
+        """
+    )
+
+
 Migration = tuple[str, str, Callable[[Connection], None]]
 
 MIGRATIONS: list[Migration] = [
@@ -411,6 +423,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-17-rehearsal-leases-v1",
         "expiring operation leases prevent duplicate rehearsal provider calls",
         _apply_rehearsal_leases_v1,
+    ),
+    (
+        "2026-07-17-validation-case-kinds-v1",
+        "append-only model robustness and usability validation dataset kinds",
+        _apply_validation_case_kinds_v1,
     ),
 ]
 

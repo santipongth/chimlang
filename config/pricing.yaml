@@ -1,6 +1,6 @@
 # ราคา model — USD ต่อ 1M tokens (fail-closed: model ที่ไม่อยู่ในตารางนี้รันไม่ได้)
 #
-# ราคาดึงจาก OpenRouter /models API เมื่อ 5 ก.ค. 2026 — ตรวจซ้ำเป็นระยะ
+# ราคาดึงจาก OpenRouter /models API และตรวจซ้ำล่าสุด 17 ก.ค. 2026 — ตรวจซ้ำเป็นระยะ
 # (ราคา OpenRouter เปลี่ยนได้; ถ้า run ไหน cost จริงเพี้ยนจาก estimate เกิน 2 เท่า ให้อัปเดตไฟล์นี้)
 models:
   # crowd tier — ผู้ชนะ Thai mini-benchmark 5 ก.ค. 2026 (ดู ADR-0001)
@@ -10,8 +10,24 @@ models:
   # analyst tier — ใช้เป็น judge ใน leak test ด้วย
   "qwen/qwen3-235b-a22b-2507":
     input_usd_per_m: 0.090
-    output_usd_per_m: 0.100
+    output_usd_per_m: 0.550
   # ตัวสำรอง crowd (อันดับสองใน benchmark — ถูกกว่าเล็กน้อย แต่พลาดข้อประชด)
   "qwen/qwen3-30b-a3b-instruct-2507":
-    input_usd_per_m: 0.048
-    output_usd_per_m: 0.193
+    input_usd_per_m: 0.100
+    output_usd_per_m: 0.300
+  # low-cost candidates สำหรับ opt-in robustness sample (provider routing อาจจำกัดตาม account policy)
+  "google/gemini-2.5-flash-lite":
+    input_usd_per_m: 0.100
+    output_usd_per_m: 0.400
+  "google/gemini-2.5-flash":
+    input_usd_per_m: 0.300
+    output_usd_per_m: 2.500
+  "google/gemini-3.1-flash-lite-preview":
+    input_usd_per_m: 0.250
+    output_usd_per_m: 1.500
+  "mistralai/mistral-small-3.2-24b-instruct":
+    input_usd_per_m: 0.100
+    output_usd_per_m: 0.300
+  "meta-llama/llama-3.3-70b-instruct":
+    input_usd_per_m: 0.130
+    output_usd_per_m: 0.400

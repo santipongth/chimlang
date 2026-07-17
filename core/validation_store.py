@@ -17,7 +17,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS validation_datasets (
     dataset_id TEXT PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    kind TEXT NOT NULL CHECK (kind IN ('miracl_th','human_panel')),
+    kind TEXT NOT NULL CHECK (kind IN ('miracl_th','human_panel','model_robustness','usability')),
     name TEXT NOT NULL,
     revision TEXT NOT NULL,
     license TEXT NOT NULL,
@@ -177,6 +177,80 @@ class ValidationStore:
             )
         return self.get_dataset(dataset_id)
 
+    def register_case_dataset(
+        self,
+        *,
+        kind: str,
+        name: str,
+        revision: str,
+        license_name: str,
+        rows: list[dict],
+        metadata: dict,
+        actor: str,
+    ) -> dict:
+        if kind not in {"model_robustness", "usability"}:
+            raise ValueError("case dataset รองรับ model_robustness หรือ usability เท่านั้น")
+        if not rows or len(rows) > 5000:
+            raise ValueError("case dataset ต้องมี 1-5000 cases")
+        normalized = []
+        for index, row in enumerate(rows):
+            prompt = str(row.get("prompt") or "").strip()[:20_000]
+            if not prompt:
+                raise ValueError("ทุก case ต้องมี prompt")
+            normalized.append(
+                {
+                    "case_id": str(row.get("case_id") or f"case-{index + 1}")[:160],
+                    "prompt": prompt,
+                    "expected": row.get("expected"),
+                    "observed": row.get("observed") or {},
+                    "slice": row.get("slice") or {},
+                }
+            )
+        basis = {
+            "kind": kind,
+            "name": name.strip(),
+            "revision": revision.strip(),
+            "license": license_name.strip(),
+            "rows": normalized,
+            "metadata": metadata,
+        }
+        self._assert_pii_free(basis)
+        dataset_id = f"validation-{kind.replace('_', '-')}-{uuid4().hex[:12]}"
+        content_hash = canonical_hash(basis)
+        with connection(self._dsn) as conn:
+            conn.execute(
+                "INSERT INTO validation_datasets "
+                "(dataset_id, kind, name, revision, license, content_hash, metadata, created_by) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s)",
+                (
+                    dataset_id,
+                    kind,
+                    name.strip()[:200],
+                    revision.strip()[:200],
+                    license_name.strip()[:100],
+                    content_hash,
+                    json.dumps({**metadata, "case_count": len(normalized)}, ensure_ascii=False),
+                    actor[:160],
+                ),
+            )
+            conn.cursor().executemany(
+                "INSERT INTO validation_cases "
+                "(dataset_id, case_id, prompt, expected, observed, slice) "
+                "VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb)",
+                [
+                    (
+                        dataset_id,
+                        row["case_id"],
+                        row["prompt"],
+                        json.dumps(row["expected"], ensure_ascii=False),
+                        json.dumps(row["observed"], ensure_ascii=False),
+                        json.dumps(row["slice"], ensure_ascii=False),
+                    )
+                    for row in normalized
+                ],
+            )
+        return self.get_dataset(dataset_id)
+
     def register_dataset(
         self,
         *,
@@ -280,9 +354,18 @@ class ValidationStore:
         if row is None:
             raise ValueError(f"ไม่พบ validation report {report_id}")
         metadata = row[6]
+        complete_measurement = metadata.get("benchmark_complete") is True and (
+            row[3] in {"miracl_retrieval", "model_robustness"}
+            or (
+                row[3] == "usability"
+                and int(metadata.get("participant_count") or 0) >= 5
+                and int(metadata.get("consent_confirmed_count") or 0) >= 5
+                and int(metadata.get("tasks_recorded") or 0) >= 25
+            )
+        )
         trust_status = (
             "measured"
-            if row[3] == "miracl_retrieval" and metadata.get("benchmark_complete") is True
+            if complete_measurement
             else "audit"
             if row[3] == "benchmark_invalidation"
             else "unverified"

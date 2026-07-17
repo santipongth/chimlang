@@ -32,7 +32,7 @@ export default defineConfig({
       [
         "/dashboard.json", "/signal.json", "/citizen", "/graph", "/health",
         "/runs", "/run-jobs", "/run-metrics.json", "/simruns.json", "/settings",
-        "/experiments", "/engines.json", "/personas", "/gallery", "/watchlists",
+        "/experiments", "/projects", "/validation", "/rehearsals", "/engines.json", "/personas", "/gallery", "/watchlists",
         "/alerts", "/calibration.json", "/predictions", "/observability.json", "/compare.json",
       ].map((path) => [
         path,

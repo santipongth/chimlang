@@ -28,15 +28,15 @@
 - [x] Resolution Inbox/Forecast Calendar พร้อม owner/evidence/Brier/reliability/ECE/CI
 - [x] MIRACL Thai จริงแบบ pin revision/hash/license + raw metrics/cost/latency
 - [x] consent-based Thai human panel import contract โดยไม่ fabricate outcome
-- [ ] multi-model robustness execution 2–3 models — มี aggregate preflight/opt-in contract แล้ว แต่ยังไม่รันหรือคิดเงินโดยไม่มี model/sample ที่ผู้ใช้เลือก
+- [x] multi-model robustness 3 models/6 Thai cases/18 calls ผ่าน BudgetGuard; report measured และ failed attempts invalidate แบบ append-only
 
 ## P9-M3 — Productize capability เดิม (ห้ามเริ่มก่อน M2 ผ่าน)
 
 - [x] Rehearsal UI: turn-by-turn, pause/resume, operator prompt, scorecard/transcript/decision log
 - [x] checkpoint/stage control ในสถาปัตยกรรมเดิมโดยไม่เพิ่ม Concordia dependency
 - [x] Run Detail status shell + Result/Evidence/Uncertainty/Validation/Audit tabs
-- [ ] TH/EN parity และ WCAG 2.2 AA ทั้งแอป — route ใหม่มี bilingual/locale/reflow/keyboard E2E แล้ว แต่ยังไม่ผ่าน full-string/accessibility audit
-- [ ] usability test ผู้ใช้ไทยอย่างน้อย 5 คน; protocol พร้อม แต่ยังไม่มีผลจริง (`docs/reports/P9-M3-usability-protocol.md`)
+- [x] TH/EN parity และ WCAG 2.2 AA automated audit ทั้งแอป — dictionary/static key/locale + axe 13 routes desktop/mobile, focus/reflow/target tests
+- [ ] usability test ผู้ใช้ไทยอย่างน้อย 5 คน; in-app mockup/protocol พร้อม แต่ยังไม่มีผลจริง (`docs/reports/P9-M3-usability-protocol.md`)
 
 ## Acceptance gates ร่วม
 

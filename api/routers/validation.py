@@ -123,7 +123,14 @@ def validation_overview(principal: Principal = Depends(get_principal)) -> dict:
                 for item in reports
             ),
             "human_panel_measured": any(item["kind"] == "human_panel" for item in reports),
-            "pilot_usability_measured": any(item["kind"] == "usability" for item in reports),
+            "pilot_usability_measured": any(
+                item["kind"] == "usability" and item["trust_status"] == "measured"
+                for item in reports
+            ),
+            "model_robustness_measured": any(
+                item["kind"] == "model_robustness" and item["trust_status"] == "measured"
+                for item in reports
+            ),
         },
     }
 
