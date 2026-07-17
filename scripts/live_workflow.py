@@ -1,4 +1,4 @@
-"""Unmocked Project -> Evidence -> Population -> Run -> Export workflow over real HTTP."""
+"""Unmocked Population -> Run -> Export workflow over real HTTP."""
 
 from __future__ import annotations
 
@@ -26,39 +26,11 @@ def run(args: argparse.Namespace) -> dict:
         if health.get("status") != "ok" or health.get("components", {}).get("worker") != "ok":
             raise RuntimeError(f"stack not ready: {health}")
 
-        project = _require(
-            client.post(
-                "/projects",
-                json={
-                    "name": f"live-integration-{stamp}",
-                    "brief": "ทดสอบ workflow จริงแบบแยก environment",
-                },
-            )
-        )
-        project_id = project["project_id"]
-        evidence = _require(
-            client.post(
-                f"/projects/{project_id}/evidence/text",
-                json={
-                    "label": "หลักฐานทดสอบระบบจริง",
-                    "text": "ราคาพลังงานที่สูงขึ้นอาจเพิ่มภาระการเดินทางและต้นทุนสินค้า",
-                    "kind": "text",
-                    "item_id": "",
-                },
-            )
-        )
-        evidence_set = _require(
-            client.post(
-                f"/projects/{project_id}/evidence-sets",
-                json={"name": "Live EvidenceSetV1", "version_ids": [evidence["version_id"]]},
-            )
-        )
         population_set = _require(
             client.post(
                 "/population-sets",
                 json={
                     "name": "Live acknowledged synthetic population",
-                    "project_id": project_id,
                     "acknowledged_synthetic": True,
                 },
             )
@@ -69,13 +41,18 @@ def run(args: argparse.Namespace) -> dict:
             "domain": "เศรษฐกิจ",
             "agents": args.agents,
             "rounds": args.rounds,
-            "project_id": project_id,
             "population_set_id": population_set["set_id"],
             "population_acknowledged": True,
             "retrieval_mode": "bm25",
         }
         if args.engine == "debate":
-            body["evidence_set_id"] = evidence_set["set_id"]
+            body["sources"] = [
+                {
+                    "kind": "text",
+                    "label": "หลักฐานทดสอบระบบจริง",
+                    "text": "ราคาพลังงานที่สูงขึ้นอาจเพิ่มภาระการเดินทางและต้นทุนสินค้า",
+                }
+            ]
         readiness = _require(client.post("/runs/readiness", json=body))
         if not readiness["can_run"]:
             raise RuntimeError(f"run readiness blocked: {readiness}")
@@ -127,8 +104,6 @@ def run(args: argparse.Namespace) -> dict:
             {
                 "status": "complete",
                 "run_id": run_id,
-                "project_id": project_id,
-                "evidence_set_id": evidence_set["set_id"],
                 "population_set_id": population_set["set_id"],
                 "estimated_usd": estimate,
                 "actual_usd": float((detail.get("payload") or {}).get("cost_usd") or 0),

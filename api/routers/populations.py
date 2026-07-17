@@ -9,7 +9,6 @@ from api.auth import get_principal, require
 from api.models import ApiError
 from core.config import get_settings
 from core.population_store import PopulationSetStore
-from core.project_store import ProjectStore
 from governance.rbac import Permission, Principal
 from simulation.persona import PersonaFactory
 
@@ -19,13 +18,11 @@ router = APIRouter(prefix="/population-sets", tags=["populations"])
 class PopulationFreezeBody(BaseModel):
     name: str = Field(default="Frozen population", max_length=200)
     pack_id: int | None = None
-    project_id: str = ""
     acknowledged_synthetic: bool = False
 
 
 class PopulationSetResponse(BaseModel):
     set_id: str
-    project_id: str
     created_at: str
     schema_version: int
     name: str
@@ -60,8 +57,6 @@ def freeze_population(
 ) -> dict:
     require(principal, Permission.RUN)
     try:
-        if body.project_id:
-            ProjectStore(get_settings().postgres_url).get(body.project_id)
         segments, source_kind, source_ref = _segments(body.pack_id)
         return PopulationSetStore(get_settings().postgres_url).freeze(
             segments,
@@ -69,7 +64,6 @@ def freeze_population(
             actor=principal.user_id,
             source_kind=source_kind,
             source_ref=source_ref,
-            project_id=body.project_id,
             synthetic=True,
             acknowledged=body.acknowledged_synthetic,
         )

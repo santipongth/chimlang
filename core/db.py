@@ -12,7 +12,7 @@ from threading import Lock
 from psycopg import Connection
 from psycopg_pool import ConnectionPool
 
-LATEST_SCHEMA_VERSION = "2026-07-17-population-sets-v1"
+LATEST_SCHEMA_VERSION = "2026-07-18-remove-project-validation-rehearsal-usability-v1"
 
 
 class SchemaNotReadyError(RuntimeError):

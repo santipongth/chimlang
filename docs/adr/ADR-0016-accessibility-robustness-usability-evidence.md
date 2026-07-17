@@ -1,6 +1,6 @@
 # ADR-0016 — Accessibility, model robustness และ usability evidence
 
-สถานะ: Accepted
+สถานะ: Accepted เฉพาะ TH/EN + WCAG; validation/usability surfaces ถูก supersede โดย ADR-0019
 วันที่: 17 ก.ค. 2026
 ขอบเขต: Phase 9 M2/M3
 

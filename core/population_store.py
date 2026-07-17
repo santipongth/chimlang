@@ -15,7 +15,6 @@ from simulation.persona_packs import validate_pack
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS population_sets (
     set_id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     schema_version INT NOT NULL CHECK (schema_version = 1),
     name TEXT NOT NULL,
@@ -28,7 +27,6 @@ CREATE TABLE IF NOT EXISTS population_sets (
     created_by TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS population_sets_hash ON population_sets(content_hash);
-CREATE INDEX IF NOT EXISTS population_sets_project ON population_sets(project_id, created_at DESC);
 DROP TRIGGER IF EXISTS population_sets_append_only ON population_sets;
 CREATE TRIGGER population_sets_append_only
     BEFORE UPDATE OR DELETE ON population_sets
@@ -45,7 +43,6 @@ class PopulationSetStore:
     def _manifest(
         segments: list[dict[str, Any]],
         *,
-        project_id: str,
         source_kind: str,
         source_ref: str,
         synthetic: bool,
@@ -53,7 +50,6 @@ class PopulationSetStore:
     ) -> dict[str, Any]:
         return {
             "schema_version": 1,
-            "project_id": project_id,
             "source_kind": source_kind,
             "source_ref": source_ref,
             "synthetic": synthetic,
@@ -73,11 +69,10 @@ class PopulationSetStore:
         actor: str,
         source_kind: str,
         source_ref: str = "",
-        project_id: str = "",
         synthetic: bool = True,
         acknowledged: bool = False,
     ) -> dict[str, Any]:
-        if source_kind not in {"sample-default", "persona-pack", "project"}:
+        if source_kind not in {"sample-default", "persona-pack"}:
             raise ValueError("population source_kind ไม่ถูกต้อง")
         if synthetic and not acknowledged:
             raise ValueError("ต้องยอมรับก่อนว่า population เป็นข้อมูลสังเคราะห์ ไม่ใช่ผลสำรวจจริง")
@@ -86,7 +81,6 @@ class PopulationSetStore:
         PersonaFactory(segments=segments)
         manifest = self._manifest(
             segments,
-            project_id=project_id.strip(),
             source_kind=source_kind,
             source_ref=source_ref.strip(),
             synthetic=synthetic,
@@ -104,12 +98,11 @@ class PopulationSetStore:
             set_id = f"population-{datetime.now(UTC):%Y%m%d-%H%M%S}-{uuid4().hex[:8]}"
             conn.execute(
                 "INSERT INTO population_sets "
-                "(set_id, project_id, schema_version, name, source_kind, source_ref, synthetic, "
+                "(set_id, schema_version, name, source_kind, source_ref, synthetic, "
                 "acknowledged, content_hash, manifest, created_by) "
-                "VALUES (%s,%s,1,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)",
+                "VALUES (%s,1,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)",
                 (
                     set_id,
-                    project_id.strip(),
                     (name.strip() or "Frozen population")[:200],
                     source_kind,
                     source_ref.strip()[:500],
@@ -125,27 +118,26 @@ class PopulationSetStore:
     def get(self, set_id: str) -> dict[str, Any]:
         with connection(self._dsn) as conn:
             row = conn.execute(
-                "SELECT set_id, project_id, created_at, schema_version, name, source_kind, "
+                "SELECT set_id, created_at, schema_version, name, source_kind, "
                 "source_ref, synthetic, acknowledged, content_hash, manifest, created_by "
                 "FROM population_sets WHERE set_id = %s",
                 (set_id,),
             ).fetchone()
         if row is None:
             raise ValueError(f"ไม่พบ PopulationSetV1 {set_id}")
-        manifest = dict(row[10])
+        manifest = dict(row[9])
         return {
             "set_id": row[0],
-            "project_id": row[1],
-            "created_at": row[2].isoformat(),
-            "schema_version": row[3],
-            "name": row[4],
-            "source_kind": row[5],
-            "source_ref": row[6],
-            "synthetic": row[7],
-            "acknowledged": row[8],
-            "content_hash": row[9],
+            "created_at": row[1].isoformat(),
+            "schema_version": row[2],
+            "name": row[3],
+            "source_kind": row[4],
+            "source_ref": row[5],
+            "synthetic": row[6],
+            "acknowledged": row[7],
+            "content_hash": row[8],
             "manifest": manifest,
-            "created_by": row[11],
-            "hash_valid": canonical_hash(manifest) == row[9],
+            "created_by": row[10],
+            "hash_valid": canonical_hash(manifest) == row[8],
             "segments": list(manifest.get("segments") or []),
         }

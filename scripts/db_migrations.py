@@ -306,37 +306,52 @@ def _apply_run_manifests_v1(conn: Connection) -> None:
 
 
 def _apply_project_evidence_v1(conn: Connection) -> None:
-    from core.project_store import _SCHEMA as project_schema
-
-    conn.execute(project_schema)
+    """Historical marker retained for migration-ledger compatibility."""
 
 
 def _apply_validation_lab_v1(conn: Connection) -> None:
-    from core.validation_store import _SCHEMA as validation_schema
-
-    conn.execute(validation_schema)
+    """Historical marker retained for migration-ledger compatibility."""
 
 
 def _apply_rehearsal_sessions_v1(conn: Connection) -> None:
-    from core.rehearsal_store import _SCHEMA as rehearsal_schema
-
-    conn.execute(rehearsal_schema)
+    """Historical marker retained for migration-ledger compatibility."""
 
 
 def _apply_rehearsal_leases_v1(conn: Connection) -> None:
-    from core.rehearsal_store import _SCHEMA as rehearsal_schema
-
-    conn.execute(rehearsal_schema)
+    """Historical marker retained for migration-ledger compatibility."""
 
 
 def _apply_validation_case_kinds_v1(conn: Connection) -> None:
+    """Historical marker retained for migration-ledger compatibility."""
+
+
+def _remove_decommissioned_workspaces(conn: Connection) -> None:
+    """Remove the four user-decommissioned workspaces and their operational data.
+
+    Run manifests, prediction/finding registries, audit events and provider-spend
+    ledgers are intentionally retained because they are immutable governance records.
+    """
     conn.execute(
         """
-        ALTER TABLE validation_datasets
-            DROP CONSTRAINT IF EXISTS validation_datasets_kind_check;
-        ALTER TABLE validation_datasets
-            ADD CONSTRAINT validation_datasets_kind_check
-            CHECK (kind IN ('miracl_th','human_panel','model_robustness','usability'));
+        DROP TABLE IF EXISTS rehearsal_operation_leases CASCADE;
+        DROP TABLE IF EXISTS rehearsal_events CASCADE;
+        DROP TABLE IF EXISTS rehearsal_sessions CASCADE;
+
+        DROP TABLE IF EXISTS prediction_owner_events CASCADE;
+        DROP TABLE IF EXISTS validation_reports CASCADE;
+        DROP TABLE IF EXISTS validation_cases CASCADE;
+        DROP TABLE IF EXISTS validation_datasets CASCADE;
+
+        DROP TABLE IF EXISTS evidence_set_members CASCADE;
+        DROP TABLE IF EXISTS evidence_sets CASCADE;
+        DROP TABLE IF EXISTS evidence_versions CASCADE;
+        DROP TABLE IF EXISTS evidence_items CASCADE;
+        DROP TABLE IF EXISTS project_runs CASCADE;
+        DROP TABLE IF EXISTS project_revisions CASCADE;
+        DROP TABLE IF EXISTS projects CASCADE;
+
+        DROP INDEX IF EXISTS population_sets_project;
+        ALTER TABLE population_sets DROP COLUMN IF EXISTS project_id;
         """
     )
 
@@ -439,6 +454,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-17-population-sets-v1",
         "immutable acknowledged population snapshots for every production run",
         _apply_population_sets_v1,
+    ),
+    (
+        "2026-07-18-remove-project-validation-rehearsal-usability-v1",
+        "remove decommissioned workspace tables while retaining immutable governance ledgers",
+        _remove_decommissioned_workspaces,
     ),
 ]
 

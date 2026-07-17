@@ -40,11 +40,8 @@ from api.routers.ops import router as ops_router
 from api.routers.personas import router as personas_router
 from api.routers.policy import router as policy_router
 from api.routers.populations import router as populations_router
-from api.routers.projects import router as projects_router
-from api.routers.rehearsals import router as rehearsals_router
 from api.routers.runs import router as runs_router
 from api.routers.settings import router as settings_router
-from api.routers.validation import router as validation_router
 from api.routers.watchlists import router as watchlists_router
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
@@ -81,9 +78,6 @@ app.include_router(personas_router)
 app.include_router(populations_router)
 app.include_router(policy_router)
 app.include_router(watchlists_router)
-app.include_router(projects_router)
-app.include_router(validation_router)
-app.include_router(rehearsals_router)
 
 _WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 if _WEB_DIST.exists():
@@ -554,34 +548,6 @@ def _run_urls(run_id: str) -> dict[str, str]:
     }
 
 
-def _materialize_evidence_set(body: RunBody) -> tuple[RunBody, dict]:
-    if not body.evidence_set_id.strip():
-        return body, {}
-    if body.engine != "debate":
-        raise HTTPException(status_code=422, detail="EvidenceSetV1 ใช้กับ debate engine เท่านั้น")
-    from core.project_store import EvidenceStore
-
-    try:
-        sources, provenance = EvidenceStore(get_settings().postgres_url).sources_for_set(
-            body.evidence_set_id.strip()
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if body.project_id and body.project_id != provenance["project_id"]:
-        raise HTTPException(status_code=422, detail="evidence set อยู่นอก project ที่ระบุ")
-    if len(body.sources) + len(sources) > 10:
-        raise HTTPException(status_code=422, detail="sources รวมจาก EvidenceSetV1 เกิน 10 รายการ")
-    return (
-        body.model_copy(
-            update={
-                "project_id": provenance["project_id"],
-                "sources": [*body.sources, *sources],
-            }
-        ),
-        provenance,
-    )
-
-
 def _materialize_population_set(body: RunBody, *, actor: str) -> tuple[RunBody, dict]:
     """Resolve or freeze PopulationSetV1 before a production run can be persisted."""
 
@@ -599,8 +565,6 @@ def _materialize_population_set(body: RunBody, *, actor: str) -> tuple[RunBody, 
             raise HTTPException(
                 status_code=409, detail="PopulationSetV1 hash/acknowledgement ไม่ครบ"
             )
-        if body.project_id and frozen["project_id"] and body.project_id != frozen["project_id"]:
-            raise HTTPException(status_code=422, detail="population set อยู่นอก project ที่ระบุ")
         return body, frozen
     if not body.population_acknowledged:
         raise HTTPException(
@@ -624,7 +588,6 @@ def _materialize_population_set(body: RunBody, *, actor: str) -> tuple[RunBody, 
             actor=actor,
             source_kind=source_kind,
             source_ref=source_ref,
-            project_id=body.project_id,
             synthetic=True,
             acknowledged=True,
         )
@@ -722,17 +685,6 @@ def _prepare_run_spec(
         ),
         "watermark_required": True,
     }
-    if body.evidence_set_id:
-        from core.project_store import EvidenceStore
-
-        frozen = EvidenceStore(get_settings().postgres_url).get_set(body.evidence_set_id)
-        governance["evidence_set"] = {
-            "set_id": frozen["set_id"],
-            "project_id": frozen["project_id"],
-            "schema_version": frozen["schema_version"],
-            "content_hash": frozen["content_hash"],
-            "hash_valid": frozen["hash_valid"],
-        }
     if body.population_set_id:
         from core.population_store import PopulationSetStore
 
@@ -816,8 +768,6 @@ def _run_create_impl(
         engine = get_engine(body.engine)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    if not precreated:
-        body, _ = _materialize_evidence_set(body)
     subject = body.subject.strip()
     if len(subject) < 4:
         raise HTTPException(status_code=422, detail="หัวข้อสั้นเกินไป")
@@ -896,8 +846,6 @@ def _run_create_impl(
     config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
     config["experiment_id"] = body.experiment_id
-    config["project_id"] = body.project_id
-    config["evidence_set_id"] = body.evidence_set_id
     config["population_set_id"] = body.population_set_id
     config["seed"] = run_seed
     config["run_spec"] = run_spec.model_dump(mode="json")
@@ -924,10 +872,6 @@ def _run_create_impl(
             parent_run_id=body.parent_run_id,
             progress_message="เริ่มรัน",
         )
-        if body.project_id:
-            from core.project_store import ProjectStore
-
-            ProjectStore(settings.postgres_url).attach_run(body.project_id, run_id)
     from core.run_manifest import canonical_hash
     from core.runstore import RunCanceledError
 
@@ -1207,7 +1151,6 @@ def _enqueue_persistent_run(
         engine = get_engine(body.engine)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    body, _ = _materialize_evidence_set(body)
     body, _ = _materialize_population_set(body, actor=principal.user_id)
     task_body = body
     subject = body.subject.strip()
@@ -1283,8 +1226,6 @@ def _enqueue_persistent_run(
                 "seed": run_seed,
                 "reflection": body.reflection,
                 "experiment_id": body.experiment_id,
-                "project_id": body.project_id,
-                "evidence_set_id": body.evidence_set_id,
                 "population_set_id": body.population_set_id,
                 "run_spec": run_spec.model_dump(mode="json"),
                 "manifest_versions": manifest_versions,
@@ -1297,10 +1238,6 @@ def _enqueue_persistent_run(
             idempotency_key=idempotency_key,
             idempotency_request_hash=body_hash,
         )
-        if body.project_id:
-            from core.project_store import ProjectStore
-
-            ProjectStore(settings.postgres_url).attach_run(body.project_id, run_id)
     except Exception as e:
         existing = rstore.find_by_idempotency(idempotency_key)
         if existing:

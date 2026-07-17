@@ -74,10 +74,6 @@ async function stubApi(page: Page) {
     if (path.endsWith("/insights.json")) return fulfill(route, { total_runs: 0, exports: 0, runs_per_day: [], predictions_by_domain: [] });
     if (path.endsWith("/observability.json")) return fulfill(route, { window_hours: 24, providers: [], failure_taxonomy: [], queue: { queued: 0, running: 0, errors: 0, avg_latency_seconds: 0 }, pii_policy: "fail-closed" });
     if (path.endsWith("/experiments")) return fulfill(route, { experiments: [] });
-    if (path.endsWith("/projects")) return fulfill(route, { projects: [] });
-    if (path.endsWith("/validation/overview")) return fulfill(route, { datasets: [], reports: [], trust_claims: { miracl_measured: false, human_panel_measured: false, pilot_usability_measured: false, model_robustness_measured: false } });
-    if (path.endsWith("/validation/resolution-inbox")) return fulfill(route, { as_of: "2026-07-17", due: [], upcoming: [], resolved: [], metrics: { mean_brier: null, brier_ci95: null, ece: null, reliability: [] }, resolution_requires_evidence: true });
-    if (path.endsWith("/rehearsals")) return fulfill(route, { rehearsals: [] });
     if (path.endsWith("/gallery.json")) return fulfill(route, { items: [] });
     if (path.endsWith("/calibration.json")) return fulfill(route, { overall_brier: null, resolved_total: 0, domains: [], trend: [], items: [], due: [], upcoming: [], baseline_brier: 0.25, sample_size: 0, reliability: [], confidence_histogram: [] });
     if (path.endsWith("/health/deep")) return fulfill(route, { status: "ok", components: {} });
@@ -92,14 +88,10 @@ const routes = [
   "/history",
   "/insights",
   "/experiments",
-  "/projects",
-  "/validation",
-  "/rehearsals",
   "/calibration",
   "/watchlist",
   "/gallery",
   "/settings",
-  "/usability",
 ];
 
 test("all application routes pass automated WCAG 2.2 AA checks in English", async ({ page }) => {
@@ -121,7 +113,7 @@ test("all application routes pass automated WCAG 2.2 AA checks in English", asyn
 test("language, skip-link, focus, reflow and target controls are operable", async ({ page }) => {
   await stubApi(page);
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.goto("/app/#/usability");
+  await page.goto("/app/#/settings");
   await expect(page.locator("html")).toHaveAttribute("lang", "th");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "ข้ามไปเนื้อหาหลัก" })).toBeFocused();
@@ -130,7 +122,7 @@ test("language, skip-link, focus, reflow and target controls are operable", asyn
   await page.getByRole("button", { name: "เปิดเมนู" }).click();
   await page.getByRole("button", { name: "English" }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.getByRole("heading", { name: "Five-participant Thai usability study" })).toBeVisible();
+  await expect(page.locator("main")).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   const smallControls = await page.locator("main button:visible, main a:visible, main input:visible, main select:visible").evaluateAll((items) =>
@@ -143,23 +135,4 @@ test("language, skip-link, focus, reflow and target controls are operable", asyn
     }),
   );
   expect(smallControls).toEqual([]);
-});
-
-test("five-participant usability mockup records consent and task progress locally", async ({ page }) => {
-  await stubApi(page);
-  await page.addInitScript(() => {
-    localStorage.setItem("chimlang-lang", "en");
-    localStorage.removeItem("chimlang-usability-p9m3-v1");
-  });
-  await page.goto("/app/#/usability");
-  const consent = page.getByRole("checkbox");
-  await consent.check();
-  await page.getByRole("button", { name: "Start timer" }).first().click();
-  await page.getByRole("button", { name: "Complete", exact: true }).first().click();
-  await expect(page.getByRole("progressbar", { name: "Overall progress" })).toHaveAttribute("aria-valuenow", "1");
-  await page.getByRole("button", { name: /P02/ }).click();
-  await expect(page.getByRole("checkbox")).not.toBeChecked();
-  await page.getByRole("button", { name: /P01/ }).click();
-  await expect(page.getByRole("checkbox")).toBeChecked();
-  await expect(page.getByText("Complete", { exact: true }).first()).toBeVisible();
 });

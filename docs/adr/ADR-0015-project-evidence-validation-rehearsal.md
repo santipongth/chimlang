@@ -1,6 +1,6 @@
 # ADR-0015: Frozen case workflow, measurable validation และ event-sourced rehearsal
 
-- สถานะ: Accepted (17 ก.ค. 2026 — ผู้ใช้อนุมัติให้เริ่ม P9-M2/M3)
+- สถานะ: Superseded โดย ADR-0019 (18 ก.ค. 2026)
 
 ## บริบท
 

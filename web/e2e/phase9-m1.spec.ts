@@ -6,6 +6,20 @@ async function watchlistStub(page: Page) {
   );
 }
 
+test("decommissioned workspaces are absent from navigation and routes", async ({ page }) => {
+  await watchlistStub(page);
+  await page.addInitScript(() => localStorage.setItem("chimlang-lang", "en"));
+  await page.goto("/app/#/");
+
+  for (const label of ["Projects & Evidence", "Validation Lab", "Rehearsal", "Usability study"]) {
+    await expect(page.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+  }
+  for (const path of ["projects", "validation", "rehearsals", "usability"]) {
+    await page.goto(`/app/#/${path}`);
+    await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+  }
+});
+
 test("mobile drawer is keyboard reachable and invalid routes are bilingual", async ({ page }, testInfo) => {
   await watchlistStub(page);
   await page.setViewportSize({ width: 390, height: 844 });

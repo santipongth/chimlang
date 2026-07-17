@@ -2,6 +2,14 @@
 
 เริ่ม 17 ก.ค. 2569 — ผู้ใช้อนุมัติ roadmap 8–12 สัปดาห์และสั่ง implement; ADR-0014 เป็น contract หลัก
 
+## Product scope revision — 18 ก.ค. 2569
+
+- [x] ตามมติผู้ใช้และ ADR-0019 ถอด Project/Evidence, Validation Lab, Press-room Rehearsal และ
+  Usability study จาก production ทั้ง UI, API, runtime code และฐานข้อมูล
+- [x] migration ลบ 14 operational tables; immutable run/prediction/finding/audit/financial records คงไว้
+- [x] production workflow ปัจจุบันเป็น PopulationSet → Run → Result → Export และ live smoke ผ่านจริง
+- รายการ P9-M2/M3 ด้านล่างเป็นประวัติงานที่เคยส่งมอบ ไม่ใช่ surface ที่ยังเปิดใช้งาน
+
 ## P9-M1 — Trusted Run Foundation + UX blockers (trust gate)
 
 - [x] immutable `RunSpecV1`/`RunManifestV1`, canonical hash, snapshots และ legacy-incomplete migration
@@ -20,7 +28,7 @@
 
 ผล gate: ผ่านเมื่อ 17 ก.ค. 2569 — ดู `docs/reports/P9-M1-trust-foundation.md`; ผู้ใช้อนุมัติ M2/M3 ในวันเดียวกัน
 
-## P9-M2 — Project, Evidence และ Validation Lab (ห้ามเริ่มก่อนมติหลัง M1)
+## P9-M2 — Project, Evidence และ Validation Lab (historical; decommissioned โดย ADR-0019)
 
 - [x] Project/Case workflow: Brief → Evidence → Population → Assumptions → Run → Compare → Decision
 - [x] Evidence Library + immutable `EvidenceSetV1`, version/dedup/health/PII preview
@@ -31,13 +39,13 @@
 - [x] consent-based Thai human panel import contract โดยไม่ fabricate outcome
 - [x] multi-model robustness 3 models/6 Thai cases/18 calls ผ่าน BudgetGuard; report measured และ failed attempts invalidate แบบ append-only
 
-## P9-M3 — Productize capability เดิม (ห้ามเริ่มก่อน M2 ผ่าน)
+## P9-M3 — Productize capability เดิม (บางส่วน decommissioned โดย ADR-0019)
 
 - [x] Rehearsal UI: turn-by-turn, pause/resume, operator prompt, scorecard/transcript/decision log
 - [x] checkpoint/stage control ในสถาปัตยกรรมเดิมโดยไม่เพิ่ม Concordia dependency
 - [x] Run Detail status shell + Result/Evidence/Uncertainty/Validation/Audit tabs
 - [x] TH/EN parity และ WCAG 2.2 AA automated audit ทั้งแอป — dictionary/static key/locale + axe 13 routes desktop/mobile, focus/reflow/target tests
-- [ ] usability test ผู้ใช้ไทยอย่างน้อย 5 คน; in-app mockup/protocol พร้อม แต่ยังไม่มีผลจริง (`docs/reports/P9-M3-usability-protocol.md`)
+- [x] ปิดรายการ usability โดยยุติและถอด surface ตามมติผู้ใช้; ไม่ได้อ้างว่ามีผลทดสอบผู้ใช้จริง
 
 ## Acceptance gates ร่วม
 
@@ -57,7 +65,7 @@
 - [x] immutable PopulationSetV1; synthetic population ต้องรับทราบก่อน freeze/run และมี manifest hash
 - [x] Citizen demo ถูกถอดจาก production routes และย้ายเป็น offline CLI
 - [x] Debate analyst failure เป็น run error/degraded ไม่ส่ง mechanical fallback เป็น success
-- [x] unmocked real-process Project → Evidence → Population → Run → worker → Result → Export ผ่าน
+- [x] unmocked real-process workflow ผ่าน; ปัจจุบันปรับเป็น Population → Run → worker → Result → Export
 - [x] low-cost OpenRouter Debate smoke ผ่าน BudgetGuard: actual USD 0.000411 < cap USD 0.05
 - [x] CI แยก backend mocked, browser stubbed, live integration และ manual provider smoke ชัดเจน
 

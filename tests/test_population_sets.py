@@ -75,20 +75,3 @@ def test_population_api_and_run_fail_closed_without_acknowledgement():
     assert blocked_set.status_code == 422
     assert blocked_run.status_code == 422
     assert "PopulationSetV1" in blocked_run.json()["detail"]
-
-
-@needs_pg
-def test_population_api_rejects_unknown_project():
-    from fastapi.testclient import TestClient
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/population-sets",
-            json={
-                "name": "pytest unknown project",
-                "project_id": "project-does-not-exist",
-                "acknowledged_synthetic": True,
-            },
-        )
-
-    assert response.status_code == 404
