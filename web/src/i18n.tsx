@@ -391,6 +391,12 @@ export const DICT: Record<string, { th: string; en: string }> = {
   },
   set_news_feeds: { th: "รายการ RSS feeds (คั่นด้วยเครื่องหมายจุลภาค ,)", en: "RSS feeds (comma-separated)" },
   set_news_feeds_active: { th: "ใช้งานจริงตอนนี้", en: "Currently active" },
+  set_news_ttl: { th: "Cache ผลดึงข่าว (ชั่วโมง)", en: "News fetch cache (hours)" },
+  set_news_ttl_note: { th: "0 = ค่ามาตรฐาน 6 ชม. — ภายในช่วงนี้คำค้น/feed เดิมใช้ผลจาก cache", en: "0 = default 6h — identical queries/feeds reuse cached results within this window" },
+  set_news_max_age: { th: "อายุข่าวสูงสุด (วัน)", en: "Max news age (days)" },
+  set_news_max_age_note: { th: "0 = ค่ามาตรฐาน 14 วัน — ข่าว RSS ที่เก่ากว่านี้ถูกกรองทิ้ง (ไม่ทราบวันที่ = คงไว้)", en: "0 = default 14 days — older RSS items are filtered out (unknown dates are kept)" },
+  set_news_hours_unit: { th: "ชม.", en: "h" },
+  set_news_days_unit: { th: "วัน", en: "days" },
   set_key_db_short: { th: "จากหน้านี้", en: "from this page" },
   set_key_env_short: { th: "จากไฟล์ .env", en: "from .env" },
   set_tavily_none: {

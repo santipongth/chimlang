@@ -373,6 +373,13 @@ def _remove_vector_retrieval(conn: Connection) -> None:
     conn.execute("DROP TABLE IF EXISTS run_chunk_embeddings")
 
 
+def _news_published_at(conn: Connection) -> None:
+    """เก็บ timestamp จริงของข่าว (pubDate/published) ลง provenance ของ snapshot"""
+    conn.execute(
+        "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS published_at TEXT NOT NULL DEFAULT ''"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     (
         "2026-07-15-run-lifecycle-newsdesk-cache",
@@ -473,6 +480,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-18-remove-vector-retrieval-v1",
         "drop unused pgvector embedding table after ADR-0023 retrieval simplification",
         _remove_vector_retrieval,
+    ),
+    (
+        "2026-07-18-news-published-at-v1",
+        "store real publication timestamps for news snapshot provenance",
+        _news_published_at,
     ),
 ]
 

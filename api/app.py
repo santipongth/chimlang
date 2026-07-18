@@ -967,6 +967,7 @@ def _run_create_impl(
                             "error": it.error,
                             "content": it.content,
                             "pii_redactions": it.pii_redactions,
+                            "published_at": it.published_at,
                         }
                         for it in all_items
                     ],
@@ -1012,6 +1013,7 @@ def _run_create_impl(
                         "channel_tags": it.channel_tags,
                         "status": it.status,
                         "error": it.error,
+                        "published_at": it.published_at,
                     }
                     for it in _reload_news(settings.postgres_url, run_id)
                 ]

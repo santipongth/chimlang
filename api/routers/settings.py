@@ -48,11 +48,14 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
     except Exception:
         spent = 0.0
         reserved = 0.0
-    from simulation.newsdesk import effective_news_config
+    from simulation.newsdesk import effective_news_config, effective_news_tuning
 
     effective_feeds, effective_tavily = effective_news_config(settings)
+    effective_ttl, effective_max_age = effective_news_tuning(settings)
     news_config = {
         "feeds": effective_feeds,
+        "cache_ttl_hours": effective_ttl,
+        "max_age_days": effective_max_age,
         "feeds_source": "db"
         if str(data.get("news_rss_feeds", "")).strip()
         else ("env" if settings.news_rss_feeds_list() else "none"),

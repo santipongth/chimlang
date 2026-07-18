@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     # รายการ RSS feed ข่าวไทย (คั่นด้วย ,) — โต๊ะข่าวกลางดึงให้ agent ไม่ให้ agent แตะเน็ตเอง
     news_rss_feeds: str = ""
     tavily_api_key: str = ""  # search API (optional) — ไม่มี = โหมด RSS อย่างเดียว
+    news_cache_ttl_hours: int = 6  # cache ผลดึงข่าวต่อ (provider, คำค้น/feed) — ปรับจาก Settings ได้
+    news_max_age_days: int = 14  # ข่าว RSS ที่มี timestamp เก่ากว่านี้ถูกกรองทิ้ง
 
     def news_rss_feeds_list(self) -> list[str]:
         return [f.strip() for f in self.news_rss_feeds.split(",") if f.strip()]

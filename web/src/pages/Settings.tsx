@@ -490,6 +490,42 @@ export default function Settings() {
                 {t("set_news_feeds_active")}: {data.news.feeds.length} feeds ({data.news.feeds_source === "db" ? t("set_key_db_short") : data.news.feeds_source === "env" ? t("set_key_env_short") : "—"})
               </span>
             </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_news_ttl")}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={168}
+                  value={data.news_cache_ttl_hours ?? 0}
+                  onChange={(e) => setData({ ...data, news_cache_ttl_hours: parseInt(e.target.value) || 0 })}
+                  onBlur={() => patch({ news_cache_ttl_hours: data.news_cache_ttl_hours ?? 0 } as any)}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {t("set_news_ttl_note")} · {t("set_news_feeds_active")}: {data.news.cache_ttl_hours ?? 6} {t("set_news_hours_unit")}
+                </span>
+              </label>
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_news_max_age")}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={data.news_max_age_days ?? 0}
+                  onChange={(e) => setData({ ...data, news_max_age_days: parseInt(e.target.value) || 0 })}
+                  onBlur={() => patch({ news_max_age_days: data.news_max_age_days ?? 0 } as any)}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {t("set_news_max_age_note")} · {t("set_news_feeds_active")}: {data.news.max_age_days ?? 14} {t("set_news_days_unit")}
+                </span>
+              </label>
+            </div>
             <div className="rounded-xl border border-border bg-background p-3 space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 🔎 Tavily Search API key

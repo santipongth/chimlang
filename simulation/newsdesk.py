@@ -16,6 +16,7 @@ import random
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -24,12 +25,16 @@ from core.db import connection, require_schema
 from core.run_context import RunContext, ensure_external_retrieval_allowed
 from core.safe_fetch import SafeOutboundFetcher
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
-from simulation.sources import _parse_rss, _strip_html, _trigrams, validate_external_url
+from simulation.sources import _bm25_scores, _strip_html, _trigrams, validate_external_url
 
 MAX_ITEMS_PER_RUN = 30
 MAX_SEARCH_QUERIES_PER_RUN = 8
 MAX_CONTENT_CHARS = 4_000
-NEWS_CACHE_TTL_HOURS = 6
+NEWS_CACHE_TTL_HOURS = 6  # default — ปรับได้จากหน้า Settings (news_cache_ttl_hours)
+NEWS_MAX_AGE_DAYS = 14  # default — ข่าว RSS เก่ากว่านี้ถูกกรองทิ้ง (ปรับได้จาก Settings)
+# ตัดซ้ำแบบใกล้เคียงด้วย containment coefficient (|A∩B| / min(|A|,|B|)) แทน Jaccard —
+# ข่าวเรื่องเดียวกันคนละสำนักมักเป็น "เนื้อเดิม + พาดหัว/รายละเอียดต่างกัน" ซึ่ง Jaccard เจือจาง
+NEAR_DUP_CONTAINMENT = 0.7
 
 # heuristic การกระจายข่าวเข้าช่องทาง (บันทึกตรงๆ ว่าเป็น heuristic จาก provider —
 # ไม่ใช่ข้อมูลจริงว่าข่าวชิ้นนั้นแพร่ช่องไหน; refine ภายหลังได้โดยแก้ mapping นี้จุดเดียว)
@@ -57,10 +62,12 @@ CREATE TABLE IF NOT EXISTS news_items (
     channel_tags JSONB NOT NULL DEFAULT '{}',
     status TEXT NOT NULL,
     error TEXT NOT NULL DEFAULT '',
-    pii_redactions JSONB NOT NULL DEFAULT '{}'
+    pii_redactions JSONB NOT NULL DEFAULT '{}',
+    published_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS news_items_run ON news_items (run_id);
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE news_items ADD COLUMN IF NOT EXISTS published_at TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS news_fetch_cache (
     cache_key TEXT PRIMARY KEY,
     provider TEXT NOT NULL CHECK (provider IN ('rss', 'search')),
@@ -84,22 +91,71 @@ class NewsItem:
     status: str  # ready | redacted | blocked | error | skipped
     error: str = ""
     pii_redactions: dict[str, int] = field(default_factory=dict)
+    published_at: str = ""  # ISO timestamp จริงของข่าว (จาก pubDate/published) — "" = ไม่ทราบ
 
 
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:32]
 
 
-def _fetch_rss_items(feed_url: str) -> list[tuple[str, str]]:
-    """คืน [(title, content)] จาก feed — แยกราย item เพื่อ PII gate เป็นชิ้นๆ"""
+def _parse_pub_date(value: str) -> str:
+    """แปลง timestamp ของ feed เป็น ISO string — รับทั้ง RFC 822 (RSS) และ ISO 8601 (Atom)
+
+    แปลงไม่ได้ = "" (ไม่ทราบอายุข่าว — ไม่ถูกกรองทิ้ง เพราะไม่มีหลักฐานว่าเก่า)
+    """
+    value = value.strip()
+    if not value:
+        return ""
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).isoformat()
+
+
+def _parse_rss_entries(xml: str) -> list[tuple[str, str, str]]:
+    """คืน [(title, content, published_iso)] ราย item — เก็บ timestamp จริงลง provenance"""
+    blocks = re.findall(r"<item[\s\S]*?</item>|<entry[\s\S]*?</entry>", xml, flags=re.IGNORECASE)
+    out: list[tuple[str, str, str]] = []
+    for chunk in blocks[:15]:
+        title_m = re.search(r"<title[^>]*>([\s\S]*?)</title>", chunk, flags=re.IGNORECASE)
+        desc_m = re.search(
+            r"<description[^>]*>([\s\S]*?)</description>|<summary[^>]*>([\s\S]*?)</summary>",
+            chunk,
+            flags=re.IGNORECASE,
+        )
+        date_m = re.search(
+            r"<pubDate[^>]*>([\s\S]*?)</pubDate>|<published[^>]*>([\s\S]*?)</published>"
+            r"|<updated[^>]*>([\s\S]*?)</updated>|<dc:date[^>]*>([\s\S]*?)</dc:date>",
+            chunk,
+            flags=re.IGNORECASE,
+        )
+        strip_cdata = lambda s: re.sub(r"<!\[CDATA\[|\]\]>", "", s or "")  # noqa: E731
+        title = _strip_html(strip_cdata(title_m.group(1))) if title_m else ""
+        desc = (
+            _strip_html(strip_cdata(next((g for g in desc_m.groups() if g), ""))) if desc_m else ""
+        )
+        published = (
+            _parse_pub_date(strip_cdata(next((g for g in date_m.groups() if g), "")))
+            if date_m
+            else ""
+        )
+        if title:
+            content = f"{title}\n{desc}".strip()[:MAX_CONTENT_CHARS]
+            out.append((title[:200], content, published))
+    return out
+
+
+def _fetch_rss_items(feed_url: str) -> list[tuple[str, str, str]]:
+    """คืน [(title, content, published_iso)] จาก feed — แยกราย item เพื่อ PII gate เป็นชิ้นๆ"""
     safe_url = validate_external_url(feed_url)
     text = SafeOutboundFetcher().fetch(safe_url).text
-    out: list[tuple[str, str]] = []
-    for block in _parse_rss(text).split("\n\n"):
-        lines = block.strip().split("\n", 1)
-        if lines and lines[0]:
-            out.append((lines[0][:200], block.strip()[:MAX_CONTENT_CHARS]))
-    return out
+    return _parse_rss_entries(text)
 
 
 def _tavily_search(query: str, api_key: str, *, max_results: int = 3) -> list[tuple[str, str, str]]:
@@ -135,13 +191,15 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
             title = str(raw.get("title", ""))[:200]
             url = str(raw.get("url", ""))
             content = str(raw.get("content", ""))[:MAX_CONTENT_CHARS]
+            published_at = str(raw.get("published_at", ""))
             prior_counts = {str(k): int(v) for k, v in (raw.get("pii_redactions") or {}).items()}
             prior_status = str(raw.get("status", "ready"))
         elif provider == "search":
             title, url, content = (str(x) for x in raw[:3])
-            prior_counts, prior_status = {}, "ready"
+            published_at, prior_counts, prior_status = "", {}, "ready"
         else:
             title, content = (str(x) for x in raw[:2])
+            published_at = str(raw[2]) if len(raw) > 2 else ""
             url, prior_counts, prior_status = "", {}, "ready"
 
         if url and detector.check(url).blocked:
@@ -153,6 +211,7 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
                     "status": "blocked",
                     "error": "พบ PII ใน URL (GOV-01)",
                     "pii_redactions": {},
+                    "published_at": "",
                 }
             )
             continue
@@ -168,6 +227,7 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
                     "status": "blocked",
                     "error": "พบ PII ที่ redact อย่างปลอดภัยไม่ได้ (GOV-01)",
                     "pii_redactions": {},
+                    "published_at": "",
                 }
             )
             continue
@@ -187,6 +247,7 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
                 "status": status,
                 "error": str(raw.get("error", ""))[:500] if isinstance(raw, dict) else "",
                 "pii_redactions": counts,
+                "published_at": published_at,
             }
         )
     return prepared
@@ -200,6 +261,7 @@ def _cached_fetch(
     url: str,
     fetcher,
     detector: PIIDetector,
+    ttl_hours: int = NEWS_CACHE_TTL_HOURS,
 ) -> list:
     if detector.check(f"{query}\n{url}").blocked:
         raise PIIRedactionError("news query or URL contains PII")
@@ -209,7 +271,7 @@ def _cached_fetch(
             "SELECT payload, fetched_at FROM news_fetch_cache WHERE cache_key = %s",
             (key,),
         ).fetchone()
-        if row and row[1] > datetime.now(UTC) - timedelta(hours=NEWS_CACHE_TTL_HOURS):
+        if row and row[1] > datetime.now(UTC) - timedelta(hours=max(1, ttl_hours)):
             return _prepare_news_payload(provider, list(row[0]), detector)
     payload = _prepare_news_payload(provider, list(fetcher()), detector)
     with connection(dsn) as conn:
@@ -242,6 +304,23 @@ def effective_news_config(settings) -> tuple[list[str], str]:
     return feeds, key
 
 
+def effective_news_tuning(settings) -> tuple[int, int]:
+    """(cache_ttl_hours, max_age_days) ที่ใช้จริง — ค่าจาก Settings (DB, 0 = default) ทับ .env"""
+    ttl = int(settings.news_cache_ttl_hours)
+    max_age = int(settings.news_max_age_days)
+    try:
+        from core.appsettings import get_app_settings
+
+        data = get_app_settings(settings.postgres_url)
+        if int(data.get("news_cache_ttl_hours") or 0) > 0:
+            ttl = int(data["news_cache_ttl_hours"])
+        if int(data.get("news_max_age_days") or 0) > 0:
+            max_age = int(data["news_max_age_days"])
+    except Exception:
+        pass  # fail-safe: DB พัง = ใช้ .env ต่อ
+    return max(1, ttl), max(1, max_age)
+
+
 def gather(
     dsn: str,
     ctx: RunContext,
@@ -259,8 +338,10 @@ def gather(
         raise ValueError("PII detector ถูกปิด — ปฏิเสธการดึงข่าว (GOV-01 fail-closed)")
     detector = PIIDetector(load_allowlist())
     eff_feeds, tavily_key = effective_news_config(settings)
+    ttl_hours, max_age_days = effective_news_tuning(settings)
     feeds = feeds if feeds is not None else eff_feeds
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
+    subject = queries[0] if queries else ""
 
     raw: list[dict] = []
     failures: list[tuple[str, str, str, str]] = []  # (provider, query, url, error)
@@ -276,6 +357,7 @@ def gather(
                     url="https://api.tavily.com/search",
                     fetcher=lambda q=q: _tavily_search(q, tavily_key),
                     detector=detector,
+                    ttl_hours=ttl_hours,
                 )
                 for item in results:
                     raw.append({"provider": "search", "query": q, **item})
@@ -286,6 +368,8 @@ def gather(
     elif queries and not tavily_key:
         for q in queries:
             failures.append(("search", q, "", "Tavily skipped: TAVILY_API_KEY ยังไม่ได้ตั้งค่า"))
+    age_cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+    rss_candidates: list[dict] = []
     for feed in feeds[:10]:
         try:
             results = _cached_fetch(
@@ -295,16 +379,44 @@ def gather(
                 url=feed,
                 fetcher=lambda feed=feed: _fetch_rss_items(feed),
                 detector=detector,
+                ttl_hours=ttl_hours,
             )
-            for item in results[:10]:
-                raw.append({**item, "provider": "rss", "query": feed, "url": feed})
+            for item in results:
+                entry = {**item, "provider": "rss", "query": feed, "url": feed}
+                if entry.get("status") in ("blocked", "error", "skipped"):
+                    # หลักฐาน governance/ความล้มเหลว — เข้า snapshot ทันที ไม่เข้าคิวจัดอันดับ
+                    raw.append(entry)
+                    continue
+                published = str(entry.get("published_at", ""))
+                if published:
+                    try:
+                        if datetime.fromisoformat(published) < age_cutoff:
+                            continue  # เก่าเกิน max_age_days — กรองทิ้ง (ไม่ทราบอายุ = คงไว้)
+                    except ValueError:
+                        pass
+                rss_candidates.append(entry)
         except PIIRedactionError:
             failures.append(("rss", "", "", "พบ PII ใน RSS URL (GOV-01)"))
         except Exception as e:
             failures.append(("rss", feed, feed, f"RSS fetch failed: {type(e).__name__}: {e}"))
+    # จัดอันดับ RSS ด้วย BM25 กับหัวข้อ run แทน "มาก่อนได้ก่อน" — คุณภาพต่อโควตา 30 ชิ้น
+    if subject.strip() and rss_candidates:
+        rows = [
+            (idx, "", 0, f"{c.get('title', '')} {c.get('content', '')}")
+            for idx, c in enumerate(rss_candidates)
+        ]
+        scores = _bm25_scores(rows, subject)
+        rss_candidates = [
+            c
+            for _, c in sorted(
+                enumerate(rss_candidates), key=lambda pair: (-scores.get(pair[0], 0.0), pair[0])
+            )
+        ]
+    raw.extend(rss_candidates)
 
     items: list[NewsItem] = []
     seen: set[str] = set()
+    seen_grams: list[frozenset] = []
     now = datetime.now(UTC).isoformat()
     with connection(dsn) as conn:
         for provider, query, url, error in failures:
@@ -357,15 +469,27 @@ def gather(
             status = raw_item["status"]
             error = raw_item["error"]
             pii_redactions = raw_item["pii_redactions"]
+            published_at = str(raw_item.get("published_at", ""))
             h = _hash(title + content)
             if h in seen or (status in ("ready", "redacted") and not content.strip()):
                 continue
+            if status in ("ready", "redacted"):
+                # ตัดซ้ำแบบใกล้เคียง: ข่าวเรื่องเดียวกันคนละสำนัก (ถ้อยคำต่างเล็กน้อย)
+                # ใช้ 3-gram Jaccard เกณฑ์เดียวกับ dedupe_intents — ไม่เผาโควตา 30 ชิ้นซ้ำ
+                grams = frozenset(_trigrams(f"{title} {content[:400]}"))
+                if grams and any(
+                    len(grams & other) / (min(len(grams), len(other)) or 1) > NEAR_DUP_CONTAINMENT
+                    for other in seen_grams
+                ):
+                    continue
+                if grams:
+                    seen_grams.append(grams)
             seen.add(h)
             tags = CHANNEL_TAGS[provider]
             conn.execute(
                 "INSERT INTO news_items (run_id, provider, query, url, title, content, "
-                "content_hash, channel_tags, status, error, pii_redactions) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)",
+                "content_hash, channel_tags, status, error, pii_redactions, published_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb, %s)",
                 (
                     ctx.run_id,
                     provider,
@@ -378,10 +502,22 @@ def gather(
                     status,
                     error,
                     json.dumps(pii_redactions),
+                    published_at,
                 ),
             )
             items.append(
-                NewsItem(provider, url, title, content, now, tags, status, error, pii_redactions)
+                NewsItem(
+                    provider,
+                    url,
+                    title,
+                    content,
+                    now,
+                    tags,
+                    status,
+                    error,
+                    pii_redactions,
+                    published_at,
+                )
             )
     return items
 
@@ -391,12 +527,13 @@ def load_items(dsn: str, run_id: str) -> list[NewsItem]:
     with connection(dsn) as conn:
         rows = conn.execute(
             "SELECT provider, url, title, content, fetched_at::text, channel_tags, status, error, "
-            "pii_redactions "
+            "pii_redactions, published_at "
             "FROM news_items WHERE run_id = %s ORDER BY id",
             (run_id,),
         ).fetchall()
     return [
-        NewsItem(r[0], r[1], r[2], r[3], r[4], dict(r[5]), r[6], r[7], dict(r[8])) for r in rows
+        NewsItem(r[0], r[1], r[2], r[3], r[4], dict(r[5]), r[6], r[7], dict(r[8]), r[9])
+        for r in rows
     ]
 
 

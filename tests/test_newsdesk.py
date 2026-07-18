@@ -394,3 +394,133 @@ def client_p7():
     from api.app import app
 
     return TestClient(app)
+
+
+def test_parse_pub_date_accepts_rfc822_iso_and_rejects_garbage():
+    from simulation.newsdesk import _parse_pub_date
+
+    assert _parse_pub_date("Wed, 15 Jul 2026 08:30:00 +0700").startswith("2026-07-15T01:30:00")
+    assert _parse_pub_date("2026-07-15T08:30:00Z").startswith("2026-07-15T08:30:00")
+    assert _parse_pub_date("ไม่ใช่วันที่") == ""
+    assert _parse_pub_date("") == ""
+
+
+def test_parse_rss_entries_extracts_published_timestamp():
+    from simulation.newsdesk import _parse_rss_entries
+
+    xml = """<rss><channel>
+    <item><title>ข่าวมี timestamp</title><description>เนื้อหา ก</description>
+    <pubDate>Wed, 15 Jul 2026 08:30:00 +0700</pubDate></item>
+    <item><title>ข่าวไม่มี timestamp</title><description>เนื้อหา ข</description></item>
+    </channel></rss>"""
+    entries = _parse_rss_entries(xml)
+    assert entries[0][0] == "ข่าวมี timestamp"
+    assert entries[0][2].startswith("2026-07-15T01:30:00")
+    assert entries[1][2] == ""
+
+
+@needs_pg
+def test_gather_filters_stale_news_and_keeps_unknown_age(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    import simulation.newsdesk as nd
+
+    fresh = datetime.now(UTC).isoformat()
+    stale = (datetime.now(UTC) - timedelta(days=90)).isoformat()
+    feed = f"https://age.feed/{uuid4()}.rss"
+    monkeypatch.setattr(
+        nd,
+        "_fetch_rss_items",
+        lambda url: [
+            ("ข่าวใหม่ล่าสุดวันนี้", "ข่าวใหม่ล่าสุดวันนี้\nรายละเอียดข่าวสดหนึ่ง", fresh),
+            ("ข่าวเก่ามากแล้ว", "ข่าวเก่ามากแล้ว\nรายละเอียดข่าวโบราณสองปีก่อน", stale),
+            ("ข่าวไม่ระบุวันที่", "ข่าวไม่ระบุวันที่\nรายละเอียดข่าวปริศนา", ""),
+        ],
+    )
+    items = gather(DSN, RunContext(run_id=f"news-age-{uuid4()}", seed=1), feeds=[feed], queries=[])
+    titles = [it.title for it in items if it.status in ("ready", "redacted")]
+    assert "ข่าวใหม่ล่าสุดวันนี้" in titles
+    assert "ข่าวไม่ระบุวันที่" in titles  # ไม่ทราบอายุ = คงไว้
+    assert "ข่าวเก่ามากแล้ว" not in titles
+    published = {it.title: it.published_at for it in items}
+    assert published["ข่าวใหม่ล่าสุดวันนี้"] == fresh  # provenance เก็บ timestamp จริง
+
+
+@needs_pg
+def test_gather_ranks_rss_by_bm25_relevance_to_subject(monkeypatch):
+    import simulation.newsdesk as nd
+
+    feed = f"https://rank.feed/{uuid4()}.rss"
+    # กัน test ยิง Tavily จริง — บังคับให้ไม่มี search key (BM25 ยังใช้ queries[0] เป็นหัวข้อ)
+    monkeypatch.setattr(nd, "effective_news_config", lambda s: ([], ""))
+    monkeypatch.setattr(
+        nd,
+        "_fetch_rss_items",
+        lambda url: [
+            ("เรื่องบันเทิงดาราละคร", "เรื่องบันเทิงดาราละคร\nวงการบันเทิงคึกคักสุดสัปดาห์", ""),
+            (
+                "ค่าธรรมเนียมรถติดกรุงเทพ",
+                "ค่าธรรมเนียมรถติดกรุงเทพ\nมาตรการเก็บค่าธรรมเนียมรถติดในกรุงเทพเริ่มปีหน้า",
+                "",
+            ),
+        ],
+    )
+    items = gather(
+        DSN,
+        RunContext(run_id=f"news-rank-{uuid4()}", seed=1),
+        feeds=[feed],
+        queries=["ค่าธรรมเนียมรถติดกรุงเทพ"],
+    )
+    ready = [it.title for it in items if it.status in ("ready", "redacted")]
+    assert ready[0] == "ค่าธรรมเนียมรถติดกรุงเทพ"  # เกี่ยวข้องกว่า = มาก่อน แม้อยู่หลังใน feed
+
+
+@needs_pg
+def test_gather_drops_near_duplicate_stories(monkeypatch):
+    import simulation.newsdesk as nd
+
+    feed = f"https://dup.feed/{uuid4()}.rss"
+    base = "นายกฯ ประกาศมาตรการลดค่าครองชีพรอบใหม่ ครอบคลุมค่าน้ำค่าไฟและขนส่งสาธารณะทั่วประเทศ"
+    variant = base + " ตามรายงานของผู้สื่อข่าวภาคสนามช่วงเช้า"
+    monkeypatch.setattr(
+        nd,
+        "_fetch_rss_items",
+        lambda url: [
+            ("มาตรการลดค่าครองชีพ", f"มาตรการลดค่าครองชีพ\n{base}", ""),
+            ("ข่าวเดียวกันอีกสำนัก", f"ข่าวเดียวกันอีกสำนัก\n{variant}", ""),
+            ("ข่าวคนละเรื่องเลย", "ข่าวคนละเรื่องเลย\nสภาพอากาศภาคเหนือมีฝนตกหนักบางพื้นที่", ""),
+        ],
+    )
+    items = gather(DSN, RunContext(run_id=f"news-dup-{uuid4()}", seed=1), feeds=[feed], queries=[])
+    ready = [it.title for it in items if it.status in ("ready", "redacted")]
+    assert "มาตรการลดค่าครองชีพ" in ready
+    assert "ข่าวคนละเรื่องเลย" in ready
+    assert "ข่าวเดียวกันอีกสำนัก" not in ready  # near-duplicate ถูกตัด
+
+
+@needs_pg
+def test_news_tuning_settings_validation_and_effective_values():
+    from core.appsettings import get_app_settings, put_app_settings
+    from core.config import get_settings
+    from simulation.newsdesk import effective_news_tuning
+
+    settings = get_settings()
+    snapshot = get_app_settings(DSN)
+    try:
+        put_app_settings(DSN, {"news_cache_ttl_hours": 2, "news_max_age_days": 3})
+        assert effective_news_tuning(settings) == (2, 3)
+        put_app_settings(DSN, {"news_cache_ttl_hours": 0, "news_max_age_days": 0})
+        ttl, age = effective_news_tuning(settings)
+        assert ttl == settings.news_cache_ttl_hours and age == settings.news_max_age_days
+        with pytest.raises(ValueError):
+            put_app_settings(DSN, {"news_cache_ttl_hours": 999})
+        with pytest.raises(ValueError):
+            put_app_settings(DSN, {"news_max_age_days": -5})
+    finally:
+        put_app_settings(
+            DSN,
+            {
+                "news_cache_ttl_hours": snapshot.get("news_cache_ttl_hours", 0),
+                "news_max_age_days": snapshot.get("news_max_age_days", 0),
+            },
+        )
