@@ -23,6 +23,14 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
+- **ใหม่ (19 ก.ค. ADR-0028 — debate อ้างหลักฐาน + โหมดน้ำเสียง + กรองข่าว):** วินิจฉัย run สเปน-บอลโลก
+  ที่ agent พูดวนเรื่องปากท้อง — 3 ต้นเหตุ: persona pack ตายตัวเพื่อนโยบาย/สังคม, prompt ไม่บังคับ
+  reason/cite (1/120), Tavily คืนขยะ (cookie/เกม FIFA). แก้: (1) กรอง Tavily boilerplate + BM25 rank
+  เทียบหัวข้อ (2) prompt ใส่ N-id + บังคับอิงหลักฐาน + metric evidence_citation_rate (3) discourse_register
+  per-run: citizen(เดิม)/analyst(ทางการ) เลือกใน wizard default citizen (4) readiness persona_fit warn
+  เมื่อ citizen. Verification: backend 421, Vitest 11, Playwright 20, live readiness 2 register + filter
+  unit check ผ่าน. **Debate LLM จริงผู้ใช้ทดสอบเอง — รันหัวข้อสเปนซ้ำโหมด analyst เทียบ citizen ได้.**
+
 - **ใหม่ (18 ก.ค. ADR-0027):** ถอด RSS ออกจาก evidence sources ต่อ run — เหลือ text/url;
   kind rss ใหม่ = 422 ทั้ง API/engine, แถวประวัติยังอ่านได้ (CHECK เดิมคงไว้ ไม่มี migration),
   frozen rerun ข้าม legacy rss อย่างปลอดภัย; RSS ใน codebase เหลือเฉพาะ legacy-read.

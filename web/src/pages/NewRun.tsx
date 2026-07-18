@@ -99,6 +99,7 @@ export default function NewRun({
   const [packLimits, setPackLimits] = useState<PackLimits>(FALLBACK_PACK_LIMITS);
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [liveNews, setLiveNews] = useState(false);
+  const [register, setRegister] = useState<"citizen" | "analyst">("citizen"); // โหมดน้ำเสียง (ADR-0028)
   const [readiness, setReadiness] = useState<RunReadiness | null>(null);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
@@ -160,11 +161,12 @@ export default function NewRun({
       sources: isDebate ? sources : [],
       views,
       live_news: isDebate && liveNews,
+      discourse_register: isDebate ? register : "citizen",
     };
     fetchRunReadiness(body)
       .then(setReadiness)
       .catch(() => setReadiness(null));
-  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews]);
+  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews, register]);
 
   function addSource() {
     if (sources.length >= 10) return;
@@ -205,6 +207,7 @@ export default function NewRun({
         sources: isDebate ? sources : [],
         views,
         live_news: isDebate && liveNews,
+        discourse_register: isDebate ? register : "citizen",
       }, idempotencyKey);
       onCreated(job.run_id);
     } catch (e: any) {
@@ -391,6 +394,28 @@ export default function NewRun({
             </div>
           )}
           {!isDebate && <p className="text-xs text-muted-foreground">🌌 {t("wiz_universes")}</p>}
+
+          {/* โหมดน้ำเสียง (ADR-0028) — เฉพาะ debate: คนไทยจ๋า (เดิม) / ทางการ (นักวิเคราะห์) */}
+          {isDebate && (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_register_title")}</div>
+              <p className="mt-1 text-xs text-muted-foreground">{t("wiz_register_desc")}</p>
+              <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                {([
+                  ["citizen", "🗣️", t("wiz_register_citizen"), t("wiz_register_citizen_desc")],
+                  ["analyst", "📊", t("wiz_register_analyst"), t("wiz_register_analyst_desc")],
+                ] as const).map(([id, icon, label, desc]) => (
+                  <SelectCard key={id} active={register === id} onClick={() => setRegister(id)}>
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <span>{icon}</span>
+                      <span>{label}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{desc}</div>
+                  </SelectCard>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_persona_title")}</div>
@@ -596,6 +621,7 @@ export default function NewRun({
             <span className="text-muted-foreground">{t("wiz_step_engine")}</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : ` · ${t("wiz_universes_short")}`}</span>
             <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{formatNumber(Math.min(agents, cap))}</span>
             <span className="text-muted-foreground">{t("wiz_persona_title")}</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
+            {isDebate && (<><span className="text-muted-foreground">{t("wiz_register_title")}</span><span>{register === "analyst" ? `📊 ${t("wiz_register_analyst")}` : `🗣️ ${t("wiz_register_citizen")}`}</span></>)}
             {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
             <span className="text-muted-foreground">{t("wiz_redteam_label")}</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ${t("ui_on")}`) : "—"}</span>
           </div>

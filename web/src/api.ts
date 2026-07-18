@@ -117,6 +117,7 @@ export interface CreateRunBody {
   seed?: number | null;
   views?: string[]; // มุมมองที่จะเปิดใช้ (P6-M6)
   live_news?: boolean; // โต๊ะข่าวสด (P7, debate เท่านั้น)
+  discourse_register?: "citizen" | "analyst"; // โหมดน้ำเสียง (ADR-0028, debate เท่านั้น)
 }
 
 function toRunRequest(body: CreateRunBody) {
@@ -136,6 +137,7 @@ function toRunRequest(body: CreateRunBody) {
     seed: body.seed ?? null,
     views: body.views ?? [],
     live_news: body.live_news ?? false,
+    discourse_register: body.discourse_register ?? "citizen",
     parent_run_id: body.parent_run_id ?? "",
     experiment_id: "",
     population_set_id: body.population_set_id ?? "",

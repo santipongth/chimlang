@@ -260,6 +260,21 @@ export const DICT: Record<string, { th: string; en: string }> = {
     th: "ข่าวสดจากโต๊ะข่าวกลางที่ตัวแทนจำลองเห็นระหว่างการรัน (ถูกแช่แข็งเป็นสำเนา ณ เวลานั้น (snapshot) — ตรวจย้อนหลังได้เสมอ)",
     en: "Live news the agents saw via the central news desk (frozen as a snapshot — always auditable afterwards).",
   },
+  wiz_register_title: { th: "โหมดน้ำเสียง (Discourse register)", en: "Discourse register" },
+  wiz_register_desc: {
+    th: "เลือกน้ำเสียงของตัวแทนจำลองในวงถกเถียง — โหมดคนไทยจ๋าเหมาะกับโจทย์นโยบาย/สังคมที่อยากได้ปฏิกิริยาแบบชาวบ้านจริง ส่วนโหมดทางการเหมาะกับโจทย์เชิงข้อเท็จจริง/ต่างประเทศ/กีฬาที่อยากได้การถกจากหลักฐานมากกว่าเรื่องปากท้อง",
+    en: "Choose how the simulated agents speak in the debate — the everyday-Thai mode suits policy and social scenarios where you want realistic grassroots reactions, while the formal mode suits factual, foreign, or sports topics where you want evidence-grounded argument rather than cost-of-living framing.",
+  },
+  wiz_register_citizen: { th: "คนไทยจ๋า", en: "Everyday Thai" },
+  wiz_register_citizen_desc: {
+    th: "น้ำเสียงชาวบ้านจริง สะท้อนความเกรงใจ มีม และการประชด — เหมาะกับโจทย์นโยบาย/กระแสสังคม",
+    en: "Grassroots voice with deference, memes, and sarcasm — best for policy and social scenarios.",
+  },
+  wiz_register_analyst: { th: "ทางการ", en: "Formal analyst" },
+  wiz_register_analyst_desc: {
+    th: "น้ำเสียงนักวิเคราะห์ ภาษาทางการ ถกจากหลักฐานเป็นหลัก ไม่ใช้มีม/ประชด — เหมาะกับโจทย์ข้อเท็จจริง/ต่างประเทศ/กีฬา",
+    en: "Analyst voice in formal language, arguing from evidence without memes — best for factual, foreign, or sports topics.",
+  },
   wiz_news_title: { th: "โต๊ะข่าวสด (Live News Desk)", en: "Live News Desk" },
   wiz_news_desc: {
     th: "ระบบค้นข่าวล่าสุดจากอินเทอร์เน็ต (Tavily search ตามหัวข้อ) มาให้ตัวแทนจำลองใช้ระหว่างการถกเถียง — แต่ละกลุ่มเห็นข่าวไม่เหมือนกันตามพฤติกรรมการเสพสื่อของกลุ่มนั้น และข้อมูลส่วนบุคคล (PII) ถูกลบพร้อมตรวจซ้ำก่อนบันทึกเสมอ",

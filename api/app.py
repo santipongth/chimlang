@@ -829,6 +829,7 @@ def _run_create_impl(
         "requested_agents": body.agents,
         "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
         "live_news": body.live_news,  # provenance: run นี้ใช้ข่าวสดหรือไม่ (P7)
+        "discourse_register": body.discourse_register,  # โหมดน้ำเสียง (ADR-0028)
     }
     config["parent_run_id"] = body.parent_run_id
     config["experiment_id"] = body.experiment_id
@@ -986,6 +987,7 @@ def _run_create_impl(
                 segment_news=segment_news,
                 news_fetcher=news_fetcher,
                 synthesis_max_tokens=effective_llm_settings().llm_synthesis_max_tokens,
+                discourse_register=body.discourse_register,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
             if result.synthesis.get("status") == "analyst_failed":

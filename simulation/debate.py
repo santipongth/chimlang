@@ -229,27 +229,44 @@ def _initial_stance(p: Persona) -> float:
     return 0.0
 
 
-def _persona_system(p: Persona) -> str:
+def _persona_role(p: Persona) -> str:
     # Red Team แบบ devil's advocate เต็มรูป (ADR-0022) — งานวิจัยพบว่า "soft framing"
     # (แค่บอกบทบาทเบาๆ) ไม่ต่างจาก baseline; ต้องสั่งโจมตีข้อสรุปเสียงข้างมากอย่างเป็นระบบ
     # และห้ามคล้อยตาม ถึงจะ induce disagreement ได้จริง (IUI'24 devil's advocate;
     # OpenReview mxBmj5LYU2 "Only the Devil's Advocate Works")
-    role = ""
     if "contrarian" in p.traits:
-        role = (
+        return (
             " บทบาทของคุณ: devil's advocate ประจำวง — อ่านโพสต์ทั้งหมดแล้วระบุข้อสรุปที่"
             "เสียงข้างมากกำลังเห็นพ้อง จากนั้นโจมตีข้อสรุปนั้นด้วยข้อโต้แย้งที่แรงและมีเหตุผลที่สุด"
             " ห้ามคล้อยตามเสียงข้างมาก ห้ามยอมแพ้ ห้ามใช้ move 'concession'"
             " และจุดยืนของคุณต้องไม่เป็นบวก"
         )
-    elif "auditor" in p.traits:
-        role = (
+    if "auditor" in p.traits:
+        return (
             " บทบาทของคุณ: ผู้ตรวจสอบหลักฐาน — ไล่ชี้ claim ในวงที่ไม่มีหลักฐานอ้างอิง"
             " ตั้งคำถามบังคับให้ผู้โพสต์แสดง evidence อย่ายอมรับข้อสรุปที่ยังไม่มีหลักฐานรองรับ"
             " ใช้ move 'question' หรือ 'counterclaim' เป็นหลัก"
         )
-    elif "redteam" in p.traits:
-        role = " บทบาทพิเศษของคุณ: ตั้งคำถามกับฉันทามติที่กำลังก่อตัว หาจุดอ่อนของข้อสรุป"
+    if "redteam" in p.traits:
+        return " บทบาทพิเศษของคุณ: ตั้งคำถามกับฉันทามติที่กำลังก่อตัว หาจุดอ่อนของข้อสรุป"
+    return ""
+
+
+def _persona_system(p: Persona, register: str = "citizen") -> str:
+    """system prompt ตามโหมดน้ำเสียง (ADR-0028) — Red Team role layer ทับได้ทั้งสองโหมด
+
+    - citizen (คนไทยจ๋า): ข้อความเดิมทุกตัวอักษร — persona voice/เกรงใจ/say-do/มีม-ประชด
+    - analyst (ทางการ): reframe เป็นนักวิเคราะห์ ใช้ภาษาทางการ อ้างอิงหลักฐานเป็นหลัก
+    """
+    role = _persona_role(p)
+    if register == "analyst":
+        return (
+            f"คุณคือนักวิเคราะห์ที่นำเสนอมุมมองของกลุ่ม '{p.segment_name}' อย่างเป็นกลาง "
+            "ใช้ภาษาทางการ อ้างอิงหลักฐานเป็นหลัก หลีกเลี่ยงการประชดหรือมุกตลก "
+            f"ไม่โยงเรื่องปากท้องถ้าไม่เกี่ยวกับโจทย์.{role} "
+            "ตอบภาษาไทยเท่านั้น ห้ามกุชื่อ/ตัวเลข — จำไม่ได้ให้บอกว่าไม่แน่ใจ เรียกคนด้วยบทบาท "
+            "ตอบเป็น JSON ล้วนเท่านั้น (ไม่มี markdown)"
+        )
     return (
         f"คุณคือคนไทยกลุ่ม '{p.segment_name}' "
         f"(เกรงใจ {p.kreng_jai:.1f}, ช่องว่างพูด-ทำ {p.say_do_gap:.1f}, "
@@ -387,6 +404,10 @@ def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> 
         "agent_count": agent_count,
         "parser_fallback_posts": sum(
             1 for p in ok if p.parser_mode == "parser_fallback_unsupported"
+        ),
+        # สัดส่วนโพสต์ ok ที่อ้างอิงหลักฐาน (evidence_refs ไม่ว่าง) — grounding rate ของวง (ADR-0028)
+        "evidence_citation_rate": (
+            round(sum(1 for p in ok if p.evidence_refs) / len(ok), 4) if ok else 0.0
         ),
     }
     metrics.update(_conformity_metrics(ok, rounds, per_round_avg, per_round_dispersion))
@@ -556,6 +577,7 @@ def run_debate(
     news_fetcher=None,  # callable(list[str]) -> dict[segment, tuple[str,...]] — โต๊ะข่าวค้นตาม intent
     on_round=None,
     synthesis_max_tokens: int | None = None,  # None/0 = ใช้ default; ผู้ใช้ตั้งจากหน้า Settings
+    discourse_register: str = "citizen",  # โหมดน้ำเสียง (ADR-0028): citizen | analyst
 ) -> DebateResult:
     settings = get_settings()
     if len(personas) > settings.max_agents_per_debate:
@@ -567,6 +589,8 @@ def run_debate(
     stances = [_initial_stance(p) for p in personas]
     all_posts: list[DebatePost] = []
     news: dict[str, tuple[str, ...]] = dict(segment_news or {})  # media diet รายกลุ่ม (P7)
+    # N-id ของข่าวที่แสดงจริงในฟีด (ADR-0028) — ให้ verifier ยอมรับ citation ข่าว (N1..) เหมือน E-id
+    news_ids_seen: set[str] = set()
     context_block = (
         "\n".join(
             f"[{evidence_ids[i] if i < len(evidence_ids) else f'E{i + 1}'}] {c[:600]}"
@@ -612,6 +636,10 @@ def run_debate(
 
         # ฟีดข่าวของกลุ่ม (media diet — P7): แต่ละ segment เห็นชุดข่าวไม่เหมือนกัน
         news_snapshot = dict(news)  # freeze ต่อรอบ ให้ทุก thread เห็นชุดเดียวกัน
+        # จดจำ N-id ที่ segment ใดก็ตามเห็นในรอบนี้ (แสดงสูงสุด 4 รายการ) — main thread จึง thread-safe
+        for seg_lines in news_snapshot.values():
+            for i in range(min(len(seg_lines), 4)):
+                news_ids_seen.add(f"N{i + 1}")
 
         def ask(
             idx: int,
@@ -622,9 +650,10 @@ def run_debate(
         ) -> DebatePost:  # bind ค่าปัจจุบันของ loop
             p = personas[idx]
             seg_news = news_now.get(p.segment_name, ())
+            # ใส่ N-id ให้ข่าว (N1, N2, …) คู่กับ E-id ของ evidence — ให้ agent อ้างใน evidence_refs ได้
             news_block = (
                 "\nข่าวล่าสุดที่คนกลุ่มคุณเห็นในฟีดตัวเอง:\n"
-                + "\n".join(f"• {ln[:300]}" for ln in seg_news[:4])
+                + "\n".join(f"[N{i + 1}] {ln[:300]}" for i, ln in enumerate(seg_news[:4]))
                 + "\n"
                 if seg_news
                 else ""
@@ -632,17 +661,28 @@ def run_debate(
             want_hint = (
                 ', "want_to_know": "สิ่งที่อยากรู้เพิ่มก่อนตัดสินใจ (สั้นๆ หรือเว้นว่าง)"' if news_fetcher else ""
             )
+            grounding = (
+                "ถ้าอ้างข้อเท็จจริง ต้องอ้างอิงจากข่าว/เอกสารที่ให้ (ใส่ ID เช่น N1 หรือ E1 ใน evidence_refs) "
+                "ถ้าไม่มีหลักฐานรองรับ ให้บอกว่ายังไม่มีข้อมูล ห้ามกุตัวเลข/ชื่อ"
+            )
+            if discourse_register == "analyst":
+                write_line = (
+                    "เขียนบทวิเคราะห์สั้น (ไม่เกิน 90 คำ) ในมุมมองของกลุ่มคุณอย่างเป็นกลาง "
+                    "อ้างอิงหลักฐานเป็นหลัก โต้แย้งประเด็น/โพสต์อื่นด้วยเหตุผล"
+                )
+            else:
+                write_line = "เขียนโพสต์ 1 โพสต์ (ไม่เกิน 60 คำ) ตามเสียงของกลุ่มคุณ — โต้ตอบประเด็น/โพสต์อื่นได้"
             user = (
                 f"หัวข้อดีเบต: {subject}\n\n"
                 f"ข้อมูลอ้างอิง:\n{context_block}\n{news_block}\n"
                 f"จุดยืนปัจจุบันของคุณ: {stances[idx]:+.2f} (−1 คัดค้านสุด … +1 เห็นด้วยสุด)\n\n"
                 f"โพสต์ล่าสุดจากคนอื่น (รอบ {r + 1}):\n{feeds[idx]}\n"
-                "เขียนโพสต์ 1 โพสต์ (ไม่เกิน 60 คำ) ตามเสียงของกลุ่มคุณ — โต้ตอบประเด็น/โพสต์อื่นได้\n"
+                f"{write_line}\n{grounding}\n"
                 'ตอบ JSON: {"content": "ข้อความโพสต์", "stance": จุดยืนใหม่ -1..1, '
                 f'"sentiment": โทนอารมณ์ -1..1{want_hint}, '
                 '"move_type": "claim|evidence|counterclaim|concession|question", '
                 '"reply_to": "move ID ก่อนหน้า หรือเว้นว่าง", '
-                '"evidence_refs": ["evidence ID เช่น E1"]}'
+                '"evidence_refs": ["ID หลักฐานที่อ้าง เช่น N1 หรือ E1"]}'
             )
             try:
                 structured_kwargs = (
@@ -653,7 +693,7 @@ def run_debate(
                 result = adapter.chat(
                     ModelTier.CROWD,
                     [
-                        {"role": "system", "content": _persona_system(p)},
+                        {"role": "system", "content": _persona_system(p, discourse_register)},
                         {"role": "user", "content": user},
                     ],
                     max_tokens=260,
@@ -724,7 +764,8 @@ def run_debate(
 
     metrics = _compute_metrics(all_posts, rounds, len(personas))
     protocol = analyze_protocol(all_posts, subject=subject, rounds=rounds)
-    verifier = verify_moves(all_posts, evidence_ids=set(evidence_ids))
+    # evidence ที่ verifier ยอมรับ = E-id ของเอกสาร + N-id ของข่าวที่แสดงจริง (ADR-0028)
+    verifier = verify_moves(all_posts, evidence_ids=set(evidence_ids) | news_ids_seen)
     protocol["verifier"] = verifier
     protocol["move_lineage"] = verifier["lineage"]
     if metrics["posts_ok"] == 0:

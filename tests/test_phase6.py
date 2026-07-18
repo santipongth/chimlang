@@ -336,6 +336,115 @@ def test_debate_conformity_metrics_decompose_flips():
     assert metrics2["stance_flips"]["conforming_without_evidence"] == 0
 
 
+def _synthesis_json() -> str:
+    return json.dumps(
+        {
+            "summary": "สรุปทดสอบ",
+            "confidence": 0.7,
+            "distribution": [{"bucket": "เห็นด้วย", "pct": 100}],
+            "key_drivers": ["ปัจจัยทดสอบ"],
+            "risks": ["ความเสี่ยงทดสอบ"],
+            "judge": {
+                "verdict": "pass",
+                "citation_assessment": "ผ่าน",
+                "contradiction_assessment": "ผ่าน",
+                "schema_assessment": "ผ่าน",
+                "unsupported_claims": [],
+                "notes": [],
+            },
+        },
+        ensure_ascii=False,
+    )
+
+
+class _TierRecorder:
+    """adapter ที่แยกงานตาม tier (ไม่พึ่งข้อความ prompt) — บันทึก system/user prompt ของ crowd"""
+
+    def __init__(self, post_payload: dict | None = None):
+        self.system_prompts: list[str] = []
+        self.user_prompts: list[str] = []
+        self._post = post_payload or {"content": "โพสต์ทดสอบ", "stance": 0.2, "sentiment": 0.0}
+
+    def chat(self, tier, messages, **kw):
+        from core.llm.adapter import ModelTier
+
+        if tier == ModelTier.CROWD:
+            self.system_prompts.append(messages[0]["content"])
+            self.user_prompts.append(messages[1]["content"])
+            return _R(json.dumps(self._post, ensure_ascii=False))
+        return _R(_synthesis_json())
+
+
+def test_debate_register_analyst_reframes_system_prompt_citizen_unchanged():
+    # ADR-0028: analyst = นักวิเคราะห์ ภาษาทางการ ไม่สั่งใช้มีม; citizen = เดิม (มีมีม/ประชด)
+    citizen = _TierRecorder()
+    run_debate(_personas(4), subject="สเปนเป็นแชมป์ฟุตบอลโลก 2026", rounds=1, seed=5, adapter=citizen)
+    assert citizen.system_prompts
+    assert all("นักวิเคราะห์" not in s for s in citizen.system_prompts)
+    assert any("ใช้มีม/ประชด" in s for s in citizen.system_prompts)  # persona voice เดิมคงอยู่
+
+    analyst = _TierRecorder()
+    run_debate(
+        _personas(4),
+        subject="สเปนเป็นแชมป์ฟุตบอลโลก 2026",
+        rounds=1,
+        seed=5,
+        adapter=analyst,
+        discourse_register="analyst",
+    )
+    assert analyst.system_prompts
+    assert all("นักวิเคราะห์" in s for s in analyst.system_prompts)
+    assert all("มีม" not in s for s in analyst.system_prompts)  # ไม่มีคำสั่งมีม
+
+
+def test_debate_metrics_evidence_citation_rate():
+    from simulation.debate import _compute_metrics
+
+    def post(idx, refs):
+        return DebatePost(
+            0,
+            idx,
+            f"seg{idx}",
+            "x",
+            0.2,
+            0.0,
+            move_id=f"m-r1-a{idx + 1}",
+            evidence_refs=tuple(refs),
+        )
+
+    posts = [post(0, ("E1",)), post(1, ()), post(2, ("N1", "E2")), post(3, ())]
+    metrics = _compute_metrics(posts, rounds=1, agent_count=4)
+    assert metrics["evidence_citation_rate"] == 0.5  # 2 จาก 4 โพสต์ที่ cite
+
+
+def test_debate_news_block_uses_n_ids_and_verifier_accepts_news_citations():
+    # ADR-0028: ข่าวใน news_block มี N-id และ verifier ยอมรับ citation ข่าว (N1) เหมือน E-id
+    rec = _TierRecorder(
+        {
+            "content": "อ้างข่าว",
+            "stance": 0.1,
+            "sentiment": 0.0,
+            "move_type": "evidence",
+            "evidence_refs": ["N1"],
+        }
+    )
+    personas = _personas(4)
+    seg = personas[0].segment_name
+    result = run_debate(
+        personas,
+        subject="ทดสอบข่าว",
+        rounds=1,
+        seed=5,
+        adapter=rec,
+        segment_news={seg: ("ข่าวเด่นของกลุ่มนี้",)},
+    )
+    assert any("[N1] ข่าวเด่นของกลุ่มนี้" in u for u in rec.user_prompts)
+    unknown = [
+        v for v in result.protocol["verifier"]["violations"] if v["code"] == "unknown_evidence"
+    ]
+    assert not unknown  # N1 คือข่าวที่แสดงจริง ไม่ใช่ evidence ปลอม
+
+
 def test_debate_classifies_truncated_analyst_after_both_attempts():
     class AlwaysTruncatedAnalystAdapter(_FakeAdapter):
         def chat(self, tier, messages, **kw):

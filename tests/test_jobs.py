@@ -117,6 +117,34 @@ def test_run_readiness_blocks_exceeded_monthly_budget(client, monkeypatch):
     assert body["cost"]["monthly_spent_usd"] == 10.0
 
 
+def test_run_readiness_persona_fit_advisory(client):
+    # ADR-0028: debate+citizen → persona_fit warn (ไม่ block); analyst → pass; fabric → ไม่มี
+    citizen = client.post(
+        "/runs/readiness",
+        json={"engine": "debate", "subject": "สเปนเป็นแชมป์ฟุตบอลโลก 2026", "agents": 10},
+    ).json()
+    pf = next(c for c in citizen["checks"] if c["id"] == "persona_fit")
+    assert pf["status"] == "warn"
+
+    analyst = client.post(
+        "/runs/readiness",
+        json={
+            "engine": "debate",
+            "subject": "สเปนเป็นแชมป์ฟุตบอลโลก 2026",
+            "agents": 10,
+            "discourse_register": "analyst",
+        },
+    ).json()
+    pf2 = next(c for c in analyst["checks"] if c["id"] == "persona_fit")
+    assert pf2["status"] == "pass"
+
+    fabric = client.post(
+        "/runs/readiness",
+        json={"engine": "fabric", "subject": "readiness scenario", "agents": 20},
+    ).json()
+    assert not any(c["id"] == "persona_fit" for c in fabric["checks"])
+
+
 def test_task_itself_enforces_governance():
     """ยิง task ตรง (ข้าม API) — require_aggregate ใน _run_dashboard ต้องยังกันได้"""
     from core.tasks import whatif_dashboard_task

@@ -83,15 +83,24 @@ def test_gather_redacts_pii_before_cache_and_snapshot(monkeypatch):
     import simulation.newsdesk as nd
 
     _stub_key(monkeypatch)
+    # เนื้อหาต้องตรงหัวข้อ (มี "มาตรการใหม่") เพื่อผ่าน BM25 ranking + ยาวพอ (ADR-0028)
     monkeypatch.setattr(
         nd,
         "_tavily_search",
         lambda q, key, **kw: [
-            ("ข่าวปกติ", "https://news.example/a", "คณะกรรมการแถลงมาตรการใหม่วันนี้"),
-            ("ข่าวมี PII", "https://news.example/b", "ติดต่อคุณสมชายที่เบอร์ 081-234-5678 ด่วน"),
+            (
+                "ข่าวปกติ",
+                "https://news.example/a",
+                "คณะกรรมการแถลงมาตรการใหม่วันนี้เพื่อลดภาระของประชาชนทั่วประเทศตามที่รอคอย",
+            ),
+            (
+                "ข่าวมี PII",
+                "https://news.example/b",
+                "ฝ่ายประชาสัมพันธ์แจ้งว่ามาตรการใหม่ให้ติดต่อเบอร์ 081-234-5678 เพื่อสอบถามรายละเอียด",
+            ),
         ],
     )
-    query = f"ข่าวทดสอบ-{uuid4()}"
+    query = f"มาตรการใหม่ ทดสอบ {uuid4().hex}"
     ctx = RunContext(run_id="news-pii-item", seed=1)
     items = gather(DSN, ctx, queries=[query])
     ready = [it for it in items if it.status == "ready"]
@@ -169,22 +178,71 @@ def test_gather_drops_near_duplicate_stories(monkeypatch):
     _stub_key(monkeypatch)
     base = "นายกฯ ประกาศมาตรการลดค่าครองชีพรอบใหม่ ครอบคลุมค่าน้ำค่าไฟและขนส่งสาธารณะทั่วประเทศ"
     variant = base + " ตามรายงานของผู้สื่อข่าวภาคสนามช่วงเช้า"
+    # ข่าวที่สาม on-topic แต่เนื้อหาต่างจริง (ไม่ใช่ near-dup) — ต้องผ่าน BM25 ranking (ADR-0028)
+    distinct = "รัฐบาลเตรียมปรับขึ้นค่าแรงขั้นต่ำเพื่อช่วยลดภาระค่าครองชีพของแรงงานทั่วประเทศในปีหน้า"
     monkeypatch.setattr(
         nd,
         "_tavily_search",
         lambda q, key, **kw: [
             ("มาตรการลดค่าครองชีพ", "https://news.example/1", base),
             ("ข่าวเดียวกันอีกสำนัก", "https://news.example/2", variant),
-            ("ข่าวคนละเรื่องเลย", "https://news.example/3", "สภาพอากาศภาคเหนือมีฝนตกหนักบางพื้นที่"),
+            ("ข่าวคนละเรื่องเลย", "https://news.example/3", distinct),
         ],
     )
     items = gather(
-        DSN, RunContext(run_id=f"news-dup-{uuid4()}", seed=1), queries=[f"ค่าครองชีพ-{uuid4()}"]
+        DSN, RunContext(run_id=f"news-dup-{uuid4()}", seed=1), queries=[f"ค่าครองชีพ {uuid4().hex}"]
     )
     ready = [it.title for it in items if it.status in ("ready", "redacted")]
-    assert "มาตรการลดค่าครองชีพ" in ready
-    assert "ข่าวคนละเรื่องเลย" in ready
-    assert "ข่าวเดียวกันอีกสำนัก" not in ready  # near-duplicate ถูกตัด
+    # near-duplicate: เก็บเพียงหนึ่งในสองสำนัก (ranking อาจจัดสำนักไหนขึ้นก่อนก็ได้)
+    assert ("มาตรการลดค่าครองชีพ" in ready) ^ ("ข่าวเดียวกันอีกสำนัก" in ready)
+    assert "ข่าวคนละเรื่องเลย" in ready  # ข่าว on-topic ที่ต่างจริง ต้องคงอยู่
+
+
+@needs_pg
+def test_gather_filters_boilerplate_and_ranks_by_topic(monkeypatch):
+    """ADR-0028: cookie/nav boilerplate + off-topic ถูกกรอง; ข่าวตรงหัวข้อถูกจัดอันดับขึ้นก่อน"""
+    import simulation.newsdesk as nd
+
+    _stub_key(monkeypatch)
+    monkeypatch.setattr(
+        nd,
+        "_tavily_search",
+        lambda q, key, **kw: [
+            # boilerplate: มีวลีคุกกี้ แม้เนื้อจะพาดพิงหัวข้อก็ต้องถูกกรองด้วยตัวกรอง boilerplate
+            (
+                "ยินดีต้อนรับ",
+                "https://news.example/cookie",
+                "เว็บไซต์นี้ใช้คุกกี้เพื่อพัฒนาประสบการณ์ กดยอมรับทั้งหมด ข่าวฟุตบอลโลกสเปนแชมป์ อ่านเพิ่มเติม",
+            ),
+            # off-topic: พรีเมียร์ลีก ไม่มีคำหัวข้อ (สเปน/แชมป์/ฟุตบอลโลก) → BM25 ~0 ถูกตัด
+            (
+                "พรีเมียร์ลีกนัดล่าสุด",
+                "https://news.example/epl",
+                "สโมสรในพรีเมียร์ลีกอังกฤษลงเตะนัดล่าสุดผลออกมาเสมอกันหลายคู่ตามรายงานสถิติประจำสัปดาห์",
+            ),
+            # on-topic: ตรงหัวข้อจริง → ต้องคงอยู่และมาก่อน
+            (
+                "สเปนคว้าแชมป์",
+                "https://news.example/spain",
+                "ทีมชาติสเปนเอาชนะคู่แข่งในรอบชิงและคว้าแชมป์ฟุตบอลโลกได้สำเร็จตามที่แฟนบอลลุ้น",
+            ),
+        ],
+    )
+    run_id = f"news-rank-{uuid4()}"
+    items = gather(DSN, RunContext(run_id=run_id, seed=1), queries=["สเปนเป็นแชมป์ฟุตบอลโลก"])
+    ready_titles = [it.title for it in items if it.status in ("ready", "redacted")]
+    assert "สเปนคว้าแชมป์" in ready_titles  # on-topic คงอยู่
+    assert ready_titles[0] == "สเปนคว้าแชมป์"  # ข่าวตรงหัวข้อมาก่อน
+    assert "ยินดีต้อนรับ" not in ready_titles  # boilerplate คุกกี้ถูกกรองแม้จะพาดพิงหัวข้อ
+    assert "พรีเมียร์ลีกนัดล่าสุด" not in ready_titles  # off-topic คะแนน ~0 ถูกตัด
+
+
+def test_is_low_quality_flags_boilerplate_and_short():
+    from simulation.newsdesk import _is_low_quality
+
+    assert _is_low_quality("พาดหัว", "เว็บไซต์นี้ใช้คุกกี้เพื่อประสบการณ์ที่ดีกว่า กดยอมรับทั้งหมด")
+    assert _is_low_quality("สั้น", "ข่าวสั้นมาก")  # เนื้อหาสั้นเกิน
+    assert not _is_low_quality("ข่าวจริง", "ทีมชาติสเปนคว้าแชมป์ฟุตบอลโลกได้สำเร็จหลังเอาชนะในรอบชิงชนะเลิศ")
 
 
 # ---- NFR-07: replay จาก snapshot ไม่แตะเน็ต + deterministic ----

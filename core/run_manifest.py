@@ -114,6 +114,9 @@ def normalize_run_request(
         "seed": int(seed),
         "views": views or ["canvas", "debate", "evidence", "overview"],
         "live_news": bool(raw.get("live_news")),
+        "discourse_register": (
+            "analyst" if str(raw.get("discourse_register") or "citizen") == "analyst" else "citizen"
+        ),
         "parent_run_id": str(raw.get("parent_run_id", "") or ""),
         "experiment_id": str(raw.get("experiment_id", "") or ""),
         "population_set_id": str(raw.get("population_set_id", "") or ""),

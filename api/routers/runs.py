@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 
@@ -23,6 +25,7 @@ class RunReadinessBody(BaseModel):
     due_days: int = 30
     views: list[str] = []
     live_news: bool = False
+    discourse_register: Literal["citizen", "analyst"] = "citizen"
     parent_run_id: str = ""
     population_set_id: str = ""
 

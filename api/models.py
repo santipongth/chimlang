@@ -32,6 +32,8 @@ class RunBody(BaseModel):
     seed: int | None = None
     views: list[str] = Field(default_factory=list)
     live_news: bool = False
+    # โหมดน้ำเสียงของ debate (ADR-0028): citizen = คนไทยจ๋า (เดิม), analyst = ทางการ/นักวิเคราะห์
+    discourse_register: Literal["citizen", "analyst"] = "citizen"
     parent_run_id: str = ""
     experiment_id: str = ""
     population_set_id: str = ""

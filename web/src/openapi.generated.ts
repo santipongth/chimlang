@@ -1407,6 +1407,12 @@ export interface components {
              */
             live_news: boolean;
             /**
+             * Discourse Register
+             * @default citizen
+             * @enum {string}
+             */
+            discourse_register: "citizen" | "analyst";
+            /**
              * Parent Run Id
              * @default
              */
@@ -1496,6 +1502,12 @@ export interface components {
              * @default false
              */
             live_news: boolean;
+            /**
+             * Discourse Register
+             * @default citizen
+             * @enum {string}
+             */
+            discourse_register: "citizen" | "analyst";
             /**
              * Parent Run Id
              * @default

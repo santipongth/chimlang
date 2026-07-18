@@ -140,6 +140,20 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
         )
     else:
         checks.append(ReadinessCheck("news", "News Desk", "warn", "disabled"))
+    # Persona-fit advisory (ADR-0028) — debate เท่านั้น: persona pack เริ่มต้นออกแบบเพื่อโจทย์
+    # นโยบาย/สังคมไทย; โจทย์ข้อเท็จจริง/ต่างประเทศ/กีฬาแนะนำโหมดทางการ (analyst). warn เฉยๆ ไม่ block
+    if engine.key == "debate":
+        register = str(body.get("discourse_register") or "citizen")
+        checks.append(
+            ReadinessCheck(
+                "persona_fit",
+                "Persona fit",
+                "pass" if register == "analyst" else "warn",
+                "analyst_register_selected"
+                if register == "analyst"
+                else "default_persona_tuned_for_thai_policy_social_use_analyst_for_factual",
+            )
+        )
     try:
         cost = estimate_run_cost(body, settings)
         run_cap = float(cost.get("run_cap_usd", settings.run_budget_usd_cap))

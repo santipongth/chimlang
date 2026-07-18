@@ -23,7 +23,7 @@ from core.config import get_settings
 from core.db import connection, require_schema
 from core.run_context import RunContext, ensure_external_retrieval_allowed
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
-from simulation.sources import _strip_html, _trigrams
+from simulation.sources import _bm25_scores, _strip_html, _trigrams
 
 MAX_ITEMS_PER_RUN = 30
 MAX_SEARCH_QUERIES_PER_RUN = 8
@@ -96,6 +96,61 @@ class NewsItem:
 
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:32]
+
+
+# วลี boilerplate ของหน้าเว็บ (cookie banner / เมนู / บล็อกแนะนำ) ที่ Tavily มักคืนติดมากับเนื้อ
+# ข่าว — จับด้วย heuristic แล้วทิ้ง เพราะเป็น nav cruft ไม่ใช่เนื้อข่าวจริง (agent เคยบ่นว่า
+# "ฟีดมีแต่ข่าวคุกกี้"). ตัวพิมพ์เล็กแล้วเทียบ (ภาษาไทยไม่มี case, อังกฤษถูก normalize)
+_BOILERPLATE_PHRASES = (
+    "ใช้คุกกี้",
+    "cookie",
+    "อ่านเพิ่มเติม",
+    "ข่าวยอดนิยม",
+    "เนื้อหาที่เกี่ยวข้อง",
+    "ข่าวแนะนำ",
+    "ยอมรับทั้งหมด",
+    "นโยบายความเป็นส่วนตัว",
+)
+# เนื้อหาสั้นกว่านี้ถือว่าไม่พอเป็นข่าวจริง (พาดหัว/ป้ายเมนูล้วน) — ตัดทิ้ง
+# ตั้งค่อนข้างต่ำ: ตัวกรองหลักคือวลี boilerplate + BM25 relevance; length เป็นด่านรอง
+_MIN_CONTENT_CHARS = 24
+
+
+def _is_low_quality(title: str, content: str) -> bool:
+    """True = search result เป็น boilerplate/nav cruft หรือเนื้อหาสั้นเกินจะเป็นข่าวจริง"""
+    body = str(content or "").strip()
+    if len(body) < _MIN_CONTENT_CHARS:
+        return True
+    haystack = f"{title or ''} {body}".lower()
+    return any(phrase in haystack for phrase in _BOILERPLATE_PHRASES)
+
+
+def _rank_search_items(raw: list[dict], topic: str) -> list[dict]:
+    """กรอง boilerplate + จัดอันดับผลค้นตามความเข้ากับหัวข้อ (BM25 เทียบ topic)
+
+    - ready/redacted: ผ่านตัวกรอง boilerplate แล้วให้คะแนน BM25 เทียบ topic → เก็บเฉพาะที่คะแนน>0
+      (off-topic เช่น แทคติกเกม/พรีเมียร์ลีก คะแนน ~0 ถูกตัด) เรียงมากไปน้อย
+    - blocked/error/skipped: ไม่เข้าคิวจัดอันดับ — ผ่านตรงเพื่อคง snapshot เป็นหลักฐาน (auditability)
+    """
+    passthrough = [r for r in raw if r.get("status") not in ("ready", "redacted")]
+    rankable = [
+        r
+        for r in raw
+        if r.get("status") in ("ready", "redacted")
+        and not _is_low_quality(r.get("title", ""), r.get("content", ""))
+    ]
+    if not topic.strip() or not rankable:
+        return rankable + passthrough
+    rows = [
+        (idx, "", 0, f"{r.get('title', '')} {r.get('content', '')}")
+        for idx, r in enumerate(rankable)
+    ]
+    scores = _bm25_scores(rows, topic)
+    kept = [
+        (scores.get(idx, 0.0), idx, r) for idx, r in enumerate(rankable) if scores.get(idx, 0.0) > 0
+    ]
+    kept.sort(key=lambda item: (-item[0], item[1]))
+    return [r for _, _, r in kept] + passthrough
 
 
 def _tavily_search(
@@ -293,6 +348,10 @@ def gather(
     elif queries and not tavily_key:
         for q in queries:
             failures.append(("search", q, "", "Tavily skipped: TAVILY_API_KEY ยังไม่ได้ตั้งค่า"))
+
+    # กรอง boilerplate + จัดอันดับผลค้นตามหัวข้อ run (queries[0]) ก่อนเข้าเพดาน MAX_ITEMS_PER_RUN;
+    # off-topic/ขยะ (คะแนน BM25 ~0) ถูกตัด. blocked/error/skipped ไม่แตะ (คง snapshot เป็นหลักฐาน)
+    raw = _rank_search_items(raw, queries[0] if queries else "")
 
     items: list[NewsItem] = []
     seen: set[str] = set()
