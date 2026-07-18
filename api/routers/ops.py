@@ -40,7 +40,14 @@ def health_deep() -> dict:
     try:
         from core.tasks import worker_available
 
-        components["worker"] = "ok" if worker_available(verify_control=True) else "offline"
+        # heartbeat สด + ตอบ control ping = ok; heartbeat สดแต่ไม่ตอบ ping = busy
+        # (solo pool ตอบ ping ไม่ได้ระหว่างรันงานยาว — ยังรับงานเข้าคิวได้ตามปกติ)
+        if worker_available(verify_control=True):
+            components["worker"] = "ok"
+        elif worker_available():
+            components["worker"] = "busy"
+        else:
+            components["worker"] = "offline"
     except Exception as exc:
         components["worker"] = f"down: {type(exc).__name__}"
     try:
@@ -50,7 +57,7 @@ def health_deep() -> dict:
         components["neo4j"] = "ok"
     except Exception as exc:
         components["neo4j"] = f"down: {type(exc).__name__}"
-    overall = "ok" if all(value == "ok" for value in components.values()) else "degraded"
+    overall = "ok" if all(value in ("ok", "busy") for value in components.values()) else "degraded"
     return {"status": overall, "components": components}
 
 

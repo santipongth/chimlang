@@ -1161,7 +1161,7 @@ def _enqueue_persistent_run(
             "reused": True,
             **_run_urls(existing["run_id"]),
         }
-    if not celery_app.conf.task_always_eager and not worker_available(verify_control=True):
+    if not celery_app.conf.task_always_eager and not worker_available():
         raise HTTPException(
             status_code=503,
             detail="worker ไม่พร้อม — ยังไม่สร้าง run กรุณาเปิด Celery worker แล้วลองใหม่",
