@@ -122,7 +122,22 @@ test("language, skip-link, focus, reflow and target controls are operable", asyn
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("main")).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(1);
+  // เกณฑ์เดิม (≤ 1px) — เพิ่ม diagnostics เพื่อให้ log CI ระบุ element ตัวการเมื่อ fail
+  // (เคย fail บน ubuntu-latest ที่ font rendering ต่างจากเครื่อง dev โดย log ไม่บอกอะไรเลย)
+  const overflowingElements = overflow > 1
+    ? await page.evaluate(() => {
+        const limit = document.documentElement.clientWidth;
+        return Array.from(document.querySelectorAll<HTMLElement>("body *"))
+          .filter((el) => el.getBoundingClientRect().right > limit + 1)
+          .slice(0, 8)
+          .map((el) => {
+            const box = el.getBoundingClientRect();
+            const text = (el.textContent || "").trim().slice(0, 60);
+            return `${el.tagName}.${String(el.className).slice(0, 60)} right=${Math.round(box.right)} text="${text}"`;
+          });
+      })
+    : [];
+  expect(overflow, `horizontal overflow ${overflow}px; culprits: ${overflowingElements.join(" | ")}`).toBeLessThanOrEqual(1);
   const smallControls = await page.locator("main button:visible, main a:visible, main input:visible, main select:visible").evaluateAll((items) =>
     items.filter((item) => {
       const box = item.getBoundingClientRect();

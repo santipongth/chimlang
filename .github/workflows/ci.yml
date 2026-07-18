@@ -106,6 +106,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
+          # post-step `uv cache prune --ci` เคย exit 2 บน job นี้ (run 29622722253)
+          # ทำให้ job แดงทั้งที่ live workflow ผ่านครบทุก step — ปิด cache แลกเวลา install เล็กน้อย
+          enable-cache: false
       - name: Install dependencies
         run: uv sync
       - name: Apply migrations

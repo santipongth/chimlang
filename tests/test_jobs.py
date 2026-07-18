@@ -83,9 +83,21 @@ def test_run_readiness_preflight_for_fabric(client):
 
 def test_run_readiness_blocks_exceeded_monthly_budget(client, monkeypatch):
     import core.run_quality as quality
+    from core.config import Settings
 
     monkeypatch.setattr(quality, "spent_this_month", lambda dsn: 10.0)
     monkeypatch.setattr(quality, "effective_monthly_cap", lambda: 5.0)
+    # CI tier "mocked" ไม่มี .env/DB — pin model ให้ cost estimate ไปถึง monthly check ได้
+    # (โจทย์ของ test คือ monthly cap block ไม่ใช่ pricing fail-closed ซึ่งมี test แยกอยู่แล้ว)
+    monkeypatch.setattr(
+        quality,
+        "effective_llm_settings",
+        lambda: Settings(
+            llm_model_crowd="qwen/qwen3.5-flash-02-23",
+            llm_model_analyst="qwen/qwen3-235b-a22b-2507",
+            _env_file=None,
+        ),
+    )
     r = client.post(
         "/runs/readiness",
         json={
