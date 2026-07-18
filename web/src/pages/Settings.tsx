@@ -292,14 +292,14 @@ export default function Settings() {
                   ⚠️ {t("set_key_no_master")}
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="password"
                   value={keyDraft}
                   onChange={(e) => setKeyDraft(e.target.value)}
                   placeholder={t("set_key_ph")}
                   disabled={!data.llm.master_key_present}
-                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs disabled:opacity-50"
+                  className="min-w-40 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs disabled:opacity-50"
                 />
                 <button
                   onClick={saveKey}
@@ -513,14 +513,14 @@ export default function Settings() {
                     ? `✅ ${t("set_key_env")} (${data.news.tavily_masked})`
                     : `⚠️ ${t("set_tavily_none")}`}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="password"
                   value={tavilyDraft}
                   onChange={(e) => setTavilyDraft(e.target.value)}
                   placeholder={t("set_key_ph")}
                   disabled={!data.llm?.master_key_present}
-                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs disabled:opacity-50"
+                  className="min-w-40 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs disabled:opacity-50"
                 />
                 <button
                   onClick={async () => {
