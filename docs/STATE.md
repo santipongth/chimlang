@@ -23,6 +23,13 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
+- **ใหม่ (18 ก.ค. ADR-0025):** ลบกล่อง Simulation finding ใน Run Detail (เฉพาะ UI — registry
+  append-only คงเดิมตามกฎเหล็กข้อ 3) + ลบ Run repair ทั้งฟีเจอร์ (endpoints/engine helpers/UI;
+  ไม่มีตาราง DB เฉพาะ) + **แก้บั๊ก Trust Scorecard 2 ตัว**: budget check ที่ pass เสมอ และ
+  scorecard ไม่ engine-aware (fabric โดนหักจากเช็ค debate ที่ไม่เกี่ยว — ตอนนี้ตัวหารคะแนนมาจาก
+  เช็คที่เกี่ยวจริงต่อ engine) พร้อม tests ใหม่ 6 ตัว และแปล label/band เป็นไทย (rd_tsc_*).
+  Verification: backend 413, Vitest 11, Playwright 20, Ruff, OpenAPI, build, Compose rebuild ผ่าน.
+
 - **ใหม่ (18 ก.ค. ถอด Watchlist + แปลไทย/อังกฤษเต็มรูปทั้ง UI):** (1) **ADR-0024** ถอด Watchlist
   ทั้งฟีเจอร์ตามคำสั่งผู้ใช้: หน้า/เมนู/unread badge, router, `governance/watchlist.py`+`webhook.py`,
   Celery beat รายชั่วโมง, config `alert_webhook_url`/`consensus_shift_threshold` และ migration

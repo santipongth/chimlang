@@ -217,14 +217,6 @@ class RunStore:
         )
         return True
 
-    def update_payload(self, run_id: str, payload: dict, message: str = "updated") -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "UPDATE sim_runs SET payload = %s, progress_message = %s WHERE run_id = %s",
-                (json.dumps(payload, ensure_ascii=False), message[:200], run_id),
-            )
-        self.add_event(run_id, "payload_updated", stage="repair", message=message)
-
     def fail(self, run_id: str, error: str) -> bool:
         with self._conn() as conn:
             row = conn.execute(

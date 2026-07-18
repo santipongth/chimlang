@@ -8,7 +8,7 @@
   (ต้นแบบนับ stance 0 ต่อเงียบๆ = silent corruption)
 - ทุก call ผ่าน adapter + BudgetGuard, ประเมิน cost ก่อนเริ่ม; crowd ใช้ reasoning=False
   (บทเรียน 6 ก.ค. — เร็ว 29x); production synthesis ใช้ analyst และ fail หาก analyst ล้ม
-  ส่วน mechanical synthesis ใช้เฉพาะคำสั่ง rebuild stored snapshot ที่ผู้ใช้เรียกชัดเจน
+  โดยไม่มี mechanical fallback (ADR-0018; เส้นทาง rebuild snapshot ถูกถอดตาม ADR-0025)
 - ภาษาไทย first-class + กติกา prompt มาตรฐาน (ห้ามกุชื่อ/ตัวเลข)
 """
 
@@ -541,69 +541,6 @@ def analyze_protocol(posts: list[DebatePost], *, subject: str, rounds: int) -> d
         "contention_graph": {"nodes": nodes, "edges": edges},
         "failure_taxonomy": failures,
     }
-
-
-def _mechanical_synthesis(posts: list[DebatePost], subject: str, rounds: int) -> dict:
-    ok = [p for p in posts if not p.failed and p.round_no == rounds - 1]
-    n = len(ok) or 1
-    avg = sum(p.stance for p in ok) / n
-    pos = sum(1 for p in ok if p.stance > 0.2)
-    neg = sum(1 for p in ok if p.stance < -0.2)
-    lean = "เอนไปทางเห็นด้วย" if avg > 0.15 else "เอนไปทางคัดค้าน" if avg < -0.15 else "เสียงแตก"
-    return {
-        "summary": f"หัวข้อ '{subject}': หลังดีเบต {rounds} รอบ วงสนทนา{lean} (จุดยืนเฉลี่ย {avg:+.2f})",
-        "confidence": round(min(0.9, 0.5 + abs(avg) / 2), 2),
-        "distribution": [
-            {"bucket": "เห็นด้วย", "pct": round(pos / n * 100)},
-            {"bucket": "กลางๆ", "pct": round((n - pos - neg) / n * 100)},
-            {"bucket": "คัดค้าน", "pct": round(neg / n * 100)},
-        ],
-        "key_drivers": ["(สรุปเชิงกลไก — analyst model ไม่พร้อม)"],
-        "risks": ["synthesis เป็น fallback เชิงกลไก ไม่ใช่บทวิเคราะห์ LLM"],
-        "fallback": True,
-    }
-
-
-def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict:
-    """Rebuild debate metrics/synthesis from stored posts only.
-
-    This is the safe partial-retry path for UI/API repair: it never calls an LLM and
-    therefore preserves replay reproducibility and budget guarantees.
-    """
-    debate_posts = [
-        DebatePost(
-            round_no=int(p["round_no"]),
-            agent_idx=int(p["agent_idx"]),
-            segment=str(p["segment"]),
-            content=str(p.get("content", "")),
-            stance=float(p.get("stance", 0.0)),
-            sentiment=float(p.get("sentiment", 0.0)),
-            failed=bool(p.get("failed", False)),
-            failure_reason=str(p.get("failure_reason", "")),
-            parser_mode=str(p.get("parser_mode", "")),
-            move_id=str(p.get("move_id", "")),
-            move_type=normalize_move_type(p.get("move_type")),
-            parent_move_id=str(p.get("parent_move_id", "")),
-            evidence_refs=normalize_evidence_refs(p.get("evidence_refs", [])),
-            # posts จาก DB ไม่มี expressed (คอลัมน์คงที่) → default True; voice metrics
-            # ที่แม่นอยู่ใน payload ของ run จริงเท่านั้น
-            expressed=bool(p.get("expressed", True)),
-        )
-        for p in posts
-    ]
-    effective_rounds = max(1, rounds or (max((p.round_no for p in debate_posts), default=0) + 1))
-    agent_count = len({p.agent_idx for p in debate_posts})
-    metrics = _compute_metrics(debate_posts, effective_rounds, agent_count)
-    synthesis = _mechanical_synthesis(debate_posts, subject, effective_rounds)
-    failed = metrics["posts_failed"]
-    total = len(debate_posts) or 1
-    synthesis["confidence"] = round(
-        float(synthesis.get("confidence", 0.5)) * (1 - failed / total), 2
-    )
-    synthesis["resynthesized_from_snapshot"] = True
-    protocol = analyze_protocol(debate_posts, subject=subject, rounds=effective_rounds)
-    protocol["verifier"] = verify_moves(debate_posts)
-    return {"synthesis": synthesis, "metrics": metrics, "protocol": protocol}
 
 
 def run_debate(

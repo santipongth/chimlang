@@ -424,28 +424,6 @@ export async function deleteRun(runId: string): Promise<void> {
   if (!response.ok) throw openApiError(error, response.status);
 }
 
-export async function createPrediction(
-  runId: string,
-  body: {
-    claim: string;
-    probability: number;
-    measurement: string;
-    due_date: string;
-    domain?: string;
-    forecast_type: "binary";
-  },
-): Promise<{ predictions: PredictionContract[]; findings: SimulationFinding[] }> {
-  const { data, error, response } = await apiClient.POST("/runs/{run_id}/predictions", {
-    params: { path: { run_id: runId } },
-    body: { ...body, domain: body.domain ?? "general" },
-  });
-  if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as {
-    predictions: PredictionContract[];
-    findings: SimulationFinding[];
-  };
-}
-
 export interface ValidationReport {
   parent_run_id: string;
   status: string;
@@ -512,20 +490,6 @@ export async function retryRun(runId: string): Promise<RunJobStatus> {
   });
   if (!response.ok || !data) throw openApiError(error, response.status);
   return data as unknown as RunJobStatus;
-}
-
-export async function refreshRunNews(runId: string): Promise<void> {
-  const { error, response } = await apiClient.POST("/runs/{run_id}/refresh-news", {
-    params: { path: { run_id: runId } },
-  });
-  if (!response.ok) throw openApiError(error, response.status);
-}
-
-export async function resynthesizeRun(runId: string): Promise<void> {
-  const { error, response } = await apiClient.POST("/runs/{run_id}/resynthesize", {
-    params: { path: { run_id: runId } },
-  });
-  if (!response.ok) throw openApiError(error, response.status);
 }
 
 export interface RunMetrics {

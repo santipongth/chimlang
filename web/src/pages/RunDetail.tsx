@@ -20,10 +20,7 @@ import {
   SimRunDetail,
   ValidationReport,
   cancelRun,
-  createPrediction,
   pct,
-  refreshRunNews,
-  resynthesizeRun,
   rerunRun,
   shareRun,
   unshareRun,
@@ -268,18 +265,26 @@ function SocialSignalMap({ newsItems, t }: { newsItems: any[]; t: (k: string) =>
 function TrustScorecard({ scorecard, t }: { scorecard: SimRunDetail["trust_scorecard"]; t: (k: string) => string }) {
   if (!scorecard) return null;
   const tone = scorecard.band === "strong" ? "text-primary-strong" : scorecard.band === "usable" ? "text-amber-700" : "text-red-700";
+  // แปล label ของ check ตาม id — id ที่ไม่รู้จัก fallback เป็น label จาก API (detail คงเป็น technical)
+  const checkLabel = (c: { id: string; label: string }) => {
+    const key = `rd_tsc_${c.id}`;
+    const translated = t(key);
+    return translated === key ? c.label : translated;
+  };
+  const bandKey = `rd_tsc_band_${scorecard.band}`;
+  const bandLabel = t(bandKey) === bandKey ? scorecard.band : t(bandKey);
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("rd_trust_scorecard")}</div>
           <div className={`mt-1 text-3xl font-semibold ${tone}`}>{scorecard.score}/100</div>
-          <div className="text-xs text-muted-foreground">{scorecard.band}</div>
+          <div className="text-xs text-muted-foreground">{bandLabel}</div>
         </div>
         <div className="grid flex-1 gap-2 md:grid-cols-3">
           {scorecard.checks.map((c) => (
             <div key={c.id} className={`rounded-xl border px-3 py-2 text-xs ${c.status === "block" ? "border-red-200 bg-red-50 text-red-700" : c.status === "warn" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-primary/20 bg-primary/5 text-primary-strong"}`}>
-              <div className="font-medium">{c.label}</div>
+              <div className="font-medium">{checkLabel(c)}</div>
               <div className="mt-0.5 text-muted-foreground">{c.detail}</div>
             </div>
           ))}
@@ -453,15 +458,7 @@ export default function RunDetail({
   const [shareErr, setShareErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
-  const [repairBusy, setRepairBusy] = useState("");
-  const [repairErr, setRepairErr] = useState("");
-  const [predictionOpen, setPredictionOpen] = useState(false);
-  const [predictionDraft, setPredictionDraft] = useState({
-    claim: "",
-    probability: 0.5,
-    measurement: "",
-    due_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-  });
+  const [actionErr, setActionErr] = useState("");
   const [contractBusy, setContractBusy] = useState(false);
   const [runActionBusy, setRunActionBusy] = useState("");
   const [validationEnabled, setValidationEnabled] = useState(false);
@@ -488,12 +485,12 @@ export default function RunDetail({
 
   async function cancelCurrentRun() {
     setRunActionBusy("cancel");
-    setRepairErr("");
+    setActionErr("");
     try {
       await cancelRun(runId);
       await reload();
     } catch (e: any) {
-      setRepairErr(String(e.message ?? e));
+      setActionErr(String(e.message ?? e));
     } finally {
       setRunActionBusy("");
     }
@@ -501,60 +498,28 @@ export default function RunDetail({
 
   async function rerun(inputMode: "frozen" | "latest") {
     setRunActionBusy(inputMode);
-    setRepairErr("");
+    setActionErr("");
     try {
       const key = globalThis.crypto?.randomUUID?.() ?? `rerun-${Date.now()}-${Math.random()}`;
       const accepted = await rerunRun(runId, inputMode, key);
       if (onOpenRun) onOpenRun(accepted.run_id);
       else window.location.hash = `/runs/${encodeURIComponent(accepted.run_id)}`;
     } catch (e: any) {
-      setRepairErr(String(e.message ?? e));
+      setActionErr(String(e.message ?? e));
     } finally {
       setRunActionBusy("");
     }
   }
 
-  async function repair(kind: "news" | "synthesis") {
-    setRepairBusy(kind);
-    setRepairErr("");
-    try {
-      if (kind === "news") await refreshRunNews(runId);
-      else await resynthesizeRun(runId);
-      await reload();
-    } catch (e: any) {
-      setRepairErr(String(e.message ?? e));
-    } finally {
-      setRepairBusy("");
-    }
-  }
-
-  async function savePrediction() {
-    setContractBusy(true);
-    setRepairErr("");
-    try {
-      await createPrediction(runId, {
-        ...predictionDraft,
-        domain: data?.domain,
-        forecast_type: "binary",
-      });
-      setPredictionOpen(false);
-      await reload();
-    } catch (e: any) {
-      setRepairErr(String(e.message ?? e));
-    } finally {
-      setContractBusy(false);
-    }
-  }
-
   async function startValidation() {
     setContractBusy(true);
-    setRepairErr("");
+    setActionErr("");
     try {
       await validateRun(runId);
       setValidationEnabled(true);
       await queryClient.invalidateQueries({ queryKey: ["validation", runId] });
     } catch (e: any) {
-      setRepairErr(String(e.message ?? e));
+      setActionErr(String(e.message ?? e));
     } finally {
       setContractBusy(false);
     }
@@ -590,7 +555,6 @@ export default function RunDetail({
     {},
   );
   const shownRound = replayRound ?? (rounds.length ? rounds[rounds.length - 1] : 0);
-  const canRepair = Boolean(data && isDebate && data.status !== "queued" && data.status !== "running");
 
   return (
     <div className="space-y-6">
@@ -697,7 +661,7 @@ export default function RunDetail({
         </section>
       )}
 
-      {repairErr && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{repairErr}</p>}
+      {actionErr && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{actionErr}</p>}
 
       {data && (data.status === "complete" || data.status === "error") && (
         <>
@@ -709,109 +673,7 @@ export default function RunDetail({
             onRerunFrozen={() => rerun("frozen")}
             rerunBusy={runActionBusy === "frozen"}
           />
-          <section className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {data.result_kind === "prediction" ? t("rd_prediction_contract") : t("rd_simulation_finding")}
-                </div>
-                <p className="mt-2 text-sm">
-                  {data.predictions?.[0]?.claim ?? data.findings?.[0]?.summary ?? t("rd_no_contract")}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {data.result_kind === "prediction"
-                    ? `${Math.round((data.predictions?.[0]?.probability ?? 0) * 100)}% · ${t("rd_due_word")} ${data.predictions?.[0]?.due_date}`
-                    : t("rd_not_in_calibration")}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {data.result_kind !== "prediction" && (
-                  <button
-                    onClick={() => setPredictionOpen((v) => !v)}
-                    className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white"
-                  >
-                    {t("rd_create_prediction")}
-                  </button>
-                )}
-                <button
-                  disabled={contractBusy}
-                  onClick={startValidation}
-                  className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
-                >
-                  {t("rd_validate_seeds")}
-                </button>
-              </div>
-            </div>
-            {predictionOpen && (
-              <div className="mt-4 grid gap-3 rounded-xl border border-border bg-background p-4 md:grid-cols-2">
-                <input
-                  value={predictionDraft.claim}
-                  onChange={(e) => setPredictionDraft({ ...predictionDraft, claim: e.target.value })}
-                  placeholder={t("rd_claim_ph")}
-                  className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
-                />
-                <input
-                  value={predictionDraft.measurement}
-                  onChange={(e) => setPredictionDraft({ ...predictionDraft, measurement: e.target.value })}
-                  placeholder={t("rd_measurement_ph")}
-                  className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
-                />
-                <label className="text-xs text-muted-foreground">
-                  {t("rd_probability")} {(predictionDraft.probability * 100).toFixed(0)}%
-                  <input
-                    type="range"
-                    min="0.01"
-                    max="0.99"
-                    step="0.01"
-                    value={predictionDraft.probability}
-                    onChange={(e) => setPredictionDraft({ ...predictionDraft, probability: Number(e.target.value) })}
-                    className="mt-2 w-full"
-                  />
-                </label>
-                <input
-                  type="date"
-                  value={predictionDraft.due_date}
-                  onChange={(e) => setPredictionDraft({ ...predictionDraft, due_date: e.target.value })}
-                  className="rounded-lg border border-border px-3 py-2 text-sm"
-                />
-                <button
-                  disabled={contractBusy || !predictionDraft.claim || !predictionDraft.measurement}
-                  onClick={savePrediction}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50 md:col-span-2"
-                >
-                  {t("rd_save_append_only")}
-                </button>
-              </div>
-            )}
-          </section>
           <TrustScorecard scorecard={data.trust_scorecard} t={t} />
-          {canRepair && (
-            <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
-              <div>
-                <div className="text-sm font-semibold">{t("rd_repair_title")}</div>
-                <p className="text-xs text-muted-foreground">{t("rd_repair_desc")}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {data.config?.live_news === true && (
-                  <button
-                    disabled={!!repairBusy}
-                    onClick={() => repair("news")}
-                    className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${repairBusy === "news" ? "animate-spin" : ""}`} /> {t("rd_refresh_news")}
-                  </button>
-                )}
-                <button
-                  disabled={!!repairBusy}
-                  onClick={() => repair("synthesis")}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong disabled:opacity-50"
-                >
-                  <FileSearch className="h-4 w-4" /> {t("rd_recompute")}
-                </button>
-              </div>
-              {repairErr && <div className="basis-full rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{repairErr}</div>}
-            </section>
-          )}
           <Tabs<Tab>
             tabs={[
               { id: "overview" as Tab, label: t("rd_tab_result") },

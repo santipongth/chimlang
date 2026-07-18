@@ -186,6 +186,14 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
 def build_trust_scorecard(detail: dict) -> dict:
     payload = detail.get("payload") or {}
     checks: list[dict] = []
+    # Engine-aware: fabric ($0 mechanistic) มีเฉพาะเช็คที่เกี่ยวจริง — เช็คฝั่ง LLM/debate
+    # (sources/news/posts/budget/verifier/judge) ไม่ถูก append จึงไม่เข้าตัวหารคะแนน
+    engine_key = str(detail.get("engine") or "")
+    try:
+        llm_engine = get_engine(engine_key).uses_llm
+    except ValueError:
+        # engine ที่ไม่รู้จัก: คงชุดเช็คเต็มแบบ conservative (พฤติกรรมเดิม)
+        llm_engine = True
 
     def add(id_: str, label: str, status: str, detail_text: str, weight: int = 1) -> None:
         checks.append(
@@ -205,40 +213,46 @@ def build_trust_scorecard(detail: dict) -> dict:
         detail.get("status", "unknown"),
         2,
     )
-    sources = list(payload.get("sources") or [])
-    blocked_sources = sum(1 for s in sources if s.get("status") in {"blocked", "error"})
-    add(
-        "sources",
-        "Evidence sources",
-        "pass" if sources and not blocked_sources else "warn" if not blocked_sources else "block",
-        f"{len(sources)} sources, {blocked_sources} blocked/error",
-        2,
-    )
-    news_items = list((payload.get("news") or {}).get("items") or [])
-    bad_news = sum(1 for n in news_items if n.get("status") in {"blocked", "error"})
-    add(
-        "news",
-        "News Desk",
-        "pass" if news_items and not bad_news else "warn" if not bad_news else "block",
-        f"{len(news_items)} items, {bad_news} blocked/error",
-    )
-    metrics = payload.get("metrics") or {}
-    failed = int(metrics.get("posts_failed") or 0)
-    ok = int(metrics.get("posts_ok") or 0)
-    fail_rate = failed / max(1, failed + ok)
-    add(
-        "parse_failures",
-        "Agent output integrity",
-        "pass" if fail_rate <= 0.05 else "warn" if fail_rate <= 0.2 else "block",
-        f"{failed} failed of {failed + ok} posts",
-        2,
-    )
-    add(
-        "budget",
-        "Budget accounting",
-        "pass" if payload.get("cost_usd", 0) is not None else "warn",
-        f"${float(payload.get('cost_usd') or 0):.4f}",
-    )
+    if llm_engine:
+        sources = list(payload.get("sources") or [])
+        blocked_sources = sum(1 for s in sources if s.get("status") in {"blocked", "error"})
+        add(
+            "sources",
+            "Evidence sources",
+            "pass"
+            if sources and not blocked_sources
+            else "warn"
+            if not blocked_sources
+            else "block",
+            f"{len(sources)} sources, {blocked_sources} blocked/error",
+            2,
+        )
+        news_items = list((payload.get("news") or {}).get("items") or [])
+        bad_news = sum(1 for n in news_items if n.get("status") in {"blocked", "error"})
+        add(
+            "news",
+            "News Desk",
+            "pass" if news_items and not bad_news else "warn" if not bad_news else "block",
+            f"{len(news_items)} items, {bad_news} blocked/error",
+        )
+        metrics = payload.get("metrics") or {}
+        failed = int(metrics.get("posts_failed") or 0)
+        ok = int(metrics.get("posts_ok") or 0)
+        fail_rate = failed / max(1, failed + ok)
+        add(
+            "parse_failures",
+            "Agent output integrity",
+            "pass" if fail_rate <= 0.05 else "warn" if fail_rate <= 0.2 else "block",
+            f"{failed} failed of {failed + ok} posts",
+            2,
+        )
+        add(
+            "budget",
+            "Budget accounting",
+            # cost_usd หาย = ไม่มีข้อมูลต้นทุน → warn (เดิม get(..., 0) ทำให้ pass เสมอ)
+            "pass" if payload.get("cost_usd") is not None else "warn",
+            f"${float(payload.get('cost_usd') or 0):.4f}",
+        )
     manifest = detail.get("manifest") or {}
     try:
         from core.run_manifest import verify_manifest_hash
@@ -258,25 +272,27 @@ def build_trust_scorecard(detail: dict) -> dict:
             else str(manifest.get("reproducibility") or "legacy-incomplete")
         ),
     )
-    verifier = (payload.get("protocol") or {}).get("verifier") or {}
-    add(
-        "deterministic_verifier",
-        "Typed move verifier",
-        "pass"
-        if verifier.get("status") == "pass"
-        else "block"
-        if verifier.get("status") == "fail"
-        else "warn",
-        f"{verifier.get('status', 'legacy')} · {len(verifier.get('violations') or [])} findings",
-        2,
-    )
-    judge = (payload.get("protocol") or {}).get("analyst_judge") or {}
-    add(
-        "analyst_judge",
-        "Analyst judge",
-        "pass" if judge.get("verdict") == "pass" else "warn",
-        str(judge.get("verdict") or "legacy/unavailable"),
-    )
+    if llm_engine:
+        verifier = (payload.get("protocol") or {}).get("verifier") or {}
+        add(
+            "deterministic_verifier",
+            "Typed move verifier",
+            "pass"
+            if verifier.get("status") == "pass"
+            else "block"
+            if verifier.get("status") == "fail"
+            else "warn",
+            f"{verifier.get('status', 'legacy')} · "
+            f"{len(verifier.get('violations') or [])} findings",
+            2,
+        )
+        judge = (payload.get("protocol") or {}).get("analyst_judge") or {}
+        add(
+            "analyst_judge",
+            "Analyst judge",
+            "pass" if judge.get("verdict") == "pass" else "warn",
+            str(judge.get("verdict") or "legacy/unavailable"),
+        )
     total_weight = sum(c["weight"] for c in checks)
     earned = sum(c["weight"] for c in checks if c["status"] == "pass") + 0.5 * sum(
         c["weight"] for c in checks if c["status"] == "warn"
