@@ -7,7 +7,6 @@ const emptySettings = {
   default_rounds: 3,
   default_domain: "general",
   default_tab: "overview",
-  webhook_configured: false,
   auth_enabled: false,
   caps: { fabric: 1000, debate: 1000 },
   llm_provider: "openrouter",
@@ -63,7 +62,6 @@ async function stubApi(page: Page) {
     const request = route.request();
     if (!["fetch", "xhr"].includes(request.resourceType())) return route.continue();
     const path = new URL(request.url()).pathname;
-    if (path.endsWith("/watchlists.json")) return fulfill(route, { items: [], alerts: [], unread: 0, webhook_configured: false });
     if (path.endsWith("/engines.json")) return fulfill(route, { engines: [{ key: "fabric", label_th: "Fabric", label_en: "Fabric", desc_th: "แบบจำลองเชิงกล", desc_en: "Mechanistic model", uses_llm: false, max_agents: 1000 }] });
     if (path.endsWith("/settings.json")) return fulfill(route, emptySettings);
     if (path.endsWith("/personas/packs.json")) return fulfill(route, { packs: [] });
@@ -87,7 +85,6 @@ const routes = [
   "/history",
   "/insights",
   "/experiments",
-  "/watchlist",
   "/gallery",
   "/settings",
 ];

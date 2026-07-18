@@ -32,7 +32,6 @@ celery_app.conf.update(
     task_publish_retry_policy={"max_retries": 3, "interval_start": 0, "interval_step": 0.5},
     task_routes={
         "chimlang.whatif_dashboard": {"queue": "fabric"},
-        "chimlang.check_watchlists": {"queue": "maintenance"},
         "chimlang.detect_stale_runs": {"queue": "maintenance"},
     },
 )
@@ -198,29 +197,8 @@ def persistent_run_task(
                     raise
 
 
-@celery_app.task(name="chimlang.check_watchlists")
-def check_watchlists_task() -> dict:
-    """P5-M5 — ไล่ตรวจ watchlist ที่ถึงรอบตาม cadence แล้วสร้าง alert/webhook
-
-    ตัวหนึ่งพังไม่หยุดตัวอื่น (best-effort ราย watchlist) — คืนสรุปจำนวนที่ตรวจ/alert
-    """
-    from governance.watchlist import WatchlistStore, check_watchlist, default_runner
-
-    store = WatchlistStore(_settings.postgres_url)
-    checked, alerts, failed = 0, 0, 0
-    for w in store.due():
-        try:
-            alerts += len(check_watchlist(store, w, runner=default_runner))
-            checked += 1
-        except Exception:
-            failed += 1  # watchlist เดียวพังห้ามลากทั้งคิว
-    return {"checked": checked, "alerts": alerts, "failed": failed}
-
-
-# Celery beat: ปลุกทุกชั่วโมง (cadence จริงคุมใน WatchlistStore.due())
-# รัน beat: uv run celery -A core.tasks.celery_app beat -l info
+# Celery beat — รัน beat: uv run celery -A core.tasks.celery_app beat -l info
 celery_app.conf.beat_schedule = {
-    "check-watchlists-hourly": {"task": "chimlang.check_watchlists", "schedule": 3600.0},
     "detect-stale-runs": {"task": "chimlang.detect_stale_runs", "schedule": 60.0},
 }
 

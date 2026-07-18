@@ -154,7 +154,7 @@ function KnowledgeGraph({ data, t }: { data: GraphSummary; t: (k: string) => str
               </div>
               <div className="mt-1 font-medium">{selNode.name}</div>
               <div className="mt-2 text-xs text-muted-foreground">
-                degree {selNode.degree} · {t("ins_sources")} {selNode.sources}
+                {t("ins_degree")} {selNode.degree} · {t("ins_sources")} {selNode.sources}
               </div>
               <div className="mt-3 text-xs uppercase tracking-wider text-muted-foreground">{t("ins_connections")}</div>
               <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs">

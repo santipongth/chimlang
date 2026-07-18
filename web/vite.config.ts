@@ -32,8 +32,8 @@ export default defineConfig({
       [
         "/dashboard.json", "/signal.json", "/graph", "/health",
         "/runs", "/run-jobs", "/run-metrics.json", "/simruns.json", "/settings",
-        "/experiments", "/engines.json", "/personas", "/gallery", "/watchlists",
-        "/alerts", "/observability.json", "/compare.json",
+        "/experiments", "/engines.json", "/personas", "/gallery",
+        "/observability.json", "/compare.json",
       ].map((path) => [
         path,
         { target: "http://localhost:8000", changeOrigin: true },

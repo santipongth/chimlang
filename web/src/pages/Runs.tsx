@@ -215,7 +215,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
                       </span>
                       <span>{r.engine}</span>
                       <span>{r.created_at.slice(0, 16).replace("T", " ")}</span>
-                      <span>{r.agents} agents</span>
+                      <span>{r.agents} {t("ui_agents_unit")}</span>
                     </div>
                     <div className="mt-1 truncate font-medium">{r.subject}</div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
@@ -266,7 +266,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
           <h2 className="font-semibold">{t("runs_evidence_health")}</h2>
           {hourlyTrend.length > 0 && (
             <div>
-              <div className="mb-2 text-xs text-muted-foreground">24h run trend</div>
+              <div className="mb-2 text-xs text-muted-foreground">{t("runs_trend_24h")}</div>
               <div className="flex h-16 items-end gap-1 rounded-xl border border-border bg-background p-2">
                 {hourlyTrend.map((x, i) => {
                   const h = Math.max(8, Math.min(100, x.total * 18));
@@ -318,7 +318,7 @@ export default function Runs({ onOpen }: { onOpen: (runId: string) => void }) {
             {legacy.due.map((d) => (
               <li key={d.prediction_id} className="rounded-xl border border-border px-4 py-2.5">
                 <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-xs">#{d.prediction_id}</span>
-                <span className="mr-2 text-xs text-muted-foreground">{d.domain} · due {d.due_date}</span>
+                <span className="mr-2 text-xs text-muted-foreground">{d.domain} · {t("rd_due_word")} {d.due_date}</span>
                 {d.claim}
               </li>
             ))}

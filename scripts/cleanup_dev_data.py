@@ -3,7 +3,7 @@
     uv run python scripts/cleanup_dev_data.py          # ดูจำนวนที่จะถูกลบ (dry-run)
     uv run python scripts/cleanup_dev_data.py --yes    # ลบจริง
 
-ขอบเขต: ลบเฉพาะ **ตาราง operational** (watchlists/alerts/gallery/persona_packs)
+ขอบเขต: ลบเฉพาะ **ตาราง operational** (gallery/persona_packs/sim_runs)
 ที่ tests และการทดลอง dev สร้างทิ้งไว้ — ระบุด้วย marker คำว่า "ทดสอบ" หรือ
 label/subject ที่ test suite ใช้
 
@@ -20,11 +20,6 @@ from core.config import get_settings
 
 # เงื่อนไขระบุแถวที่มาจาก test/dev — อิง marker ที่ test suite ใช้จริง
 TARGETS: list[tuple[str, str]] = [
-    (
-        "watchlists",
-        "label LIKE '%ทดสอบ%' OR subject LIKE '%ทดสอบ%' OR label IN ('shift', 'tip', 'api-test')",
-    ),
-    ("alerts", "watchlist_id IS NULL"),  # ที่เหลือถูกลบตาม cascade ของ watchlists
     ("gallery_shares", "subject LIKE '%ทดสอบ%' OR subject LIKE 'หัวข้อ%' OR created_by = 'test'"),
     ("persona_packs", "label LIKE '%ทดสอบ%' OR prompt LIKE '%ทดสอบ%' OR created_by = 'test'"),
     ("sim_runs", "subject LIKE '%ทดสอบ%'"),  # debate_posts ลบตาม cascade

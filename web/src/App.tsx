@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ElementType } from "react";
 import {
   BarChart3,
-  Bell,
   Fish,
   Globe,
   History,
@@ -22,13 +21,11 @@ import {
   useParams,
 } from "react-router-dom";
 import { LangProvider, useLang } from "./i18n";
-import { fetchShellUnread } from "./api-shell";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const NewRun = lazy(() => import("./pages/NewRun"));
 const Runs = lazy(() => import("./pages/Runs"));
 const Compare = lazy(() => import("./pages/Compare"));
-const Watchlist = lazy(() => import("./pages/Watchlist"));
 const Insights = lazy(() => import("./pages/Insights"));
 const Experiments = lazy(() => import("./pages/Experiments"));
 const Gallery = lazy(() => import("./pages/Gallery"));
@@ -42,7 +39,6 @@ export const ROUTES = {
   history: "/history",
   insights: "/insights",
   experiments: "/experiments",
-  watchlist: "/watchlist",
   gallery: "/gallery",
   settings: "/settings",
   run: (runId: string) => `/runs/${encodeURIComponent(runId)}`,
@@ -61,7 +57,6 @@ type NavigationItem = {
   to: string;
   icon: ElementType;
   label: string;
-  badge?: number;
 };
 
 function LanguageControl() {
@@ -97,14 +92,13 @@ function LanguageControl() {
   );
 }
 
-function Navigation({ unread, onNavigate }: { unread: number; onNavigate?: () => void }) {
+function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useLang();
   const items: NavigationItem[] = [
     { to: ROUTES.new, icon: Plus, label: t("nav_new_run") },
     { to: ROUTES.history, icon: History, label: t("nav_history") },
     { to: ROUTES.insights, icon: BarChart3, label: t("nav_insights") },
     { to: ROUTES.gallery, icon: Globe, label: t("nav_gallery") },
-    { to: ROUTES.watchlist, icon: Bell, label: t("nav_watchlist"), badge: unread },
     { to: ROUTES.settings, icon: SettingsIcon, label: t("nav_settings") },
   ];
   return (
@@ -131,11 +125,6 @@ function Navigation({ unread, onNavigate }: { unread: number; onNavigate?: () =>
           >
             <item.icon className="h-4 w-4 shrink-0" />
             {item.label}
-            {(item.badge ?? 0) > 0 && (
-              <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-medium text-white">
-                {item.badge}
-              </span>
-            )}
           </NavLink>
         ))}
       </nav>
@@ -198,7 +187,6 @@ function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [request, setRequest] = useState<RunRequest | null>(null);
-  const [unread, setUnread] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -210,17 +198,6 @@ function Shell() {
     setDrawerOpen(false);
     window.setTimeout(() => openButtonRef.current?.focus(), 0);
   };
-
-  const refreshUnread = () =>
-    fetchShellUnread()
-      .then(setUnread)
-      .catch(() => {});
-
-  useEffect(() => {
-    refreshUnread();
-    const timer = window.setInterval(refreshUnread, 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (previousPathRef.current === location.pathname) return;
@@ -272,7 +249,7 @@ function Shell() {
         {routeAnnouncement}
       </div>
       <aside className="hidden min-h-screen w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex">
-        <Navigation unread={unread} />
+        <Navigation />
       </aside>
 
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:hidden">
@@ -310,7 +287,7 @@ function Shell() {
             >
               <X className="h-5 w-5" />
             </button>
-            <Navigation unread={unread} onNavigate={() => setDrawerOpen(false)} />
+            <Navigation onNavigate={() => setDrawerOpen(false)} />
           </aside>
         </div>
       )}
@@ -342,7 +319,6 @@ function Shell() {
             <Route path={ROUTES.insights} element={<Insights />} />
             <Route path={ROUTES.experiments} element={<ExperimentRoute />} />
             <Route path="/experiments/:experimentId" element={<ExperimentRoute />} />
-            <Route path={ROUTES.watchlist} element={<Watchlist onChanged={refreshUnread} />} />
             <Route path={ROUTES.gallery} element={<GalleryRoute />} />
             <Route path="/gallery/:token" element={<GalleryRoute />} />
             <Route path={ROUTES.settings} element={<Settings />} />

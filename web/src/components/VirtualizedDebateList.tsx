@@ -7,7 +7,7 @@ const VIEWPORT_HEIGHT = 520;
 const OVERSCAN = 4;
 
 export function VirtualizedDebateList({ posts }: { posts: DebatePostItem[] }) {
-  const { lang } = useLang();
+  const { t } = useLang();
   const [scrollTop, setScrollTop] = useState(0);
   const window = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
@@ -19,7 +19,7 @@ export function VirtualizedDebateList({ posts }: { posts: DebatePostItem[] }) {
   return (
     <div
       role="list"
-      aria-label={lang === "th" ? `โพสต์ดีเบต ${posts.length} รายการ` : `${posts.length} debate posts`}
+      aria-label={t("vd_posts_aria").replace("{n}", String(posts.length))}
       className="mt-4 overflow-y-auto rounded-xl border border-border bg-background"
       style={{ height: VIEWPORT_HEIGHT }}
       onScroll={onScroll}
@@ -41,12 +41,12 @@ export function VirtualizedDebateList({ posts }: { posts: DebatePostItem[] }) {
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="flex min-w-0 flex-wrap items-center gap-2 font-medium text-foreground">
                   <span className="truncate">{post.segment}</span>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{post.move_type ?? (lang === "th" ? "คำกล่าวอ้างเดิม" : "legacy claim")}</span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{post.move_type ?? t("vd_legacy_claim")}</span>
                   {post.move_id && <code className="text-[10px] text-muted-foreground">{post.move_id}</code>}
                 </span>
                 <span className="shrink-0 tabular-nums">{post.stance >= 0 ? "+" : ""}{post.stance.toFixed(2)}</span>
               </div>
-              <p className="mt-1 line-clamp-2">{post.failed ? (lang === "th" ? `(คำตอบ agent ล้มเหลว: ${post.failure_reason ?? "ไม่ทราบสาเหตุ"})` : `(agent response failed: ${post.failure_reason ?? "unknown"})`) : post.content}</p>
+              <p className="mt-1 line-clamp-2">{post.failed ? t("vd_failed_post").replace("{reason}", post.failure_reason ?? t("vd_unknown_reason")) : post.content}</p>
               {!post.failed && (post.parent_move_id || (post.evidence_refs?.length ?? 0) > 0) && (
                 <p className="mt-1 truncate text-[11px] text-muted-foreground">
                   {post.parent_move_id ? `↳ ${post.parent_move_id}` : ""}

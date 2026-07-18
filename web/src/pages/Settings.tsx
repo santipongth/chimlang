@@ -19,7 +19,7 @@ import { ConfirmDialog, PageHeader, SelectCard } from "../ui";
 // Settings (P6-M4) — ค่า default + จัดการ persona packs + สถานะระบบ (secrets อยู่ .env เท่านั้น)
 
 export default function Settings() {
-  const { t, formatCurrency } = useLang();
+  const { lang, t, formatCurrency } = useLang();
   const usd = (value: number) =>
     formatCurrency(value, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   const [data, setData] = useState<AppSettings | null>(null);
@@ -153,7 +153,7 @@ export default function Settings() {
           <section className={card + " space-y-4"}>
             <h2 className="font-semibold">{t("set_defaults")}</h2>
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Engine</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t("set_engine_default")}</div>
               <div className="grid sm:grid-cols-2 gap-2">
                 <SelectCard active={data.default_engine === "fabric"} onClick={() => patch({ default_engine: "fabric" })}>
                   <span className="text-sm">⚙ Fabric — $0 · cap {data.caps.fabric}</span>
@@ -165,7 +165,7 @@ export default function Settings() {
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Agents (default)</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("set_agents_default")}</span>
                 <input
                   type="number"
                   min={10}
@@ -177,7 +177,7 @@ export default function Settings() {
                 />
               </label>
               <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Debate rounds (default)</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("set_rounds_default")}</span>
                 <input
                   type="number"
                   min={1}
@@ -207,7 +207,7 @@ export default function Settings() {
                   }
                 >
                   <div className="text-sm font-medium">{p.label}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">{p.hint_th}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{lang === "en" ? p.hint_en || p.hint_th : p.hint_th}</div>
                 </SelectCard>
               ))}
             </div>
@@ -448,7 +448,7 @@ export default function Settings() {
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="text-muted-foreground">{t("set_budget_spent")}</span>
                   <span className="tabular-nums font-medium">
-                    {usd(data.budget.spent_this_month)} spent + {usd(data.budget.reserved_this_month)} reserved / {usd(data.budget.monthly_cap_effective)}
+                    {usd(data.budget.spent_this_month)} {t("set_budget_spent_word")} + {usd(data.budget.reserved_this_month)} {t("set_budget_reserved_word")} / {usd(data.budget.monthly_cap_effective)}
                   </span>
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
@@ -459,7 +459,7 @@ export default function Settings() {
                 </div>
                 <div className={`mt-2 text-xs font-medium ${data.budget.available_this_month <= 0 ? "text-red-600" : "text-emerald-700"}`}>
                   {data.budget.available_this_month <= 0
-                    ? `${t("set_budget_over")}: committed budget reached cap`
+                    ? `${t("set_budget_over")}: ${t("set_budget_committed_over")}`
                     : `${t("set_budget_remaining")}: ${usd(data.budget.available_this_month)}`}
                 </div>
                 {(data.run_budget_usd_cap === 0 || data.monthly_budget_usd_cap === 0) && (
@@ -528,7 +528,7 @@ export default function Settings() {
             </div>
             <div className="rounded-xl border border-border bg-background p-3 space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                🔎 Tavily Search API key
+                🔎 {t("set_tavily_key")}
               </div>
               <div className="text-xs">
                 {data.news.tavily_source === "db"
@@ -593,10 +593,10 @@ export default function Settings() {
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold">
                         {{
-                          pricing_metering: "Pricing / metering",
-                          source_strategy: "Open-source strategy",
-                          election_eligibility: "Election Mode eligibility",
-                          semantic_memory: "Semantic memory",
+                          pricing_metering: t("set_policy_pricing"),
+                          source_strategy: t("set_policy_source"),
+                          election_eligibility: t("set_policy_election"),
+                          semantic_memory: t("set_policy_memory"),
                         }[item.key]}
                       </h3>
                       <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary-strong">
@@ -608,7 +608,7 @@ export default function Settings() {
                     </code>
                     <p className="mt-2 text-xs text-muted-foreground">{item.rationale}</p>
                     <p className="mt-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                      <strong className="text-foreground">เกณฑ์ก่อนเปลี่ยน:</strong> {item.change_gate}
+                      <strong className="text-foreground">{t("set_change_gate")}:</strong> {item.change_gate}
                     </p>
                   </article>
                 ))}
@@ -637,28 +637,26 @@ export default function Settings() {
             )}
             {metrics && (
               <div className="rounded-xl border border-border bg-background p-3">
-                <div className="text-xs font-medium">Operational metrics</div>
+                <div className="text-xs font-medium">{t("set_ops_metrics")}</div>
                 <div className="mt-2 grid gap-1 sm:grid-cols-4">
                   <span className="rounded-lg border border-border px-2 py-1 text-xs">
-                    queue: {Math.round(metrics.avg_queue_wait_s)}s
+                    {t("runs_metric_queue")}: {Math.round(metrics.avg_queue_wait_s)}s
                   </span>
                   <span className="rounded-lg border border-border px-2 py-1 text-xs">
-                    runtime: {Math.round(metrics.avg_runtime_s)}s
+                    {t("runs_metric_runtime")}: {Math.round(metrics.avg_runtime_s)}s
                   </span>
                   <span className="rounded-lg border border-border px-2 py-1 text-xs">
-                    errors 24h: {metrics.errors_24h}
+                    {t("set_metric_errors")}: {metrics.errors_24h}
                   </span>
                   <span className="rounded-lg border border-border px-2 py-1 text-xs">
-                    spend: ${metrics.spent_this_month.toFixed(2)}
+                    {t("runs_metric_spend")}: ${metrics.spent_this_month.toFixed(2)}
                   </span>
                 </div>
               </div>
             )}
             <div className="grid grid-cols-[180px_1fr] gap-y-1.5 text-muted-foreground">
-              <span>Webhook (Slack/Discord)</span>
-              <span className="text-foreground">{data.webhook_configured ? `✅ ${t("set_webhook_on")}` : `— ${t("set_webhook_off")}`}</span>
               <span>Auth (X-API-Key)</span>
-              <span className="text-foreground">{data.auth_enabled ? "✅ เปิด" : `⚠️ ${t("set_auth_dev")}`}</span>
+              <span className="text-foreground">{data.auth_enabled ? `✅ ${t("set_auth_on")}` : `⚠️ ${t("set_auth_dev")}`}</span>
             </div>
             <p className="text-xs text-muted-foreground">🔒 {t("set_secret_note")}</p>
           </section>

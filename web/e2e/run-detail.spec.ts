@@ -55,9 +55,6 @@ const run = {
 };
 
 async function installRoutes(page: Page) {
-  await page.route("**/watchlists.json", async (route) => {
-    await route.fulfill({ json: { items: [], alerts: [], unread: 0, webhook_configured: false } });
-  });
   await page.route("**/runs/e2e-run.json", async (route) => {
     await route.fulfill({ json: run });
   });
@@ -124,9 +121,6 @@ test("virtualizes a 1,000-post Debate feed", async ({ page }) => {
       move_type: "claim",
     })),
   };
-  await page.route("**/watchlists.json", async (route) => {
-    await route.fulfill({ json: { items: [], alerts: [], unread: 0, webhook_configured: false } });
-  });
   await page.route("**/runs/e2e-large-run.json", async (route) => {
     await route.fulfill({ json: largeRun });
   });

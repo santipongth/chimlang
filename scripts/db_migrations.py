@@ -33,7 +33,6 @@ def _apply_module_schemas(conn: Connection) -> None:
     from core.runstore import _SCHEMA as runstore_schema
     from governance.gallery import _SCHEMA as gallery_schema
     from governance.store import _SCHEMA as governance_schema
-    from governance.watchlist import _SCHEMA as watchlist_schema
     from simulation.memory import _SCHEMA as memory_schema
     from simulation.newsdesk import _SCHEMA as newsdesk_schema
     from simulation.persona_packs import _SCHEMA as packs_schema
@@ -44,7 +43,6 @@ def _apply_module_schemas(conn: Connection) -> None:
         runstore_schema,
         governance_schema,
         gallery_schema,
-        watchlist_schema,
         packs_schema,
         sources_schema,
         newsdesk_schema,
@@ -373,6 +371,15 @@ def _remove_vector_retrieval(conn: Connection) -> None:
     conn.execute("DROP TABLE IF EXISTS run_chunk_embeddings")
 
 
+def _remove_watchlists(conn: Connection) -> None:
+    """ADR-0024: ถอดฟีเจอร์ Watchlist ทั้งหมด — ลบตาราง operational `alerts` และ `watchlists`
+    (ตรวจก่อนลบ 18 ก.ค. 2026: watchlists 360 แถว / alerts 180 แถว — ทั้งหมดเป็นข้อมูล
+    test-generated ตาม marker 'ทดสอบ'/'shift'/'tip'/'api-test'/'x' ไม่มีรายการผู้ใช้จริง)
+    audit log จาก watchlist_check เดิมเป็น append-only governance record คงไว้ตามเดิม"""
+    conn.execute("DROP TABLE IF EXISTS alerts CASCADE")
+    conn.execute("DROP TABLE IF EXISTS watchlists CASCADE")
+
+
 def _news_published_at(conn: Connection) -> None:
     """เก็บ timestamp จริงของข่าว (pubDate/published) ลง provenance ของ snapshot"""
     conn.execute(
@@ -485,6 +492,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-18-news-published-at-v1",
         "store real publication timestamps for news snapshot provenance",
         _news_published_at,
+    ),
+    (
+        "2026-07-18-remove-watchlists-v1",
+        "drop watchlist/alert operational tables after ADR-0024 feature decommission",
+        _remove_watchlists,
     ),
 ]
 

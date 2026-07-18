@@ -18,36 +18,42 @@ LLM_PROVIDERS: dict[str, dict] = {
         "base_url": "https://openrouter.ai/api/v1",
         "needs_key": True,
         "hint_th": "รวมหลายค่ายในคีย์เดียว (ค่าเริ่มต้นของโครงการ)",
+        "hint_en": "Many providers behind one key (the project default)",
     },
     "openai": {
         "label": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "needs_key": True,
         "hint_th": "GPT ทุกรุ่นจาก OpenAI โดยตรง",
+        "hint_en": "Every GPT model, directly from OpenAI",
     },
     "groq": {
         "label": "Groq",
         "base_url": "https://api.groq.com/openai/v1",
         "needs_key": True,
         "hint_th": "โมเดลโอเพนซอร์สความเร็วสูง",
+        "hint_en": "High-speed open-source models",
     },
     "together": {
         "label": "Together AI",
         "base_url": "https://api.together.xyz/v1",
         "needs_key": True,
         "hint_th": "โมเดลโอเพนซอร์สหลากหลาย",
+        "hint_en": "A wide range of open-source models",
     },
     "ollama": {
         "label": "Ollama",
         "base_url": "http://localhost:11434/v1",
         "needs_key": False,
         "hint_th": "รันโมเดลบนเครื่องตัวเอง — ข้อมูลไม่ออกนอกเครื่อง (ราคา token = 0)",
+        "hint_en": "Run models on your own machine — data never leaves it (token price = 0)",
     },
     "custom": {
         "label": "กำหนดเอง",
         "base_url": "",
         "needs_key": True,
         "hint_th": "บริการอื่นที่เข้ากับ OpenAI API",
+        "hint_en": "Any other OpenAI-compatible service",
     },
 }
 

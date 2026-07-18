@@ -561,6 +561,7 @@ export interface LlmProvider {
   base_url: string;
   needs_key: boolean;
   hint_th: string;
+  hint_en?: string; // เพิ่ม 18 ก.ค. 2026 — โหมดอังกฤษต้องไม่โชว์ hint ไทย (fallback hint_th)
 }
 
 export interface AppSettings {
@@ -569,7 +570,6 @@ export interface AppSettings {
   default_rounds: number;
   default_domain: string;
   default_tab: string;
-  webhook_configured: boolean;
   auth_enabled: boolean;
   caps: { fabric: number; debate: number };
   // LLM ปรับเองได้ (ADR-0006) — API key ไม่เคยมากับ response
@@ -877,88 +877,6 @@ export async function fetchInsights(): Promise<InsightsData> {
   const { data, error, response } = await apiClient.GET("/insights.json");
   if (!response.ok || !data) throw openApiError(error, response.status);
   return data as unknown as InsightsData;
-}
-
-// ---- Watchlist + alerts (P5-M5) ----
-
-export interface WatchlistItem {
-  id: number;
-  label: string;
-  subject: string;
-  agents: number;
-  cadence: "daily" | "weekly";
-  active: boolean;
-  last_run_at: string | null;
-  last_delta: number | null;
-}
-
-export interface AlertItem {
-  id: number;
-  ts: string;
-  watchlist_id: number | null;
-  kind: string;
-  payload: {
-    subject?: string;
-    shift?: number;
-    run_id?: string;
-    prediction_id?: number;
-    [key: string]: unknown;
-  };
-  read: boolean;
-}
-
-export interface WatchlistData {
-  items: WatchlistItem[];
-  alerts: AlertItem[];
-  unread: number;
-  webhook_configured: boolean;
-}
-
-export async function fetchWatchlists(): Promise<WatchlistData> {
-  const { data, error, response } = await apiClient.GET("/watchlists.json");
-  if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as WatchlistData;
-}
-
-export async function createWatchlist(body: {
-  label: string;
-  subject: string;
-  agents: number;
-  cadence: "daily" | "weekly";
-}): Promise<void> {
-  const { error, response } = await apiClient.POST("/watchlists", {
-    body,
-  });
-  if (!response.ok) throw openApiError(error, response.status);
-}
-
-export async function toggleWatchlist(id: number, active: boolean): Promise<void> {
-  const { error, response } = await apiClient.POST("/watchlists/{watchlist_id}/toggle", {
-    params: { path: { watchlist_id: id }, query: { active } },
-  });
-  if (!response.ok) throw openApiError(error, response.status);
-}
-
-export async function deleteWatchlist(id: number): Promise<void> {
-  const { error, response } = await apiClient.DELETE("/watchlists/{watchlist_id}", {
-    params: { path: { watchlist_id: id } },
-  });
-  if (!response.ok) throw openApiError(error, response.status);
-}
-
-export async function runWatchlistNow(id: number): Promise<{ alerts_created: AlertItem[] }> {
-  const { data, error, response } = await apiClient.POST("/watchlists/{watchlist_id}/run", {
-    params: { path: { watchlist_id: id } },
-  });
-  if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as { alerts_created: AlertItem[] };
-}
-
-export async function markAlertsRead(id?: number): Promise<void> {
-  const { error, response } = await apiClient.POST("/alerts/read", {
-    body: id == null ? { all: true } : { id, all: false },
-  });
-  if (!response.ok) throw openApiError(error, response.status);
 }
 
 // ---- Compare baseline vs +Red Team (P5-M4) ----

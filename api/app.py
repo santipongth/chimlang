@@ -42,7 +42,6 @@ from api.routers.policy import router as policy_router
 from api.routers.populations import router as populations_router
 from api.routers.runs import router as runs_router
 from api.routers.settings import router as settings_router
-from api.routers.watchlists import router as watchlists_router
 from core.config import get_settings
 from governance.election import ElectionModeError, ElectionPolicy, classify_scenario
 from governance.rbac import Permission, Principal
@@ -77,7 +76,6 @@ app.include_router(settings_router)
 app.include_router(personas_router)
 app.include_router(populations_router)
 app.include_router(policy_router)
-app.include_router(watchlists_router)
 
 _WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 if _WEB_DIST.exists():

@@ -791,13 +791,6 @@ def test_api_rejects_too_few_agents_before_db(client):
     assert (
         client.post("/gallery/share", json={"subject": "หัวข้อแชร์", "agents": -1}).status_code == 422
     )
-    assert (
-        client.post(
-            "/watchlists",
-            json={"label": "x", "subject": "หัวข้อ watchlist", "agents": 0, "cadence": "daily"},
-        ).status_code
-        == 422
-    )
 
 
 # ---- settings (M4) ----

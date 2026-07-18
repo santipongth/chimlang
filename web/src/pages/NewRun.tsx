@@ -309,7 +309,7 @@ export default function NewRun({
               <span className="mt-0.5 block text-xs text-muted-foreground">{t("wiz_news_desc")}</span>
             </span>
             <span className={`ml-3 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${liveNews ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
-              {liveNews ? "ON" : "OFF"}
+              {liveNews ? t("ui_on") : t("ui_off")}
             </span>
           </button>
           <div className="flex flex-wrap gap-2">
@@ -374,11 +374,11 @@ export default function NewRun({
 
       {stepKey === "agents" && (
         <div className={card + " space-y-4"}>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_agents")} (cap {cap})</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_agents")} ({t("ui_cap_word")} {cap})</div>
           <div className="grid sm:grid-cols-3 gap-2">
             {agentChoices.map((n) => (
               <SelectCard key={n} active={agents === n} onClick={() => setAgents(n)}>
-                <span className="text-sm font-medium">{formatNumber(n)} agents</span>
+                <span className="text-sm font-medium">{formatNumber(n)} {t("ui_agents_unit")}</span>
               </SelectCard>
             ))}
           </div>
@@ -556,7 +556,7 @@ export default function NewRun({
             <span className="flex-1">
               <span className="flex items-center gap-2 text-sm font-medium">
                 {isDebate ? t("wiz_redteam_debate_title") : t("wiz_redteam_title")}
-                {redTeam && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-strong">ON</span>}
+                {redTeam && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-strong">{t("ui_on")}</span>}
               </span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {isDebate ? t("wiz_redteam_debate_desc") : t("wiz_redteam_desc")}
@@ -597,7 +597,7 @@ export default function NewRun({
             <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{formatNumber(Math.min(agents, cap))}</span>
             <span className="text-muted-foreground">{t("wiz_persona_title")}</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
             {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
-            <span className="text-muted-foreground">{t("wiz_redteam_label")}</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ON`) : "—"}</span>
+            <span className="text-muted-foreground">{t("wiz_redteam_label")}</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ${t("ui_on")}`) : "—"}</span>
           </div>
           {isDebate && <p className="text-xs text-amber-700">💰 {t("wiz_cost_note")}</p>}
 

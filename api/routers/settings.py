@@ -72,7 +72,6 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
     }
     return {
         **safe,
-        "webhook_configured": bool(settings.alert_webhook_url.strip()),
         "auth_enabled": settings.auth_enabled,
         "caps": {
             "fabric": settings.max_agents_per_run,

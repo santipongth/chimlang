@@ -1,7 +1,7 @@
 """Persona Packs (P5-M7 — backlog Group A จาก SwarmSight): audience ที่ผู้ใช้นิยามเอง
 
 ผู้ใช้สร้าง "pack" = ชุด segment (สัดส่วน + cultural priors + channel mix) แล้ว reuse
-กับทุกโหมด (dashboard / compare / watchlist) — โครงเดียวกับ segments.yaml ของ factory
+กับทุกโหมด (dashboard / compare) — โครงเดียวกับ segments.yaml ของ factory
 เพื่อให้ `PersonaFactory(segments=...)` ใช้ได้ตรงๆ ไม่ต้องแตะ engine
 
 Governance:

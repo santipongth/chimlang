@@ -81,7 +81,7 @@ export default function Gallery({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs text-muted-foreground">
-                {detail.created_at.slice(0, 10)} · {detail.agents} agents · {detail.watermark.note}
+                {detail.created_at.slice(0, 10)} · {detail.agents} {t("ui_agents_unit")} · {detail.watermark.note}
               </div>
               <h2 className="mt-1 font-display text-2xl font-semibold">{detail.subject}</h2>
             </div>
@@ -103,7 +103,7 @@ export default function Gallery({
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">
-            Fragility {detail.payload.brief?.fragility_index}/100 — {detail.payload.brief?.confidence_label}
+            {t("rd_fragility_word")} {detail.payload.brief?.fragility_index}/100 — {detail.payload.brief?.confidence_label}
           </p>
           {(detail.payload.scenarios ?? []).length > 0 && (
             <div className="space-y-1.5">
@@ -161,7 +161,7 @@ export default function Gallery({
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-muted-foreground">
-                    {i.created_at.slice(0, 10)} · {i.agents} agents
+                    {i.created_at.slice(0, 10)} · {i.agents} {t("ui_agents_unit")}
                   </div>
                   <div className="mt-0.5 font-medium">{i.subject}</div>
                   <div className="mt-1 text-xs text-muted-foreground line-clamp-1">

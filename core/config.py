@@ -50,11 +50,6 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     api_keys: str = ""  # "คีย์:ผู้ใช้:role[:verified],..." — role: viewer|analyst|operator|admin
 
-    # --- Watchlist alerts (P5-M5) ---
-    # webhook URL เป็น secret → อยู่ .env เท่านั้น ห้ามเก็บใน DB/ห้าม log (https เท่านั้น)
-    alert_webhook_url: str = ""
-    consensus_shift_threshold: float = 0.10  # |Δ mean_delta| ระหว่างรอบ ≥ ค่านี้ = consensus_shift
-
     # --- กุญแจหลักเข้ารหัส secret ใน DB (P6-M5, ADR-0007) ---
     # จำเป็นเมื่อผู้ใช้ตั้ง LLM API key จากหน้าเว็บ — อยู่ .env จุดเดียว, ห้ามเก็บใน DB
     secret_key: str = ""

@@ -25,9 +25,6 @@ const detail = {
 };
 
 test("opens the experiment workspace by URL and compares arbitrary runs", async ({ page }) => {
-  await page.route("**/watchlists.json", async (route) => {
-    await route.fulfill({ json: { items: [], alerts: [], unread: 0, webhook_configured: false } });
-  });
   await page.route("**/experiments**", async (route) => {
     const request = route.request();
     if (request.method() === "POST" && request.url().endsWith("/experiments/compare")) {

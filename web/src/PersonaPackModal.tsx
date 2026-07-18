@@ -304,7 +304,7 @@ export default function PersonaPackModal({
             </div>
             <button
               onClick={onClose}
-              aria-label="close"
+              aria-label={t("close")}
               className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               ✕
@@ -392,8 +392,8 @@ export default function PersonaPackModal({
               <div className="grid gap-2 sm:grid-cols-3">
                 {[
                   [t("pk_voice"), pct(avgVoice)],
-                  ["Dominant channel", dominantChannel ? t(`pk_ch_${dominantChannel.ch}`) : "—"],
-                  ["Low sample groups", String(lowSampleGroups)],
+                  [t("pk_dominant_channel"), dominantChannel ? t(`pk_ch_${dominantChannel.ch}`) : "—"],
+                  [t("pk_low_sample_groups"), String(lowSampleGroups)],
                 ].map(([label, value]) => (
                   <div key={label} className={`${card} p-3`}>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>

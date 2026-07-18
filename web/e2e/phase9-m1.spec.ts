@@ -1,13 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-
-async function watchlistStub(page: Page) {
-  await page.route("**/watchlists.json", (route) =>
-    route.fulfill({ json: { items: [], alerts: [], unread: 0, webhook_configured: false } }),
-  );
-}
+import { expect, test } from "@playwright/test";
 
 test("decommissioned workspaces are absent from navigation and routes", async ({ page }) => {
-  await watchlistStub(page);
   await page.addInitScript(() => localStorage.setItem("chimlang-lang", "en"));
   await page.goto("/app/#/");
 
@@ -21,7 +14,6 @@ test("decommissioned workspaces are absent from navigation and routes", async ({
 });
 
 test("mobile drawer is keyboard reachable and invalid routes are bilingual", async ({ page }, testInfo) => {
-  await watchlistStub(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app/#/missing-route");
 
@@ -44,7 +36,6 @@ test("mobile drawer is keyboard reachable and invalid routes are bilingual", asy
 });
 
 test("gallery share token opens directly through the typed route", async ({ page }) => {
-  await watchlistStub(page);
   await page.route("**/gallery.json", (route) => route.fulfill({ json: { items: [] } }));
   await page.route("**/gallery/share-e2e.json", (route) =>
     route.fulfill({
@@ -69,7 +60,6 @@ test("gallery share token opens directly through the typed route", async ({ page
 });
 
 test("202 accepted navigates immediately to running detail and supports cancel", async ({ page }, testInfo) => {
-  await watchlistStub(page);
   let status: "queued" | "canceled" = "queued";
   let idempotencyKey = "";
   await page.route("**/engines.json", (route) =>

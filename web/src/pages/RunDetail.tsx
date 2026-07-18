@@ -173,7 +173,7 @@ export function ExecutiveReadout({
     return (
       <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5" role="alert" aria-live="polite">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-800">
-          <AlertTriangle className="h-4 w-4" /> Executive Readout
+          <AlertTriangle className="h-4 w-4" /> {t("rd_exec_readout")}
         </div>
         <h2 className="mt-2 text-xl font-semibold text-amber-950">{t("rd_synthesis_unavailable")}</h2>
         <p className="mt-2 text-sm text-amber-900">{t("rd_synthesis_unavailable_desc")}</p>
@@ -208,16 +208,16 @@ export function ExecutiveReadout({
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <FileSearch className="h-4 w-4" /> Executive Readout
+            <FileSearch className="h-4 w-4" /> {t("rd_exec_readout")}
           </div>
           <h2 className="text-xl font-semibold leading-snug">{summary}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{t("rd_prediction_note")}</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
           {[
-            ["Confidence", confidence],
-            ["Headline", range],
-            ["Evidence", `${(p.sources ?? []).length + (p.news?.items ?? []).length} items`],
+            [t("rd_confidence"), confidence],
+            [t("rd_metric_headline"), range],
+            [t("rd_metric_evidence"), `${(p.sources ?? []).length + (p.news?.items ?? []).length} ${t("wiz_src_unit")}`],
           ].map(([k, v]) => (
             <div key={k} className="rounded-xl border border-border bg-background px-3 py-2">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{k}</div>
@@ -239,29 +239,24 @@ export function ExecutiveReadout({
   );
 }
 
-function SocialSignalMap({ newsItems }: { newsItems: any[] }) {
-  const channels = [
-    ["line_closed_group", "LINE closed group"],
-    ["public_feed", "Public feed"],
-    ["algo_feed", "Algorithmic feed"],
-    ["offline_wom", "Offline word-of-mouth"],
-  ];
+function SocialSignalMap({ newsItems, t }: { newsItems: any[]; t: (k: string) => string }) {
+  const channels = ["line_closed_group", "public_feed", "algo_feed", "offline_wom"];
   const ready = newsItems.filter((x) => x.status === "ready");
   return (
     <div className="rounded-2xl border border-border bg-background p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Radio className="h-4 w-4 text-primary" /> Thai Social Signal Map
+        <Radio className="h-4 w-4 text-primary" /> {t("rd_signal_map")}
       </div>
       <div className="grid gap-2 md:grid-cols-4">
-        {channels.map(([id, label]) => {
+        {channels.map((id) => {
           const count = ready.filter((x) => (x.channel_tags?.[id] ?? 0) > 0.12).length;
           return (
             <div key={id} className="rounded-xl border border-border bg-card p-3">
-              <div className="text-xs font-medium">{label}</div>
+              <div className="text-xs font-medium">{t(`pk_ch_${id}`)}</div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
                 <div className="h-full bg-primary" style={{ width: `${Math.min(100, count * 22)}%` }} />
               </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">{count} signals</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{count} {t("rd_signals_unit")}</div>
             </div>
           );
         })}
@@ -270,14 +265,14 @@ function SocialSignalMap({ newsItems }: { newsItems: any[] }) {
   );
 }
 
-function TrustScorecard({ scorecard }: { scorecard: SimRunDetail["trust_scorecard"] }) {
+function TrustScorecard({ scorecard, t }: { scorecard: SimRunDetail["trust_scorecard"]; t: (k: string) => string }) {
   if (!scorecard) return null;
   const tone = scorecard.band === "strong" ? "text-primary-strong" : scorecard.band === "usable" ? "text-amber-700" : "text-red-700";
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trust Scorecard</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("rd_trust_scorecard")}</div>
           <div className={`mt-1 text-3xl font-semibold ${tone}`}>{scorecard.score}/100</div>
           <div className="text-xs text-muted-foreground">{scorecard.band}</div>
         </div>
@@ -301,19 +296,19 @@ function EvidenceDrawer({ item, onClose, t }: { item: any | null; onClose: () =>
       <aside className="h-full w-full max-w-lg overflow-auto border-l border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
-            <Info className="h-4 w-4 text-primary" /> Evidence
+            <Info className="h-4 w-4 text-primary" /> {t("rd_metric_evidence")}
           </div>
           <button onClick={onClose} className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <h3 className="mt-4 text-lg font-semibold">{item.title || item.label || item.url || "Evidence item"}</h3>
+        <h3 className="mt-4 text-lg font-semibold">{item.title || item.label || item.url || t("rd_evidence_item")}</h3>
         <div className="mt-3 grid grid-cols-[110px_1fr] gap-y-2 text-sm">
-          <span className="text-muted-foreground">status</span><span><StatusIcon status={item.status} /> {item.status}</span>
-          <span className="text-muted-foreground">type</span><span>{item.provider || item.kind || "source"}</span>
+          <span className="text-muted-foreground">{t("rd_field_status")}</span><span><StatusIcon status={item.status} /> {item.status}</span>
+          <span className="text-muted-foreground">{t("rd_field_type")}</span><span>{item.provider || item.kind || "source"}</span>
           {item.url && <><span className="text-muted-foreground">url</span><a href={item.url} target="_blank" rel="noreferrer" className="truncate text-primary-strong hover:underline">{item.url}</a></>}
-          {item.chunks != null && <><span className="text-muted-foreground">chunks</span><span>{item.chunks}</span></>}
-          {item.fetched_at && <><span className="text-muted-foreground">fetched</span><span>{String(item.fetched_at).slice(0, 16).replace("T", " ")}</span></>}
+          {item.chunks != null && <><span className="text-muted-foreground">{t("rd_evidence_chunks")}</span><span>{item.chunks}</span></>}
+          {item.fetched_at && <><span className="text-muted-foreground">{t("rd_field_fetched")}</span><span>{String(item.fetched_at).slice(0, 16).replace("T", " ")}</span></>}
         </div>
         {item.error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{item.error}</div>}
         <RedactionSummary counts={item.pii_redactions} t={t} />
@@ -406,15 +401,20 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
       {(verifier || judge) && (
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-border bg-background p-3 text-xs">
-            <div className="font-semibold">Deterministic verifier</div>
-            <div className="mt-1 text-muted-foreground">status {verifier?.status ?? "legacy"} · checked {verifier?.moves_checked ?? 0} moves · {verifier?.violations?.length ?? 0} findings</div>
+            <div className="font-semibold">{t("rd_verifier")}</div>
+            <div className="mt-1 text-muted-foreground">
+              {t("rd_verifier_summary")
+                .replace("{status}", String(verifier?.status ?? t("rd_legacy_word")))
+                .replace("{moves}", String(verifier?.moves_checked ?? 0))
+                .replace("{findings}", String(verifier?.violations?.length ?? 0))}
+            </div>
             <div className="mt-2 flex flex-wrap gap-1">
               {Object.entries(verifier?.counts ?? {}).map(([key, value]) => <span key={key} className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">{key}: {String(value)}</span>)}
             </div>
           </div>
           <div className="rounded-xl border border-border bg-background p-3 text-xs">
-            <div className="font-semibold">Analyst judge</div>
-            <div className="mt-1 text-muted-foreground">verdict {judge?.verdict ?? "unavailable"}</div>
+            <div className="font-semibold">{t("rd_analyst_judge")}</div>
+            <div className="mt-1 text-muted-foreground">{t("rd_verdict_word")} {judge?.verdict ?? t("rd_unavailable")}</div>
             <p className="mt-2">{judge?.citation_assessment ?? "—"}</p>
             <p className="mt-1">{judge?.contradiction_assessment ?? "—"}</p>
             <p className="mt-1">{judge?.schema_assessment ?? "—"}</p>
@@ -608,7 +608,7 @@ export default function RunDetail({
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
           <p>{error}</p>
           <button type="button" onClick={reload} className="mt-3 rounded-lg border border-red-300 px-3 py-2 font-medium">
-            {lang === "th" ? "ลองเชื่อมต่อใหม่" : "Reconnect"}
+            {t("rd_reconnect")}
           </button>
         </div>
       )}
@@ -624,11 +624,11 @@ export default function RunDetail({
           <p>{t("rd_failed")}: {data.error}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" disabled={!!runActionBusy} onClick={() => rerun("latest")} className="rounded-lg bg-red-700 px-3 py-2 font-medium text-white disabled:opacity-50">
-              {lang === "th" ? "รันใหม่ด้วยข้อมูลล่าสุด" : "Run with latest data"}
+              {t("rd_rerun_latest")}
             </button>
             {data.manifest?.complete && (
               <button type="button" disabled={!!runActionBusy} onClick={() => rerun("frozen")} className="rounded-lg border border-red-300 px-3 py-2 font-medium disabled:opacity-50">
-                {lang === "th" ? "รันใหม่ด้วย input ที่ freeze" : "Run frozen inputs"}
+                {t("rd_rerun_frozen")}
               </button>
             )}
           </div>
@@ -640,9 +640,7 @@ export default function RunDetail({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {data.status === "canceled"
-                  ? (lang === "th" ? "ยกเลิกแล้ว" : "Canceled")
-                  : (lang === "th" ? "ลำดับขั้นการรัน" : "Running timeline")}
+                {data.status === "canceled" ? t("rd_canceled") : t("rd_running_timeline")}
               </div>
               <h2 className="mt-1 font-display text-xl font-semibold">
                 {data.progress_message || data.status}
@@ -655,11 +653,11 @@ export default function RunDetail({
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={reload} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted">
-                <RefreshCw className="mr-1 inline h-4 w-4" /> {lang === "th" ? "เชื่อมต่อใหม่" : "Reconnect"}
+                <RefreshCw className="mr-1 inline h-4 w-4" /> {t("rd_reconnect")}
               </button>
               {data.status !== "canceled" && (
                 <button type="button" disabled={!!runActionBusy} onClick={cancelCurrentRun} className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">
-                  {runActionBusy === "cancel" ? "…" : (lang === "th" ? "ยกเลิกรัน" : "Cancel run")}
+                  {runActionBusy === "cancel" ? "…" : t("hist_cancel_action")}
                 </button>
               )}
             </div>
@@ -687,11 +685,11 @@ export default function RunDetail({
           {data.status === "canceled" && (
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={!!runActionBusy} onClick={() => rerun("latest")} className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-                {lang === "th" ? "รันด้วยข้อมูลล่าสุด" : "Run latest data"}
+                {t("rd_run_latest")}
               </button>
               {data.manifest?.complete && (
                 <button type="button" disabled={!!runActionBusy} onClick={() => rerun("frozen")} className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50">
-                  {lang === "th" ? "รัน input ที่ freeze" : "Run frozen inputs"}
+                  {t("rd_rerun_frozen")}
                 </button>
               )}
             </div>
@@ -715,15 +713,15 @@ export default function RunDetail({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {data.result_kind === "prediction" ? "Prediction contract" : "Simulation finding"}
+                  {data.result_kind === "prediction" ? t("rd_prediction_contract") : t("rd_simulation_finding")}
                 </div>
                 <p className="mt-2 text-sm">
-                  {data.predictions?.[0]?.claim ?? data.findings?.[0]?.summary ?? "ยังไม่มี result contract"}
+                  {data.predictions?.[0]?.claim ?? data.findings?.[0]?.summary ?? t("rd_no_contract")}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {data.result_kind === "prediction"
-                    ? `${Math.round((data.predictions?.[0]?.probability ?? 0) * 100)}% · due ${data.predictions?.[0]?.due_date}`
-                    : "ผลนี้ไม่เข้า Calibration จนกว่าจะสร้าง claim ที่วัดผลโลกจริงได้"}
+                    ? `${Math.round((data.predictions?.[0]?.probability ?? 0) * 100)}% · ${t("rd_due_word")} ${data.predictions?.[0]?.due_date}`
+                    : t("rd_not_in_calibration")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -732,7 +730,7 @@ export default function RunDetail({
                     onClick={() => setPredictionOpen((v) => !v)}
                     className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white"
                   >
-                    สร้าง Prediction ที่วัดผลได้
+                    {t("rd_create_prediction")}
                   </button>
                 )}
                 <button
@@ -740,7 +738,7 @@ export default function RunDetail({
                   onClick={startValidation}
                   className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
                 >
-                  Validate 3 seeds
+                  {t("rd_validate_seeds")}
                 </button>
               </div>
             </div>
@@ -749,17 +747,17 @@ export default function RunDetail({
                 <input
                   value={predictionDraft.claim}
                   onChange={(e) => setPredictionDraft({ ...predictionDraft, claim: e.target.value })}
-                  placeholder={lang === "th" ? "เหตุการณ์ binary ที่คาดว่าจะเกิด" : "Expected binary event"}
+                  placeholder={t("rd_claim_ph")}
                   className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
                 />
                 <input
                   value={predictionDraft.measurement}
                   onChange={(e) => setPredictionDraft({ ...predictionDraft, measurement: e.target.value })}
-                  placeholder={lang === "th" ? "วิธีวัดผล" : "Outcome measurement"}
+                  placeholder={t("rd_measurement_ph")}
                   className="rounded-lg border border-border px-3 py-2 text-sm md:col-span-2"
                 />
                 <label className="text-xs text-muted-foreground">
-                  Probability {(predictionDraft.probability * 100).toFixed(0)}%
+                  {t("rd_probability")} {(predictionDraft.probability * 100).toFixed(0)}%
                   <input
                     type="range"
                     min="0.01"
@@ -781,17 +779,17 @@ export default function RunDetail({
                   onClick={savePrediction}
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50 md:col-span-2"
                 >
-                  บันทึกแบบ append-only
+                  {t("rd_save_append_only")}
                 </button>
               </div>
             )}
           </section>
-          <TrustScorecard scorecard={data.trust_scorecard} />
+          <TrustScorecard scorecard={data.trust_scorecard} t={t} />
           {canRepair && (
             <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
               <div>
-                <div className="text-sm font-semibold">Run repair</div>
-                <p className="text-xs text-muted-foreground">Refresh evidence or append mechanical metrics from the stored snapshot.</p>
+                <div className="text-sm font-semibold">{t("rd_repair_title")}</div>
+                <p className="text-xs text-muted-foreground">{t("rd_repair_desc")}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {data.config?.live_news === true && (
@@ -800,7 +798,7 @@ export default function RunDetail({
                     onClick={() => repair("news")}
                     className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
                   >
-                    <RefreshCw className={`h-4 w-4 ${repairBusy === "news" ? "animate-spin" : ""}`} /> Refresh news
+                    <RefreshCw className={`h-4 w-4 ${repairBusy === "news" ? "animate-spin" : ""}`} /> {t("rd_refresh_news")}
                   </button>
                 )}
                 <button
@@ -808,7 +806,7 @@ export default function RunDetail({
                   onClick={() => repair("synthesis")}
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-strong disabled:opacity-50"
                 >
-                  <FileSearch className="h-4 w-4" /> Recompute metrics
+                  <FileSearch className="h-4 w-4" /> {t("rd_recompute")}
                 </button>
               </div>
               {repairErr && <div className="basis-full rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{repairErr}</div>}
@@ -816,12 +814,12 @@ export default function RunDetail({
           )}
           <Tabs<Tab>
             tabs={[
-              { id: "overview" as Tab, label: lang === "th" ? "ผลลัพธ์" : "Result" },
+              { id: "overview" as Tab, label: t("rd_tab_result") },
               ...(isDebate && showView("debate") ? [{ id: "debate" as Tab, label: t("rd_tab_debate") }] : []),
               ...(showView("evidence") ? [{ id: "evidence" as Tab, label: t("rd_tab_evidence") }] : []),
-              ...(showView("canvas") ? [{ id: "canvas" as Tab, label: lang === "th" ? "ความไม่แน่นอน" : "Uncertainty" }] : []),
-              { id: "validation" as Tab, label: lang === "th" ? "การตรวจสอบ" : "Validation" },
-              { id: "report" as Tab, label: lang === "th" ? "บันทึกตรวจสอบ" : "Audit" },
+              ...(showView("canvas") ? [{ id: "canvas" as Tab, label: t("rd_tab_uncertainty") }] : []),
+              { id: "validation" as Tab, label: t("rd_tab_validation") },
+              { id: "report" as Tab, label: t("rd_tab_audit") },
             ]}
             active={tab}
             onChange={setTab}
@@ -887,12 +885,12 @@ export default function RunDetail({
                 )}
               </section>
               <section className={card}>
-                <h2 className="mb-2 font-semibold">Stance beeswarm / timeline</h2>
+                <h2 className="mb-2 font-semibold">{t("rd_stance_beeswarm")}</h2>
                 <StanceTimelineChart posts={data.posts} />
               </section>
               <DebateProtocolPanel protocol={p.protocol} t={t} />
               <section className={card}>
-                <h2 className="mb-3 font-semibold">Interactive contention graph</h2>
+                <h2 className="mb-3 font-semibold">{t("rd_contention_interactive")}</h2>
                 <ContentionGraph posts={data.posts} />
               </section>
             </>
@@ -910,11 +908,11 @@ export default function RunDetail({
                   ))}
                 </ul>
                 <p className="text-xs text-muted-foreground">
-                  Fragility {p.brief?.fragility_index}/100 — {p.brief?.confidence_label} <InfoTip text={t("tip_fragility")} />
+                  {t("rd_fragility_word")} {p.brief?.fragility_index}/100 — {p.brief?.confidence_label} <InfoTip text={t("tip_fragility")} />
                 </p>
               </section>
               <section className={card}>
-                <h2 className="mb-3 font-semibold">Multiverse uncertainty</h2>
+                <h2 className="mb-3 font-semibold">{t("rd_multiverse")}</h2>
                 <UniverseRangeChart universes={p.universe_estimates ?? []} fallbackRange={p.brief?.headline_range} />
               </section>
               <section className={card}>
@@ -941,7 +939,7 @@ export default function RunDetail({
                 <h2 className="font-semibold">🗣 {t("rd_feed")} — {t("rd_round")} {shownRound + 1}</h2>
                 {/* Replay slider ทีละรอบ */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>▶ Replay</span>
+                  <span>▶ {t("rd_replay")}</span>
                   <input
                     type="range"
                     min={rounds[0] ?? 0}
@@ -962,7 +960,7 @@ export default function RunDetail({
             <section className={card + " space-y-4"}>
               <h2 className="font-semibold mb-1">🫧 {t("rd_tab_canvas")}</h2>
               <p className="text-xs text-muted-foreground mb-4">{t("rd_canvas_note")}</p>
-              {isDebate && newsItems.length > 0 && <SocialSignalMap newsItems={newsItems} />}
+              {isDebate && newsItems.length > 0 && <SocialSignalMap newsItems={newsItems} t={t} />}
               {isDebate ? (
                 // debate: scatter จุดยืนต่อ agent รอบสุดท้าย (x=จุดยืน, y=กระจายกัน)
                 <DebateScatter posts={data.posts} rounds={data.rounds} t={t} />
@@ -989,7 +987,7 @@ export default function RunDetail({
               <h2 className="font-semibold mb-1">🔍 {t("rd_tab_evidence")}</h2>
               {isDebate && (
                 <div className="rounded-xl border border-border bg-background p-4">
-                  <h3 className="mb-2 text-sm font-semibold">Evidence lineage</h3>
+                  <h3 className="mb-2 text-sm font-semibold">{t("rd_evidence_lineage")}</h3>
                   <EvidenceLineage
                     sources={[...(p.sources ?? []), ...(p.news?.items ?? [])]}
                     subject={data.subject}
@@ -1034,13 +1032,13 @@ export default function RunDetail({
               )}
               {isDebate && (p.evidence_matches ?? []).length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">Retrieved evidence highlights ({(p.evidence_matches ?? []).length})</p>
+                  <p className="text-xs text-muted-foreground">{t("rd_retrieved_highlights")} ({(p.evidence_matches ?? []).length})</p>
                   <ul className="space-y-1.5 text-sm">
                     {(p.evidence_matches ?? []).map((m, i: number) => (
                       <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{m.source_label} #{m.seq}</span>
-                          <span className="text-[10px] text-muted-foreground">score {Number(m.score ?? 0).toFixed(2)} · quality {Number(m.quality_score ?? 0).toFixed(2)}</span>
+                          <span className="text-[10px] text-muted-foreground">{t("rd_score_word")} {Number(m.score ?? 0).toFixed(2)} · {t("rd_quality_word")} {Number(m.quality_score ?? 0).toFixed(2)}</span>
                         </div>
                         {(m.citation_spans ?? []).slice(0, 2).map((s: any, j: number) => (
                           <p key={j} className="mt-1 text-xs text-muted-foreground">{s.text}</p>
@@ -1106,14 +1104,8 @@ export default function RunDetail({
             <section className={card + " space-y-4"} aria-live="polite">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-semibold">
-                    {lang === "th" ? "ความเสถียรของผลจำลอง" : "Simulation stability"}
-                  </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {lang === "th"
-                      ? "เปรียบเทียบหลาย seed จาก run ใหม่ ผลนี้ไม่ใช่ความแม่นยำต่อโลกจริง"
-                      : "Compares fresh runs across seeds; this is not real-world accuracy."}
-                  </p>
+                  <h2 className="font-semibold">{t("rd_validation_title")}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("rd_validation_desc")}</p>
                 </div>
                 <button
                   type="button"
@@ -1121,18 +1113,12 @@ export default function RunDetail({
                   onClick={startValidation}
                   className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
                 >
-                  {validationQuery.isFetching
-                    ? lang === "th"
-                      ? "กำลังตรวจสอบ…"
-                      : "Validating…"
-                    : lang === "th"
-                      ? "ตรวจ 3 seed"
-                      : "Validate 3 seeds"}
+                  {validationQuery.isFetching ? t("rd_validating") : t("rd_validate_seeds")}
                 </button>
               </div>
               {!validation && !validationQuery.isFetching && (
                 <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                  {lang === "th" ? "ยังไม่มีรายงาน validation สำหรับ run นี้" : "No validation report exists for this run yet."}
+                  {t("rd_no_validation")}
                 </p>
               )}
               {validationQuery.error && (
@@ -1143,10 +1129,10 @@ export default function RunDetail({
               {validation && (
                 <>
                   <div className="grid gap-2 text-xs sm:grid-cols-4">
-                    <div>Sign agreement {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
-                    <div>Dispersion {validation.between_run_dispersion.toFixed(3)}</div>
-                    <div>Failure {pct(validation.failure_rate)}</div>
-                    <div>Cost ${validation.total_cost_usd.toFixed(4)}</div>
+                    <div>{t("rd_sign_agreement")} {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
+                    <div>{t("rd_dispersion")} {validation.between_run_dispersion.toFixed(3)}</div>
+                    <div>{t("rd_failure_rate")} {pct(validation.failure_rate)}</div>
+                    <div>{t("rd_cost")} ${validation.total_cost_usd.toFixed(4)}</div>
                   </div>
                   <StabilityMatrix report={validation} />
                 </>
@@ -1170,7 +1156,7 @@ export default function RunDetail({
               </div>
               {(data.events ?? []).length > 0 && (
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Audit trail</div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">{t("rd_audit_trail")}</div>
                   <ul className="mt-1 space-y-1 text-xs">
                     {(data.events ?? []).slice(-8).map((e, i) => (
                       <li key={i} className="rounded-lg border border-border bg-background px-3 py-2">
@@ -1198,25 +1184,23 @@ export default function RunDetail({
               <p className="text-xs text-muted-foreground">📌 {t("rd_prediction_note")}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <a className="inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white" href={`/runs/${encodeURIComponent(runId)}/export.pdf?lang=${lang}`}>
-                  ⬇ {lang === "th" ? "PDF snapshot (มี watermark)" : "PDF snapshot (watermarked)"}
+                  ⬇ {t("rd_pdf_snapshot")}
                 </a>
                 <a className="inline-block rounded-xl border border-border px-5 py-2.5 text-sm font-medium" href={`/runs/${encodeURIComponent(runId)}/export.json`}>
-                  ⬇ JSON snapshot
+                  ⬇ {t("rd_json_snapshot")}
                 </a>
               </div>
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-primary-strong">
-                {lang === "th"
-                  ? "เปิดผลเดิม = snapshot ที่เก็บไว้; รัน input ที่ freeze = provider อาจต่างแบบ best-effort; รันข้อมูลล่าสุด = ดึง evidence/news ใหม่"
-                  : "Open original = stored snapshot; frozen rerun = provider determinism is best-effort; latest rerun fetches current evidence/news."}
+                {t("rd_rerun_note")}
               </div>
               <div className="flex flex-wrap gap-2">
                 {data.manifest?.complete && (
                   <button type="button" disabled={!!runActionBusy} onClick={() => rerun("frozen")} className="rounded-xl border border-border px-4 py-2 text-sm disabled:opacity-50">
-                    {lang === "th" ? "รันใหม่ด้วย input ที่ freeze" : "Rerun frozen inputs"}
+                    {t("rd_rerun_frozen")}
                   </button>
                 )}
                 <button type="button" disabled={!!runActionBusy} onClick={() => rerun("latest")} className="rounded-xl border border-border px-4 py-2 text-sm disabled:opacity-50">
-                  {lang === "th" ? "รันด้วยข้อมูลล่าสุด" : "Run latest data"}
+                  {t("rd_run_latest")}
                 </button>
               </div>
               <button
