@@ -2369,27 +2369,6 @@ def compare_json(
     return {"subject": subject, **result}
 
 
-@app.get("/calibration.json")
-def calibration_json(
-    legacy: bool = Query(False), principal: Principal = Depends(get_principal)
-) -> dict:
-    """หน้า Calibration (P5-M3): Brier รวม/รายโดเมน + trend รายสัปดาห์ + คิว resolve
-
-    อ่านอย่างเดียว — แค่ authenticate (viewer ดูได้ เหมือน /runs.json)
-    """
-    from datetime import date
-
-    from governance.store import GovernanceStore
-
-    settings = get_settings()
-    try:
-        store = GovernanceStore(settings.postgres_url)
-        # UI ไม่โชว์ขยะจาก test suite (domain ทดสอบ%) — registry ลบไม่ได้จึงกรองที่ชั้นอ่าน
-        return store.calibration_detail(date.today(), include_test=False, include_legacy=legacy)
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"ฐานข้อมูลไม่พร้อม: {e}") from e
-
-
 class ResolveBody(BaseModel):
     outcome: str  # "true" | "false"; legacy partial rows remain readable only
     observed_at: datetime

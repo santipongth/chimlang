@@ -109,11 +109,15 @@ def test_legacy_partial_is_readable_but_excluded_from_primary_calibration():
             "VALUES (%s, NULL, 0.5, 0.09, 'legacy', 'compatibility row')",
             (prediction_id,),
         )
-    primary = gov.calibration_detail(date.today(), include_legacy=False)
-    legacy = gov.calibration_detail(date.today(), include_legacy=True)
-    assert all(item["prediction_id"] != prediction_id for item in primary["items"])
-    item = next(item for item in legacy["items"] if item["prediction_id"] == prediction_id)
-    assert item["outcome_value"] == 0.5
+    # legacy row ต้องไม่ถูกนับใน primary calibration (calibration_summary กรอง source_kind='legacy')
+    assert all(row.domain != "legacy-test" for row in gov.calibration_summary())
+    # แต่แถว partial เดิมยังอ่านได้ตรงๆ จาก registry/resolution (append-only ไม่ถูกลบ)
+    with psycopg.connect(DSN) as conn:
+        value = conn.execute(
+            "SELECT outcome_value FROM prediction_resolution WHERE prediction_id = %s",
+            (prediction_id,),
+        ).fetchone()[0]
+    assert float(value) == 0.5
 
 
 def test_synthesis_revision_is_append_only():

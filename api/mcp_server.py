@@ -60,13 +60,6 @@ def compare_red_team(subject: str, agents: int = 100) -> dict:
 
 
 @mcp.tool()
-def get_calibration() -> dict:
-    """Brier score สะสมของระบบ (รวม/รายโดเมน/trend รายสัปดาห์) + คิว prediction
-    ที่ครบกำหนดรอ resolve — 0 = แม่นสมบูรณ์, 0.25 = เท่าสุ่มเดา"""
-    return _request("GET", "/calibration.json")
-
-
-@mcp.tool()
 def resolve_prediction(prediction_id: int, outcome: str, note: str) -> dict:
     """บันทึกผลจริงของ prediction (outcome: true/partial/false, partial = 0.5 ใน Brier)
     — append-only: บันทึกแล้วแก้ไม่ได้ (TRUST-01) ต้องใส่ note อ้างอิงแหล่งผลจริงเสมอ"""

@@ -141,30 +141,6 @@ def test_resolve_requires_run_permission(client, store, monkeypatch):
     )
 
 
-def test_calibration_json_shape_and_test_domain_filtered(client, store):
-    from datetime import date
-
-    pid = _register(store, "run-p5m3-shape", confidence=0.9)
-    store.resolve_prediction(pid, outcome=True, **_resolution_kwargs())
-    data = client.get("/calibration.json").json()
-    assert set(data) >= {
-        "overall_brier",
-        "resolved_total",
-        "domains",
-        "trend",
-        "items",
-        "due",
-        "upcoming",
-        "reliability",
-        "confidence_histogram",
-    }
-    # UI/API กรอง domain 'ทดสอบ%' ออก (ขยะ test — registry ลบไม่ได้จึงกรองชั้นอ่าน)
-    assert all(not d["domain"].startswith("ทดสอบ") for d in data["domains"])
-    assert all(i["prediction_id"] != pid for i in data["items"])
-    # แต่ชั้น store (include_test default) ยังเห็น prediction ใหม่ครบ
-    detail = store.calibration_detail(date.today())
-    dom = next(d for d in detail["domains"] if d["domain"] == "ทดสอบ-p5m3")
-    assert dom["happened"] >= 1
-    item = next(i for i in detail["items"] if i["prediction_id"] == pid)
-    assert item["outcome_value"] == 1.0
-    assert item["evidence_url"] == "https://example.org/outcome"
+def test_calibration_json_endpoint_removed(client):
+    # หน้า/endpoint Calibration ถูกถอดตาม ADR-0020 — registry/resolution ยังอยู่ครบ
+    assert client.get("/calibration.json").status_code == 404

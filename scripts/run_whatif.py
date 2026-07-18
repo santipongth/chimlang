@@ -13,7 +13,7 @@
 
 ทุก run: PII gate (GOV-01) → election classify (GOV-02) → audit log → simulation →
 prediction registry (≥1 record, append-only) → export ผ่าน watermark
-เมื่อครบกำหนด: resolve ผ่านหน้า Calibration ใน /app หรือ scripts/resolve_predictions.py
+เมื่อครบกำหนด: resolve ผ่าน scripts/resolve_predictions.py (หน้า Calibration ถูกถอดตาม ADR-0020)
 (ต้องมี PostgreSQL จาก `docker compose up -d` — governance เป็นเงื่อนไขบังคับ ไม่มีทางลัด)
 กลไกล้วน ไม่เรียก LLM (ต้นทุน $0) — voice ตัวอย่างจริงดูได้จาก scripts/demo_voice_round.py
 """
@@ -135,7 +135,8 @@ def main() -> None:
             or f"{args.subject}: การชี้แจง/มาตรการนี้จะทำให้สัดส่วนผู้เชื่อประเด็นดังกล่าว{direction}",
             direction=direction,
             confidence=confidence,
-            measurement=args.measurement or "ผู้ใช้ป้อนผลจริงเมื่อครบกำหนด (หน้า Calibration ใน /app)",
+            measurement=args.measurement
+            or "ผู้ใช้ป้อนผลจริงเมื่อครบกำหนด (scripts/resolve_predictions.py)",
             due_date=date.today() + timedelta(days=args.due_days),
             model_version="mechanistic-engine@" + config_hash,
             domain=args.domain,

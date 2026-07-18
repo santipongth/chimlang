@@ -19,7 +19,6 @@ def test_all_tools_registered():
     assert names == {
         "run_dashboard",
         "compare_red_team",
-        "get_calibration",
         "resolve_prediction",
         "list_runs",
         "list_gallery",

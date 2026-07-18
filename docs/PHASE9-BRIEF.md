@@ -10,6 +10,9 @@
 - [x] production workflow ปัจจุบันเป็น PopulationSet → Run → Result → Export และ live smoke ผ่านจริง
 - [x] Executive Readout validate analyst root contract, retry ได้ 1 ครั้งภายใต้ BudgetGuard และ fail-closed;
   legacy payload ที่ไม่ครบแสดงคำเตือน+frozen rerun แทนผลว่าง
+- [x] ถอดหน้า/เมนู Calibration ตามมติผู้ใช้ (ADR-0020) — ลบ page/route/`GET /calibration.json`/
+  `calibration_detail`/MCP `get_calibration`; registry append-only + resolve ผ่าน CLI/REST/MCP และ
+  `calibration_summary`/benchmark page ยังอยู่ครบ
 - รายการ P9-M2/M3 ด้านล่างเป็นประวัติงานที่เคยส่งมอบ ไม่ใช่ surface ที่ยังเปิดใช้งาน
 
 ## P9-M1 — Trusted Run Foundation + UX blockers (trust gate)

@@ -1003,64 +1003,6 @@ export async function fetchCompare(
   return data as unknown as CompareData;
 }
 
-// ---- Calibration (P5-M3) ----
-
-export interface CalibrationItem {
-  prediction_id: number;
-  run_id: string;
-  claim: string;
-  domain: string;
-  confidence: number;
-  outcome_value: number; // 1 | 0.5 | 0
-  brier: number;
-  resolved_at: string;
-  note: string;
-}
-
-export interface CalibrationData {
-  overall_brier: number | null;
-  resolved_total: number;
-  domains: { domain: string; n: number; brier: number; happened: number; partial: number; didnt: number }[];
-  trend: { t: number; brier: number; n: number }[];
-  items: CalibrationItem[];
-  due: { prediction_id: number; claim: string; domain: string; confidence: number; due_date: string }[];
-  upcoming: { prediction_id: number; claim: string; domain: string; confidence: number; due_date: string }[];
-  baseline_brier: number;
-  sample_size: number;
-  reliability: {
-    lower: number;
-    upper: number;
-    n: number;
-    mean_confidence: number | null;
-    observed_rate: number | null;
-    standard_error: number | null;
-  }[];
-  confidence_histogram: { lower: number; upper: number; n: number }[];
-}
-
-export async function fetchCalibration(): Promise<CalibrationData> {
-  const { data, error, response } = await apiClient.GET("/calibration.json");
-  if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as CalibrationData;
-}
-
-export async function resolvePrediction(
-  id: number,
-  outcome: "true" | "false",
-  note: string,
-  evidence: { observed_at: string; evidence_url: string; evidence_name: string },
-): Promise<{ brier: number }> {
-  const { data, error, response } = await apiClient.POST(
-    "/predictions/{prediction_id}/resolve",
-    {
-      params: { path: { prediction_id: id } },
-      body: { outcome, note, ...evidence },
-    },
-  );
-  if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as { brier: number };
-}
-
 // ---- Experiment workspace (P8-M6) ----
 
 export interface ExperimentSummary {

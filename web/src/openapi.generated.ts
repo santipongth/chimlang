@@ -1163,28 +1163,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/calibration.json": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Calibration Json
-         * @description หน้า Calibration (P5-M3): Brier รวม/รายโดเมน + trend รายสัปดาห์ + คิว resolve
-         *
-         *     อ่านอย่างเดียว — แค่ authenticate (viewer ดูได้ เหมือน /runs.json)
-         */
-        get: operations["calibration_json_calibration_json_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/predictions/{prediction_id}/resolve": {
         parameters: {
             query?: never;
@@ -4281,41 +4259,6 @@ export interface operations {
                 subject?: string;
                 agents?: number;
                 pack_id?: number | null;
-            };
-            header?: {
-                "x-api-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    calibration_json_calibration_json_get: {
-        parameters: {
-            query?: {
-                legacy?: boolean;
             };
             header?: {
                 "x-api-key"?: string | null;

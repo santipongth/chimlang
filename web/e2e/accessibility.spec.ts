@@ -75,7 +75,6 @@ async function stubApi(page: Page) {
     if (path.endsWith("/observability.json")) return fulfill(route, { window_hours: 24, providers: [], failure_taxonomy: [], queue: { queued: 0, running: 0, errors: 0, avg_latency_seconds: 0 }, pii_policy: "fail-closed" });
     if (path.endsWith("/experiments")) return fulfill(route, { experiments: [] });
     if (path.endsWith("/gallery.json")) return fulfill(route, { items: [] });
-    if (path.endsWith("/calibration.json")) return fulfill(route, { overall_brier: null, resolved_total: 0, domains: [], trend: [], items: [], due: [], upcoming: [], baseline_brier: 0.25, sample_size: 0, reliability: [], confidence_histogram: [] });
     if (path.endsWith("/health/deep")) return fulfill(route, { status: "ok", components: {} });
     if (path.endsWith("/product-policy.json")) return fulfill(route, { version: "test", billing_enabled: false, repository_public: false, semantic_memory_enabled: false, items: [], note: "" });
     return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "accessibility test stub" }) });
@@ -88,7 +87,6 @@ const routes = [
   "/history",
   "/insights",
   "/experiments",
-  "/calibration",
   "/watchlist",
   "/gallery",
   "/settings",

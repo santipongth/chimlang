@@ -27,7 +27,6 @@ import { fetchShellUnread } from "./api-shell";
 const Landing = lazy(() => import("./pages/Landing"));
 const NewRun = lazy(() => import("./pages/NewRun"));
 const Runs = lazy(() => import("./pages/Runs"));
-const Calibration = lazy(() => import("./pages/Calibration"));
 const Compare = lazy(() => import("./pages/Compare"));
 const Watchlist = lazy(() => import("./pages/Watchlist"));
 const Insights = lazy(() => import("./pages/Insights"));
@@ -43,7 +42,6 @@ export const ROUTES = {
   history: "/history",
   insights: "/insights",
   experiments: "/experiments",
-  calibration: "/calibration",
   watchlist: "/watchlist",
   gallery: "/gallery",
   settings: "/settings",
@@ -344,7 +342,6 @@ function Shell() {
             <Route path={ROUTES.insights} element={<Insights />} />
             <Route path={ROUTES.experiments} element={<ExperimentRoute />} />
             <Route path="/experiments/:experimentId" element={<ExperimentRoute />} />
-            <Route path={ROUTES.calibration} element={<Calibration />} />
             <Route path={ROUTES.watchlist} element={<Watchlist onChanged={refreshUnread} />} />
             <Route path={ROUTES.gallery} element={<GalleryRoute />} />
             <Route path="/gallery/:token" element={<GalleryRoute />} />
