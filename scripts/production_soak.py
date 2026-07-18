@@ -89,7 +89,6 @@ async def execute_trial(
                 "domain": "operations",
                 "agents": agents,
                 "rounds": 1,
-                "retrieval_mode": "bm25",
                 "seed": 20260716 + index,
             },
         )

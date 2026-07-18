@@ -5,10 +5,6 @@ export type Lang = "th" | "en";
 
 export const DICT: Record<string, { th: string; en: string }> = {
   tagline: { th: "สนามซ้อมอนาคตของสังคมไทย", en: "Rehearse the future of Thai society" },
-  watermark: {
-    th: "AI simulation — not a real poll | ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง และไม่ใช่คำสัญญาของหน่วยงานใด",
-    en: "AI simulation — not a real poll. All figures are simulation estimates, not real polling or promises.",
-  },
   // เมนูตาม studio ต้นทาง (มติผู้ใช้ 12 ก.ค.: ชื่อ/ไอคอน/ลำดับเหมือน swarm-visionary-forge)
   nav_new_run: { th: "คำทำนายใหม่", en: "New prediction" },
   nav_history: { th: "ประวัติ", en: "History" },
@@ -178,10 +174,6 @@ export const DICT: Record<string, { th: string; en: string }> = {
     th: "Fabric = จำลองด้วยกลไกคณิตศาสตร์ ไม่มีค่าใช้จ่าย รองรับตัวแทนจำลองจำนวนมาก · Debate = ตัวแทนจำลองคุยโต้กันจริงด้วยปัญญาประดิษฐ์ เห็นบทสนทนาและดูย้อนหลังได้ (มีค่าใช้จ่ายเล็กน้อย ระบบคุมงบให้อัตโนมัติ)",
     en: "Fabric = deterministic mechanics ($0, big scale) · Debate = LLM agents actually conversing (real feed + replay, BudgetGuard-metered)",
   },
-  wiz_engine_future: {
-    th: "engine ภายนอก (เช่น MiroFish) อยู่ในแผนระยะยาว — registry รองรับการเสียบเพิ่มแล้ว",
-    en: "External engines (e.g. MiroFish) are on the long-term roadmap — the registry is plug-ready",
-  },
   wiz_src_title: { th: "เอกสารอ้างอิง", en: "REFERENCE SOURCES" },
   wiz_src_desc: {
     th: "ป้อนเอกสาร/ลิงก์ข่าว/RSS ให้ agent ใช้อ้างอิงระหว่างดีเบต (ไม่ใส่ก็ได้ — agent จะใช้มุมมองกลุ่มล้วนๆ)",
@@ -249,15 +241,11 @@ export const DICT: Record<string, { th: string; en: string }> = {
     th: "เอกสารที่ป้อนให้ตัวแทนจำลองใช้อ้างอิงระหว่างถกเถียง — PII ในเว็บภายนอกถูกลบและตรวจซ้ำก่อนใช้งาน",
     en: "Documents fed to agents during the debate — PII in external evidence is removed and re-verified before use",
   },
-  wiz_validation_target: { th: "เป้าหมายการตรวจสอบ", en: "Validation target" },
-  wiz_claim_ph: { th: "คำกล่าวอ้างที่วัดผลได้", en: "Measurable claim" },
-  wiz_measurement_ph: { th: "วิธีวัดผลลัพธ์", en: "Outcome measurement" },
   wiz_readiness: { th: "ความพร้อม", en: "Readiness" },
   wiz_ready: { th: "พร้อมรัน", en: "Ready to run" },
   wiz_needs_review: { th: "ต้องตรวจทาน", en: "Needs review" },
   wiz_checking: { th: "กำลังตรวจสอบ…", en: "Checking…" },
   wiz_estimated_cost: { th: "ต้นทุนโดยประมาณ", en: "Estimated cost" },
-  wiz_retrieval: { th: "การค้นคืนหลักฐาน", en: "Retrieval" },
   wiz_redteam_label: { th: "ทีมทดสอบเชิงปฏิปักษ์", en: "Red Team" },
   hist_cancel_action: { th: "ยกเลิกรัน", en: "Cancel run" },
   hist_retry_action: { th: "ลองรันใหม่", en: "Retry run" },
@@ -456,10 +444,6 @@ export const DICT: Record<string, { th: string; en: string }> = {
   gal_sub: {
     th: "ผลรันที่หน่วยงานเลือกเผยแพร่ — ประชาชนโหวตเห็นด้วย/ไม่เห็นด้วยได้ (wisdom of crowd เทียบ swarm); ตัวเลขเป็น snapshot ณ เวลาแชร์ แก้ไม่ได้",
     en: "Runs organisations chose to publish — the public can vote agree/disagree (wisdom of crowd vs swarm); figures are frozen snapshots.",
-  },
-  gal_disclaimer: {
-    th: "ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง ไม่ใช่คำสัญญาของหน่วยงานใด — scenario เลือกตั้งถูกห้ามเผยแพร่ที่นี่ (ADR-0004)",
-    en: "All figures are simulation estimates — not real polls, not promises. Election scenarios cannot be published here (ADR-0004).",
   },
   gal_empty: { th: "ยังไม่มีผลรันที่เผยแพร่", en: "Nothing published yet" },
   gal_back: { th: "กลับไปรายการ", en: "Back to list" },

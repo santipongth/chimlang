@@ -81,11 +81,8 @@ export interface RunReadiness {
 }
 
 export interface CreateRunBody {
-  retrieval_mode?: "hybrid" | "bm25" | "vector";
   parent_run_id?: string;
-  reflection?: boolean;
   population_set_id?: string;
-  population_acknowledged?: boolean;
 }
 
 export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadiness> {
@@ -139,12 +136,9 @@ function toRunRequest(body: CreateRunBody) {
     seed: body.seed ?? null,
     views: body.views ?? [],
     live_news: body.live_news ?? false,
-    retrieval_mode: body.retrieval_mode ?? "hybrid",
     parent_run_id: body.parent_run_id ?? "",
-    reflection: body.reflection ?? false,
     experiment_id: "",
     population_set_id: body.population_set_id ?? "",
-    population_acknowledged: body.population_acknowledged ?? false,
     input_mode: "latest" as const,
     source_run_id: "",
   };
@@ -289,10 +283,8 @@ export interface EvidenceMatch extends EvidenceSourceItem {
   score: number;
   quality_score: number;
   citation_spans: { start: number; end: number; text: string; match: string }[];
-  retrieval_mode: string;
   requested_mode: string;
   note: string;
-  embedding_provenance?: Record<string, unknown>;
 }
 
 export interface DebateRunPayload {
@@ -327,7 +319,6 @@ export interface DebateRunPayload {
   sources?: EvidenceSourceItem[];
   evidence_matches?: EvidenceMatch[];
   context_used?: number;
-  embedding?: Record<string, unknown>;
   news?: { enabled: boolean; items: EvidenceSourceItem[]; refreshed_at?: string };
 }
 
@@ -586,8 +577,6 @@ export interface AppSettings {
   llm_base_url: string;
   llm_model_crowd: string;
   llm_model_analyst: string;
-  llm_model_embedding: string;
-  llm_embedding_dimension: number;
   llm_synthesis_max_tokens?: number;
   llm_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
   run_budget_usd_cap: number;
@@ -601,11 +590,8 @@ export interface AppSettings {
     active_base_url: string;
     active_model_crowd: string;
     active_model_analyst: string;
-    active_model_embedding: string;
-    embedding_dimension: number;
     env_model_crowd: string;
     env_model_analyst: string;
-    env_model_embedding: string;
     yaml_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
   };
   budget: {

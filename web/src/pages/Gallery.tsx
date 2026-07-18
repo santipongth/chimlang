@@ -74,11 +74,6 @@ export default function Gallery({
     <div className="space-y-6">
       <PageHeader eyebrow={t("gal_eyebrow")} title={t("gal_title")} desc={t("gal_sub")} />
 
-      {/* Disclaimer ถาวร — GOV-03/CIT-04 */}
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
-        ⚠️ AI simulation — not a real poll | {t("gal_disclaimer")}
-      </div>
-
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-5 text-sm">{error}</div>}
 
       {detail ? (

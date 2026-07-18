@@ -42,8 +42,6 @@ def run(args: argparse.Namespace) -> dict:
             "agents": args.agents,
             "rounds": args.rounds,
             "population_set_id": population_set["set_id"],
-            "population_acknowledged": True,
-            "retrieval_mode": "bm25",
         }
         if args.engine == "debate":
             body["sources"] = [

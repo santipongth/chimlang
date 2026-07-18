@@ -34,7 +34,6 @@ from simulation.debate_protocol import (
     verify_moves,
 )
 from simulation.persona import Persona
-from simulation.reflection import ReflectionPolicy, RunLocalReflector
 from simulation.tipping import detect_tipping_points
 
 DEFAULT_ROUNDS = 3
@@ -174,9 +173,7 @@ def make_debate_adapter(
     agents: int,
     rounds: int,
     *,
-    reflection_calls: int = 0,
     monthly_reservation_id: str = "",
-    include_embedding: bool = True,
 ) -> LLMAdapter:
     """adapter พร้อม estimate เฉพาะงาน debate — เกิน cap (ต่อรัน/รวมเดือน) = ไม่เริ่ม
 
@@ -199,14 +196,11 @@ def make_debate_adapter(
         # ต้องเผื่อถึงเพดาน retry — ประเมินต่ำกว่าจริงทำให้ BudgetGuard เช็คงบไม่ตรงความเป็นจริง
         TierLoad(
             settings.llm_model_analyst,
-            2 + max(0, reflection_calls),
+            2,
             9_000,
             synthesis_retry_ceiling(synthesis_tokens),
         ),
     ]
-    if include_embedding and settings.llm_model_embedding.strip():
-        # One bounded document batch plus one query. Conservative Thai char/token estimate.
-        loads.append(TierLoad(settings.llm_model_embedding, 1, 12_000, 0))
     estimate = CostEstimator(pricing).estimate(loads)
     # งบรวมเดือน (P6-M5) ก่อน — ยอดสะสม + estimate เกิน = block
     check_monthly_budget(
@@ -624,7 +618,6 @@ def run_debate(
     segment_news: dict[str, tuple[str, ...]] | None = None,
     news_fetcher=None,  # callable(list[str]) -> dict[segment, tuple[str,...]] — โต๊ะข่าวค้นตาม intent
     on_round=None,
-    reflection_policy: ReflectionPolicy | None = None,
     synthesis_max_tokens: int | None = None,  # None/0 = ใช้ default; ผู้ใช้ตั้งจากหน้า Settings
 ) -> DebateResult:
     settings = get_settings()
@@ -636,7 +629,6 @@ def run_debate(
     rng = Random(seed)
     stances = [_initial_stance(p) for p in personas]
     all_posts: list[DebatePost] = []
-    reflector = RunLocalReflector(adapter, reflection_policy) if reflection_policy else None
     news: dict[str, tuple[str, ...]] = dict(segment_news or {})  # media diet รายกลุ่ม (P7)
     context_block = (
         "\n".join(
@@ -703,17 +695,11 @@ def run_debate(
             want_hint = (
                 ', "want_to_know": "สิ่งที่อยากรู้เพิ่มก่อนตัดสินใจ (สั้นๆ หรือเว้นว่าง)"' if news_fetcher else ""
             )
-            reflection_block = reflector.prompt_context() if reflector else ""
-            reflection_note = (
-                f"\nบทสรุปไตร่ตรองจากรอบก่อน (ใช้เฉพาะ run นี้):\n{reflection_block}\n"
-                if reflection_block
-                else ""
-            )
             user = (
                 f"หัวข้อดีเบต: {subject}\n\n"
                 f"ข้อมูลอ้างอิง:\n{context_block}\n{news_block}\n"
                 f"จุดยืนปัจจุบันของคุณ: {stances[idx]:+.2f} (−1 คัดค้านสุด … +1 เห็นด้วยสุด)\n\n"
-                f"โพสต์ล่าสุดจากคนอื่น (รอบ {r + 1}):\n{feeds[idx]}\n{reflection_note}\n"
+                f"โพสต์ล่าสุดจากคนอื่น (รอบ {r + 1}):\n{feeds[idx]}\n"
                 "เขียนโพสต์ 1 โพสต์ (ไม่เกิน 60 คำ) ตามเสียงของกลุ่มคุณ — โต้ตอบประเด็น/โพสต์อื่นได้\n"
                 'ตอบ JSON: {"content": "ข้อความโพสต์", "stance": จุดยืนใหม่ -1..1, '
                 f'"sentiment": โทนอารมณ์ -1..1{want_hint}, '
@@ -784,12 +770,6 @@ def run_debate(
             if not post.failed:
                 stances[post.agent_idx] = post.stance
         all_posts.extend(round_posts)
-        if reflector and r < rounds - 1:
-            try:
-                reflector.reflect(subject=subject, round_no=r, posts=round_posts, seed=seed)
-            except Exception:
-                # Reflection is an optional bounded aid; failure never corrupts typed moves.
-                pass
         # query intent (P7-M3): รวบสิ่งที่ agent อยากรู้ → โต๊ะข่าวค้นให้ก่อนรอบถัดไป
         if news_fetcher and r < rounds - 1:
             from simulation.newsdesk import dedupe_intents
@@ -810,18 +790,6 @@ def run_debate(
     verifier = verify_moves(all_posts, evidence_ids=set(evidence_ids))
     protocol["verifier"] = verifier
     protocol["move_lineage"] = verifier["lineage"]
-    protocol["reflections"] = list(reflector.summaries) if reflector else []
-    protocol["reflection_policy"] = (
-        {
-            "max_calls": reflector.policy.max_calls,
-            "max_input_chars": reflector.policy.max_input_chars,
-            "max_output_tokens": reflector.policy.max_output_tokens,
-            "calls_used": reflector.calls,
-            "scope": "run_local_only",
-        }
-        if reflector
-        else {"enabled": False, "scope": "run_local_only"}
-    )
     if metrics["posts_ok"] == 0:
         failures = protocol["failure_taxonomy"]
         summary = ", ".join(f"{reason}={count}" for reason, count in sorted(failures.items()))

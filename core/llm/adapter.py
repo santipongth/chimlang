@@ -12,7 +12,7 @@ from enum import StrEnum
 from openai import OpenAI
 
 from core.config import Settings
-from core.llm.budget import check_monthly_budget, record_spend
+from core.llm.budget import record_spend
 from core.llm.cost import BudgetGuard
 from core.llm.pricing import PricingRegistry
 from core.observability import provider_name, record_provider_call, traced
@@ -36,15 +36,6 @@ class LLMResult:
     cost_usd: float
     structured_mode: str = "none"
     finish_reason: str = ""  # "length" = โดนตัดที่ max_tokens — caller ใช้แยก truncation จาก schema พัง
-
-
-@dataclass(frozen=True)
-class EmbeddingResult:
-    vectors: tuple[tuple[float, ...], ...]
-    model: str
-    dimension: int
-    input_tokens: int
-    cost_usd: float
 
 
 class LLMAdapter:
@@ -71,8 +62,6 @@ class LLMAdapter:
         self._pricing = pricing
         self._guard = guard
         self._base_url = settings.llm_base_url or ""
-        self._embedding_model = settings.llm_model_embedding.strip()
-        self._embedding_dimension = int(settings.llm_embedding_dimension)
         self._dsn = settings.postgres_url
         self._run_id = run_id
         self._monthly_cap_usd = max(0.0, monthly_cap_usd)
@@ -91,17 +80,6 @@ class LLMAdapter:
         """Capability gate before adding JSON Schema parameters to a provider request."""
         base = self._base_url.lower()
         return "openrouter" in base or "api.openai.com" in base
-
-    def supports_embeddings(self) -> bool:
-        return bool(self._embedding_model)
-
-    @property
-    def embedding_model(self) -> str:
-        return self._embedding_model
-
-    @property
-    def embedding_dimension(self) -> int:
-        return self._embedding_dimension
 
     def bind_run(self, run_id: str) -> None:
         """Attach safe operational lineage before calls; no prompt/content is recorded."""
@@ -225,87 +203,6 @@ class LLMAdapter:
             structured_mode=structured_mode,
             finish_reason=str(getattr(response.choices[0], "finish_reason", "") or ""),
         )
-
-    def embed(self, texts: list[str]) -> EmbeddingResult:
-        """Create evidence embeddings through the same priced, guarded provider path."""
-
-        if not texts:
-            return EmbeddingResult((), self._embedding_model, self._embedding_dimension, 0, 0.0)
-        if not self._embedding_model:
-            raise AdapterConfigError("ยังไม่ได้ตั้งค่า embedding model")
-        clean = [str(text)[:12000] for text in texts]
-        # Thai can tokenize close to one code point/token, so use chars as a conservative bound.
-        estimated_tokens = sum(max(1, len(text)) for text in clean)
-        estimated_cost = self._pricing.cost_usd(self._embedding_model, estimated_tokens, 0)
-        self._guard.check_additional(estimated_cost)
-        if self._run_id and self._monthly_cap_usd > 0:
-            check_monthly_budget(
-                self._dsn,
-                estimated_cost,
-                self._monthly_cap_usd,
-                reservation_id=self._monthly_reservation_id,
-            )
-        started = time.monotonic()
-        try:
-            with traced(
-                "llm.embedding",
-                provider=self._provider,
-                tier="embedding",
-                input_count=len(clean),
-            ):
-                response = self._client.embeddings.create(
-                    model=self._embedding_model,
-                    input=clean,
-                    dimensions=self._embedding_dimension,
-                )
-        except Exception as exc:
-            record_provider_call(
-                self._dsn,
-                run_id=self._run_id,
-                provider=self._provider,
-                operation="embedding",
-                tier="embedding",
-                status="error",
-                latency_s=time.monotonic() - started,
-                error_kind=type(exc).__name__,
-                model_version=self._embedding_model,
-            )
-            raise
-        vectors = tuple(tuple(float(value) for value in item.embedding) for item in response.data)
-        dimension = len(vectors[0]) if vectors else 0
-        if len(vectors) != len(clean) or not dimension or any(len(v) != dimension for v in vectors):
-            raise AdapterConfigError("embedding provider คืน vector shape ไม่ครบ")
-        if dimension != self._embedding_dimension:
-            raise AdapterConfigError(
-                f"embedding dimension ไม่ตรง: ได้ {dimension}, ตั้งไว้ {self._embedding_dimension}"
-            )
-        usage = getattr(response, "usage", None)
-        input_tokens = int(
-            getattr(usage, "prompt_tokens", 0) or getattr(usage, "total_tokens", 0) or 0
-        )
-        cost_usd = self._pricing.cost_usd(self._embedding_model, input_tokens, 0)
-        model_version = getattr(response, "model", "") or self._embedding_model
-        record_provider_call(
-            self._dsn,
-            run_id=self._run_id,
-            provider=self._provider,
-            operation="embedding",
-            tier="embedding",
-            status="success",
-            latency_s=time.monotonic() - started,
-            input_tokens=input_tokens,
-            cost_usd=cost_usd,
-            model_version=model_version,
-        )
-        if self._run_id:
-            record_spend(
-                self._dsn,
-                cost_usd,
-                run_id=self._run_id,
-                reservation_id=self._monthly_reservation_id,
-            )
-        self._guard.add_actual(cost_usd)
-        return EmbeddingResult(vectors, model_version, dimension, input_tokens, cost_usd)
 
     @staticmethod
     def _structured_output_unsupported(exc: Exception) -> bool:

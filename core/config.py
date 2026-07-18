@@ -22,8 +22,6 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model_crowd: str = ""
     llm_model_analyst: str = ""
-    llm_model_embedding: str = ""
-    llm_embedding_dimension: int = 1536
     # เพดาน token ของ Executive Readout synthesis — ตั้งจากหน้า Settings ได้ (มติผู้ใช้ 18 ก.ค. 2026)
     llm_synthesis_max_tokens: int = 2000
     otel_exporter_otlp_endpoint: str = ""

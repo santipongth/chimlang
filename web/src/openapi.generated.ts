@@ -1580,21 +1580,10 @@ export interface components {
              */
             live_news: boolean;
             /**
-             * Retrieval Mode
-             * @default hybrid
-             * @enum {string}
-             */
-            retrieval_mode: "hybrid" | "bm25" | "vector";
-            /**
              * Parent Run Id
              * @default
              */
             parent_run_id: string;
-            /**
-             * Reflection
-             * @default false
-             */
-            reflection: boolean;
             /**
              * Experiment Id
              * @default
@@ -1605,11 +1594,6 @@ export interface components {
              * @default
              */
             population_set_id: string;
-            /**
-             * Population Acknowledged
-             * @default false
-             */
-            population_acknowledged: boolean;
             /**
              * Input Mode
              * @default latest
@@ -1686,31 +1670,15 @@ export interface components {
              */
             live_news: boolean;
             /**
-             * Retrieval Mode
-             * @default hybrid
-             * @enum {string}
-             */
-            retrieval_mode: "hybrid" | "bm25" | "vector";
-            /**
              * Parent Run Id
              * @default
              */
             parent_run_id: string;
             /**
-             * Reflection
-             * @default false
-             */
-            reflection: boolean;
-            /**
              * Population Set Id
              * @default
              */
             population_set_id: string;
-            /**
-             * Population Acknowledged
-             * @default false
-             */
-            population_acknowledged: boolean;
         };
         /** RunSpecResponse */
         RunSpecResponse: {

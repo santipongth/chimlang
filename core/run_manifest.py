@@ -114,12 +114,9 @@ def normalize_run_request(
         "seed": int(seed),
         "views": views or ["canvas", "debate", "evidence", "overview"],
         "live_news": bool(raw.get("live_news")),
-        "retrieval_mode": str(raw.get("retrieval_mode", "hybrid")),
         "parent_run_id": str(raw.get("parent_run_id", "") or ""),
-        "reflection": bool(raw.get("reflection")),
         "experiment_id": str(raw.get("experiment_id", "") or ""),
         "population_set_id": str(raw.get("population_set_id", "") or ""),
-        "population_acknowledged": bool(raw.get("population_acknowledged")),
     }
 
 
@@ -186,7 +183,6 @@ def version_snapshot(engine: str) -> dict[str, Any]:
         else [
             "simulation/debate.py",
             "simulation/debate_protocol.py",
-            "simulation/reflection.py",
         ]
     )
     return {
@@ -209,9 +205,7 @@ def version_snapshot(engine: str) -> dict[str, Any]:
     }
 
 
-def model_and_pricing_snapshot(
-    engine: str, *, include_embedding: bool = True
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def model_and_pricing_snapshot(engine: str) -> tuple[dict[str, Any], dict[str, Any]]:
     if engine != "debate":
         return {"provider": "none", "models": {}}, {}
     from core.llm.userconfig import effective_llm_settings, effective_pricing
@@ -221,7 +215,6 @@ def model_and_pricing_snapshot(
     models = {
         "crowd": settings.llm_model_crowd,
         "analyst": settings.llm_model_analyst,
-        "embedding": settings.llm_model_embedding if include_embedding else "",
     }
     prices: dict[str, Any] = {}
     for tier, model in models.items():
@@ -236,7 +229,6 @@ def model_and_pricing_snapshot(
     return {
         "base_url": settings.llm_base_url,
         "models": models,
-        "embedding_dimension": settings.llm_embedding_dimension,
         "run_budget_usd_cap": settings.run_budget_usd_cap,
     }, prices
 

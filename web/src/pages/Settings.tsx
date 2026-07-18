@@ -250,32 +250,6 @@ export default function Settings() {
               </label>
               <label className="text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Embedding model
-                </span>
-                <input
-                  value={data.llm_model_embedding}
-                  onChange={(e) => setData({ ...data, llm_model_embedding: e.target.value })}
-                  onBlur={() => patch({ llm_model_embedding: data.llm_model_embedding } as any)}
-                  placeholder={data.llm.env_model_embedding || "ไม่ตั้ง = BM25 fallback"}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
-                />
-              </label>
-              <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Vector dimension
-                </span>
-                <input
-                  type="number"
-                  min={128}
-                  max={4096}
-                  value={data.llm_embedding_dimension}
-                  onChange={(e) => setData({ ...data, llm_embedding_dimension: parseInt(e.target.value) || 1536 })}
-                  onBlur={() => patch({ llm_embedding_dimension: data.llm_embedding_dimension } as any)}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
-                />
-              </label>
-              <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {t("set_synth_tokens")}
                 </span>
                 <input
@@ -340,8 +314,6 @@ export default function Settings() {
             <div className="rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
               {t("set_llm_active")}: crowd = <code>{data.llm.active_model_crowd || "—"}</code> ·
               analyst = <code>{data.llm.active_model_analyst || "—"}</code>
-              {" · "}embedding = <code>{data.llm.active_model_embedding || "BM25 fallback"}</code>
-              {data.llm.active_model_embedding ? ` (${data.llm.embedding_dimension}d)` : ""}
             </div>
             <button
               onClick={() =>
@@ -350,8 +322,6 @@ export default function Settings() {
                   llm_base_url: "",
                   llm_model_crowd: "",
                   llm_model_analyst: "",
-                  llm_model_embedding: "",
-                  llm_embedding_dimension: 1536,
                   llm_synthesis_max_tokens: 0,
                 } as any)
               }

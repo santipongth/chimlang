@@ -47,7 +47,7 @@ def active_product_policy() -> dict:
         PolicyItem(
             key="semantic_memory",
             status="disabled_pending_evidence",
-            active_default="run_local_reflection_only",
+            active_default="disabled",
             rationale=(
                 "Long-term autonomous memory adds privacy, drift, and cost risk without "
                 "measured benefit."

@@ -566,14 +566,6 @@ def _materialize_population_set(body: RunBody, *, actor: str) -> tuple[RunBody, 
                 status_code=409, detail="PopulationSetV1 hash/acknowledgement ไม่ครบ"
             )
         return body, frozen
-    if not body.population_acknowledged:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "ต้องยอมรับและ freeze PopulationSetV1 ก่อนรัน — "
-                "population ปัจจุบันเป็นสมมติฐานสังเคราะห์ ไม่ใช่ผลสำรวจจริง"
-            ),
-        )
     factory = _load_pack_factory(body.pack_id) or PersonaFactory()
     source_kind = "persona-pack" if body.pack_id is not None else "sample-default"
     source_ref = (
@@ -665,10 +657,7 @@ def _prepare_run_spec(
         input_mode=body.input_mode,
         source_run_id=source_run_id,
     )
-    model_config, pricing = model_and_pricing_snapshot(
-        body.engine,
-        include_embedding=body.retrieval_mode in {"hybrid", "vector"},
-    )
+    model_config, pricing = model_and_pricing_snapshot(body.engine)
     versions = version_snapshot(body.engine)
     versions["model"] = model_config
     election_active = ElectionPolicy(classify_scenario(body.subject)).active
@@ -841,9 +830,7 @@ def _run_create_impl(
         "requested_agents": body.agents,
         "views": views,  # มุมมองที่ผู้ใช้เลือกเปิด (P6-M6)
         "live_news": body.live_news,  # provenance: run นี้ใช้ข่าวสดหรือไม่ (P7)
-        "reflection": body.reflection,
     }
-    config["retrieval_mode"] = body.retrieval_mode
     config["parent_run_id"] = body.parent_run_id
     config["experiment_id"] = body.experiment_id
     config["population_set_id"] = body.population_set_id
@@ -896,26 +883,11 @@ def _run_create_impl(
             from simulation.debate import DebateUnavailableError, make_debate_adapter, run_debate
             from simulation.persona import PersonaFactory
             from simulation.redteam_population import inject_red_team
-            from simulation.reflection import ReflectionPolicy
             from simulation.sources import retrieve_evidence
 
             # Budget/model readiness must fail before source or News Desk I/O.
             _stage(10, "กำลังตรวจงบและโมเดล")
-            if body.reflection:
-                debate_adapter = make_debate_adapter(
-                    n,
-                    rounds,
-                    reflection_calls=min(2, rounds - 1),
-                    monthly_reservation_id=run_id,
-                    include_embedding=body.retrieval_mode in {"hybrid", "vector"},
-                )
-            else:
-                debate_adapter = make_debate_adapter(
-                    n,
-                    rounds,
-                    monthly_reservation_id=run_id,
-                    include_embedding=body.retrieval_mode in {"hybrid", "vector"},
-                )
+            debate_adapter = make_debate_adapter(n, rounds, monthly_reservation_id=run_id)
             if hasattr(debate_adapter, "bind_run"):
                 debate_adapter.bind_run(run_id)
             personas = (factory or PersonaFactory()).sample(n, seed=run_seed, max_agents=n)
@@ -929,24 +901,7 @@ def _run_create_impl(
                 source_status = ingest_sources(settings.postgres_url, run_id, effective_sources)
             else:
                 _stage(20, "ไม่มีหลักฐานแนบ")
-            embedding_status: dict = {"status": "not_requested"}
-            if body.retrieval_mode in {"hybrid", "vector"}:
-                from simulation.sources import index_run_embeddings
-
-                try:
-                    embedding_status = index_run_embeddings(
-                        settings.postgres_url, run_id, debate_adapter
-                    )
-                except Exception as exc:
-                    embedding_status = {"status": "unavailable", "reason": type(exc).__name__}
-            evidence_matches = retrieve_evidence(
-                settings.postgres_url,
-                run_id,
-                subject,
-                k=6,
-                mode=body.retrieval_mode,
-                embedding_adapter=debate_adapter,
-            )
+            evidence_matches = retrieve_evidence(settings.postgres_url, run_id, subject, k=6)
             context = tuple(item["content"] for item in evidence_matches)
             evidence_ids = tuple(f"E{i + 1}" for i in range(len(evidence_matches)))
             # News Desk (P7, SIM-11): โต๊ะข่าวกลางดึงข่าวสด → media diet รายกลุ่ม
@@ -1029,7 +984,6 @@ def _run_create_impl(
                 evidence_ids=evidence_ids,
                 segment_news=segment_news,
                 news_fetcher=news_fetcher,
-                reflection_policy=ReflectionPolicy() if body.reflection else None,
                 synthesis_max_tokens=effective_llm_settings().llm_synthesis_max_tokens,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
@@ -1070,7 +1024,6 @@ def _run_create_impl(
                 "sources": source_status,
                 "evidence_matches": evidence_matches,
                 "context_used": len(context),
-                "embedding": embedding_status,
                 "news": news_status,
             }
         _stage(90, "กำลังบันทึก finding/prediction contract")
@@ -1227,10 +1180,8 @@ def _enqueue_persistent_run(
                 "requested_agents": body.agents,
                 "views": views,
                 "live_news": body.live_news,
-                "retrieval_mode": body.retrieval_mode,
                 "parent_run_id": body.parent_run_id,
                 "seed": run_seed,
-                "reflection": body.reflection,
                 "experiment_id": body.experiment_id,
                 "population_set_id": body.population_set_id,
                 "run_spec": run_spec.model_dump(mode="json"),
@@ -1408,10 +1359,8 @@ def run_retry(run_id: str, principal: Principal = Depends(get_principal)) -> dic
         red_team=bool(old["config"].get("red_team")),
         views=old["config"].get("views") or [],
         live_news=bool(old["config"].get("live_news")),
-        retrieval_mode=old["config"].get("retrieval_mode") or "hybrid",
         parent_run_id=run_id,
         population_set_id=old["config"].get("population_set_id") or "",
-        population_acknowledged=True,
     )
     out = run_create_async(body, principal=principal)
     try:
@@ -1729,7 +1678,6 @@ def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> 
             red_team=bool(parent["config"].get("red_team")),
             views=list(parent["config"].get("views") or []),
             live_news=False,
-            retrieval_mode=parent["config"].get("retrieval_mode") or "hybrid",
             parent_run_id=run_id,
             seed=base_seed + offset,
         )
@@ -2274,7 +2222,6 @@ def gallery_list() -> dict:
             }
             for i in items
         ],
-        "disclaimer": "AI simulation — not a real poll | ทุกตัวเลขเป็นผลจำลอง ไม่ใช่โพลจริง",
     }
 
 

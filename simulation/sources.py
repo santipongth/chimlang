@@ -3,8 +3,7 @@
 ต่างจาก SwarmSight ต้นแบบ:
 - **PII gate ทุกเอกสารก่อนเข้าระบบ** (GOV-01/ADR-0010) — URL/RSS redact และสแกนซ้ำ
   ก่อน persist; direct text, PII URL หรือ verification failure ถูก block
-- retrieval ใช้ BM25 ภาษาไทย + pgvector cosine และ Reciprocal Rank Fusion; ถ้า embedding
-  ไม่พร้อมจะ fallback เป็น BM25 พร้อม provenance ชัดเจน ห้ามอ้างว่าเป็น vector
+- retrieval ใช้ BM25 ภาษาไทย + lexical scoring แบบ deterministic (ADR-0023: ถอด vector path แล้ว)
 - จำกัด ≤ 10 sources/run, เนื้อหา ≤ 2MB/ชิ้น (กัน DoS ตัวเอง)
 """
 
@@ -17,8 +16,7 @@ from urllib.parse import urlparse
 
 from core.config import get_settings
 from core.db import connection, require_schema
-from core.llm.adapter import LLMAdapter
-from core.observability import observe_retrieval, traced
+from core.observability import observe_retrieval
 from core.safe_fetch import SafeOutboundFetcher
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 
@@ -51,21 +49,6 @@ CREATE TABLE IF NOT EXISTS run_chunks (
     content TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS run_chunks_run ON run_chunks (run_id);
-CREATE TABLE IF NOT EXISTS run_chunk_embeddings (
-    chunk_id BIGINT NOT NULL REFERENCES run_chunks(id) ON DELETE CASCADE,
-    run_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    model_version TEXT NOT NULL,
-    dimension INT NOT NULL,
-    embedding vector NOT NULL,
-    embedded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (chunk_id, model, dimension)
-);
-CREATE INDEX IF NOT EXISTS run_chunk_embeddings_run
-    ON run_chunk_embeddings (run_id, model, dimension);
-CREATE INDEX IF NOT EXISTS run_chunk_embeddings_hnsw_1536
-    ON run_chunk_embeddings USING hnsw ((embedding::vector(1536)) vector_cosine_ops)
-    WHERE dimension = 1536;
 CREATE TABLE IF NOT EXISTS external_fetch_cache (
     url_hash TEXT PRIMARY KEY,
     url TEXT NOT NULL,
@@ -383,123 +366,6 @@ def _bm25_scores(rows: list[tuple[int, str, int, str]], query: str) -> dict[int,
     return out
 
 
-def _vector_literal(values: tuple[float, ...]) -> str:
-    if not values or any(not math.isfinite(value) for value in values):
-        raise ValueError("embedding มีค่าไม่ถูกต้อง")
-    return "[" + ",".join(f"{value:.9g}" for value in values) + "]"
-
-
-def index_run_embeddings(dsn: str, run_id: str, adapter: LLMAdapter) -> dict:
-    """Embed each stored chunk once for the configured model and persist provenance."""
-
-    if not adapter.supports_embeddings():
-        return {"status": "unavailable", "reason": "embedding_model_not_configured", "indexed": 0}
-    model = adapter.embedding_model
-    dimension = adapter.embedding_dimension
-    with connection(dsn) as conn:
-        rows = conn.execute(
-            "SELECT c.id, c.content FROM run_chunks c LEFT JOIN run_chunk_embeddings e "
-            "ON e.chunk_id = c.id AND e.model = %s AND e.dimension = %s "
-            "WHERE c.run_id = %s AND e.chunk_id IS NULL ORDER BY c.id LIMIT 500",
-            (model, dimension, run_id),
-        ).fetchall()
-    if not rows:
-        return {"status": "ready", "model": model, "dimension": dimension, "indexed": 0}
-    indexed = 0
-    model_version = model
-    total_cost = 0.0
-    with traced("retrieval.index_embeddings", run_id=run_id, chunks=len(rows)):
-        for start in range(0, len(rows), 32):
-            batch = rows[start : start + 32]
-            result = adapter.embed([row[1] for row in batch])
-            model_version = result.model
-            total_cost += result.cost_usd
-            with connection(dsn) as conn:
-                conn.cursor().executemany(
-                    "INSERT INTO run_chunk_embeddings "
-                    "(chunk_id, run_id, model, model_version, dimension, embedding) "
-                    "VALUES (%s, %s, %s, %s, %s, %s::vector) "
-                    "ON CONFLICT (chunk_id, model, dimension) DO NOTHING",
-                    [
-                        (
-                            row[0],
-                            run_id,
-                            model,
-                            model_version,
-                            result.dimension,
-                            _vector_literal(vector),
-                        )
-                        for row, vector in zip(batch, result.vectors, strict=True)
-                    ],
-                )
-            indexed += len(batch)
-    return {
-        "status": "ready",
-        "model": model,
-        "model_version": model_version,
-        "dimension": dimension,
-        "indexed": indexed,
-        "cost_usd": round(total_cost, 6),
-        "index": "pgvector_hnsw" if dimension == 1536 else "pgvector_exact_dimension_unindexed",
-    }
-
-
-def _vector_scores(
-    dsn: str,
-    run_id: str,
-    query: str,
-    adapter: LLMAdapter | None,
-) -> tuple[dict[int, float], dict]:
-    if adapter is None or not adapter.supports_embeddings():
-        return {}, {"status": "unavailable", "reason": "embedding_model_not_configured"}
-    with connection(dsn) as conn:
-        coverage = conn.execute(
-            "SELECT count(*), count(e.chunk_id) FROM run_chunks c "
-            "LEFT JOIN run_chunk_embeddings e ON e.chunk_id = c.id AND e.model = %s "
-            "AND e.dimension = %s WHERE c.run_id = %s",
-            (adapter.embedding_model, adapter.embedding_dimension, run_id),
-        ).fetchone()
-    if not coverage[0] or coverage[1] < coverage[0]:
-        return {}, {
-            "status": "unavailable",
-            "reason": "embedding_coverage_incomplete",
-            "embedded_chunks": coverage[1],
-            "total_chunks": coverage[0],
-        }
-    result = adapter.embed([query])
-    literal = _vector_literal(result.vectors[0])
-    dimension = result.dimension
-    distance = (
-        "(embedding::vector(1536) <=> %s::vector(1536))"
-        if dimension == 1536
-        else "(embedding <=> %s::vector)"
-    )
-    with connection(dsn) as conn:
-        rows = conn.execute(
-            f"SELECT chunk_id, 1 - {distance} AS similarity "  # noqa: S608 - fixed SQL fragment
-            "FROM run_chunk_embeddings WHERE run_id = %s AND model = %s AND dimension = %s "
-            f"ORDER BY {distance} LIMIT 500",  # noqa: S608 - fixed SQL fragment
-            (
-                literal,
-                run_id,
-                adapter.embedding_model,
-                dimension,
-                literal,
-            ),
-        ).fetchall()
-    return (
-        {int(chunk_id): float(similarity) for chunk_id, similarity in rows},
-        {
-            "status": "ready",
-            "model": adapter.embedding_model,
-            "model_version": result.model,
-            "dimension": dimension,
-            "index": "pgvector_hnsw" if dimension == 1536 else "pgvector_exact_dimension_unindexed",
-            "query_cost_usd": round(result.cost_usd, 6),
-        },
-    )
-
-
 def _ranks(scores: dict[int, float]) -> dict[int, int]:
     return {
         chunk_id: rank
@@ -510,16 +376,8 @@ def _ranks(scores: dict[int, float]) -> dict[int, int]:
     }
 
 
-def retrieve_evidence(
-    dsn: str,
-    run_id: str,
-    query: str,
-    *,
-    k: int = 6,
-    mode: str = "hybrid",
-    embedding_adapter: LLMAdapter | None = None,
-) -> list[dict]:
-    """Retrieve with BM25/vector ranks and RRF, preserving effective-mode provenance."""
+def retrieve_evidence(dsn: str, run_id: str, query: str, *, k: int = 6) -> list[dict]:
+    """Retrieve ด้วย Thai BM25 + lexical scoring แบบ deterministic (ADR-0023: ถอด vector/RRF)"""
     try:
         with connection(dsn) as conn:
             rows = conn.execute(
@@ -535,44 +393,12 @@ def retrieve_evidence(
         return []
     if not rows:
         return []
-    if mode not in {"hybrid", "bm25", "vector"}:
-        mode = "hybrid"
     bm25 = _bm25_scores([(r[0], r[1], r[2], r[3]) for r in rows], query)
-    requested_mode = mode
-    vector: dict[int, float] = {}
-    vector_provenance: dict = {"status": "not_requested"}
-    if mode in {"vector", "hybrid"}:
-        try:
-            with traced("retrieval.query", run_id=run_id, requested_mode=mode):
-                vector, vector_provenance = _vector_scores(dsn, run_id, query, embedding_adapter)
-        except Exception as exc:
-            vector_provenance = {"status": "unavailable", "reason": type(exc).__name__}
     bm25_ranks = _ranks(bm25)
-    vector_ranks = _ranks(vector)
-    vector_ready = bool(vector_ranks)
-    if mode == "bm25":
-        mode_used = "bm25"
-    elif mode == "vector" and vector_ready:
-        mode_used = (
-            "pgvector_hnsw" if vector_provenance.get("index") == "pgvector_hnsw" else "pgvector"
-        )
-    elif mode == "hybrid" and vector_ready:
-        mode_used = "rrf_pgvector_bm25"
-    else:
-        mode_used = "bm25_fallback_embedding_unavailable"
     scored: list[dict] = []
     for chunk_id, label, seq, content, kind, quality, duplicate_of, status in rows:
         lexical, components = _lexical_score(label, content, query)
-        bm = bm25.get(chunk_id, 0.0)
-        if mode == "bm25" or not vector_ready:
-            score = bm
-        elif mode == "vector":
-            score = vector.get(chunk_id, 0.0)
-        else:
-            # Reciprocal Rank Fusion is scale-independent, unlike adding cosine to BM25.
-            score = (1 / (60 + bm25_ranks[chunk_id]) if chunk_id in bm25_ranks else 0) + (
-                1 / (60 + vector_ranks[chunk_id]) if chunk_id in vector_ranks else 0
-            )
+        score = bm25.get(chunk_id, 0.0)
         if score <= 0:
             continue
         scored.append(
@@ -586,22 +412,13 @@ def retrieve_evidence(
                 "duplicate_of": duplicate_of,
                 "content": content,
                 "citation_spans": _citation_spans(content, query),
-                "score_components": {**components, "bm25": round(bm, 4)},
-                "rank_components": {
-                    "bm25_rank": bm25_ranks.get(chunk_id),
-                    "vector_rank": vector_ranks.get(chunk_id),
-                    "vector_similarity": round(vector.get(chunk_id, 0.0), 6),
-                },
-                "retrieval_mode": mode_used,
-                "requested_mode": requested_mode,
-                "embedding_provenance": vector_provenance,
-                "note": "vector_unavailable_fell_back"
-                if requested_mode in {"vector", "hybrid"} and not vector_ready
-                else "",
+                "score_components": {**components, "bm25": round(score, 4)},
+                "rank_components": {"bm25_rank": bm25_ranks.get(chunk_id)},
+                "retrieval_mode": "bm25",
             }
         )
     scored.sort(key=lambda x: (-x["score"], x["source_label"], x["seq"]))
-    observe_retrieval(requested_mode, mode_used, "success" if scored else "empty")
+    observe_retrieval("bm25", "bm25", "success" if scored else "empty")
     return scored[:k]
 
 

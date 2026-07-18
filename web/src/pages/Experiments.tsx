@@ -76,7 +76,7 @@ export default function Experiments({
   initialExperimentId?: string;
   onSelect?: (experimentId: string) => void;
 }) {
-  const { t, formatNumber, lang } = useLang();
+  const { t, formatNumber } = useLang();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState(initialExperimentId);
   const [mode, setMode] = useState<"comparison" | "sweep">("comparison");
@@ -86,7 +86,6 @@ export default function Experiments({
   const [engine, setEngine] = useState<"fabric" | "debate">("fabric");
   const [seeds, setSeeds] = useState("41,42,43");
   const [agents, setAgents] = useState("100");
-  const [populationAcknowledged, setPopulationAcknowledged] = useState(false);
   const listQuery = useQuery({ queryKey: ["experiments"], queryFn: fetchExperiments });
   const detailQuery = useQuery({
     queryKey: ["experiment", selected],
@@ -118,7 +117,6 @@ export default function Experiments({
           domain: "ทั่วไป",
           agents: agentValues[0] || 100,
           rounds: 3,
-          population_acknowledged: populationAcknowledged,
         },
         { seed: seedValues, ...(agentValues.length > 1 ? { agents: agentValues } : {}) },
       );
@@ -136,8 +134,8 @@ export default function Experiments({
       name.trim().length >= 2 &&
       (mode === "comparison"
         ? parseList(runIds).length >= 2
-        : subject.trim().length >= 4 && parseList(seeds).length > 0 && populationAcknowledged),
-    [mode, name, runIds, subject, seeds, populationAcknowledged],
+        : subject.trim().length >= 4 && parseList(seeds).length > 0),
+    [mode, name, runIds, subject, seeds],
   );
 
   return (
@@ -164,14 +162,6 @@ export default function Experiments({
                 <textarea aria-label={t("exp_subject")} value={subject} onChange={(event) => setSubject(event.target.value)} className="min-h-20 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder={t("exp_subject")} />
                 <input aria-label={t("exp_seeds")} value={seeds} onChange={(event) => setSeeds(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs" placeholder={t("exp_seeds")} />
                 <input aria-label={t("exp_agents")} value={agents} onChange={(event) => setAgents(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs" placeholder={t("exp_agents")} />
-                <label className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-950">
-                  <input type="checkbox" checked={populationAcknowledged} onChange={(event) => setPopulationAcknowledged(event.target.checked)} className="mt-0.5 size-4" />
-                  <span>
-                    {lang === "th"
-                      ? "ฉันรับทราบว่า sweep นี้ใช้ PopulationSet สังเคราะห์ที่ถูก freeze แล้ว ไม่ใช่ผลสำรวจ"
-                      : "I acknowledge this sweep uses a frozen synthetic PopulationSet, not survey results."}
-                  </span>
-                </label>
                 <p className="text-[11px] text-muted-foreground">{t("exp_variant_limit").replace("{n}", formatNumber(12))}</p>
               </div>
             )}

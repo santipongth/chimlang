@@ -93,17 +93,6 @@ def evaluate_production_readiness(
         "NEO4J_PASSWORD ยังเป็นค่าว่างหรือค่า dev",
     )
 
-    embedding_ready = bool(env.get("LLM_MODEL_EMBEDDING", "").strip())
-    checks.append(
-        ReadinessItem(
-            "embedding",
-            "pass" if embedding_ready else "warn",
-            "Embedding model configured"
-            if embedding_ready
-            else "ยังใช้ BM25 fallback; ตั้ง model/ราคา/dimension ก่อนเปิด vector mode",
-        )
-    )
-
     if profile == "public-ga":
         public_url = env.get("PUBLIC_BASE_URL", "").strip().lower()
         add(

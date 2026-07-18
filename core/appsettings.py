@@ -26,8 +26,6 @@ DEFAULTS: dict = {
     "llm_base_url": "",
     "llm_model_crowd": "",
     "llm_model_analyst": "",
-    "llm_model_embedding": "",
-    "llm_embedding_dimension": 1536,
     # 0 = ใช้ค่า default (.env llm_synthesis_max_tokens); > 0 = ทับ (มติผู้ใช้ 18 ก.ค. 2026)
     "llm_synthesis_max_tokens": 0,
     "llm_prices": {},  # model -> {input_usd_per_m, output_usd_per_m} (แก้ราคามาตรฐาน/เพิ่มใหม่ได้)
@@ -72,13 +70,9 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
 
         if patch["llm_provider"] not in LLM_PROVIDERS:
             raise ValueError(f"ไม่รู้จัก provider: {patch['llm_provider']}")
-    for k in ("llm_base_url", "llm_model_crowd", "llm_model_analyst", "llm_model_embedding"):
+    for k in ("llm_base_url", "llm_model_crowd", "llm_model_analyst"):
         if k in patch and not isinstance(patch[k], str):
             raise ValueError(f"{k} ต้องเป็นข้อความ")
-    if "llm_embedding_dimension" in patch and not (
-        128 <= int(patch["llm_embedding_dimension"]) <= 4096
-    ):
-        raise ValueError("llm_embedding_dimension ต้องอยู่ใน 128-4096")
     if "llm_synthesis_max_tokens" in patch:
         value = int(patch["llm_synthesis_max_tokens"])
         if value != 0 and not (500 <= value <= 16000):

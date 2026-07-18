@@ -84,12 +84,9 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
             "active_base_url": effective.llm_base_url,
             "active_model_crowd": effective.llm_model_crowd,
             "active_model_analyst": effective.llm_model_analyst,
-            "active_model_embedding": effective.llm_model_embedding,
-            "embedding_dimension": effective.llm_embedding_dimension,
             "synthesis_max_tokens": effective.llm_synthesis_max_tokens,
             "env_model_crowd": settings.llm_model_crowd,
             "env_model_analyst": settings.llm_model_analyst,
-            "env_model_embedding": settings.llm_model_embedding,
             "yaml_prices": yaml_prices,
         },
         "budget": {

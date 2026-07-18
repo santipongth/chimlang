@@ -358,7 +358,6 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
   const failures = Object.entries(protocol.failure_taxonomy ?? {});
   const verifier = protocol.verifier ?? null;
   const judge = protocol.analyst_judge ?? null;
-  const reflections = protocol.reflections ?? [];
   return (
     <div>
       <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
@@ -420,11 +419,6 @@ function DebateProtocolPanel({ protocol, t }: { protocol: any; t: (k: string) =>
             <p className="mt-1">{judge?.contradiction_assessment ?? "—"}</p>
             <p className="mt-1">{judge?.schema_assessment ?? "—"}</p>
           </div>
-        </div>
-      )}
-      {reflections.length > 0 && (
-        <div className="mt-3 rounded-xl border border-border bg-background p-3 text-xs text-muted-foreground">
-          Run-local reflection {reflections.length} ครั้ง · จำกัดเฉพาะ run นี้ · ไม่มี long-term memory
         </div>
       )}
     </div>
@@ -1046,7 +1040,7 @@ export default function RunDetail({
                       <li key={i} className="rounded-xl border border-border bg-background px-4 py-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{m.source_label} #{m.seq}</span>
-                          <span className="text-[10px] text-muted-foreground">{m.retrieval_mode} · score {Number(m.score ?? 0).toFixed(2)} · quality {Number(m.quality_score ?? 0).toFixed(2)}</span>
+                          <span className="text-[10px] text-muted-foreground">score {Number(m.score ?? 0).toFixed(2)} · quality {Number(m.quality_score ?? 0).toFixed(2)}</span>
                         </div>
                         {(m.citation_spans ?? []).slice(0, 2).map((s: any, j: number) => (
                           <p key={j} className="mt-1 text-xs text-muted-foreground">{s.text}</p>

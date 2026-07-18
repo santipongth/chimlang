@@ -128,9 +128,8 @@ def test_public_read_and_vote_cycle(client, store):
     assert r.status_code == 200
     token = r.json()["share_token"]
 
-    # อ่านสาธารณะ — ไม่ต้องมี key, มี disclaimer + watermark เสมอ
+    # อ่านสาธารณะ — ไม่ต้องมี key; watermark labels ยังบังคับเสมอ (GOV-03)
     lst = client.get("/gallery.json").json()
-    assert "not a real poll" in lst["disclaimer"]
     mine = next(i for i in lst["items"] if i["share_token"] == token)
     assert mine["watermark"]["labels"] == [
         "simulation_estimate",

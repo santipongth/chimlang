@@ -4,7 +4,7 @@ pattern จาก SwarmSight (registry + interface กลาง) แต่ engin
 - fabric: กลไก diffusion deterministic ($0, reproduce 100%, scale 1,000) — ฐานของ what-if/fragility
 - debate: agent LLM โพสต์โต้กันเป็นรอบ (เห็นบทสนทนา, cap 40, มีค่าใช้จ่ายผ่าน BudgetGuard)
 
-MiroFish external adapter อยู่ในแผนระยะยาว (PHASE6-BRIEF) — เพิ่ม key ใหม่ที่นี่เมื่อถึงเวลา
+เพิ่ม engine ใหม่ด้วยการลงทะเบียน key ที่นี่
 โดยไม่แตะโค้ดผู้เรียก
 """
 

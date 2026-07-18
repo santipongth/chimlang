@@ -1,22 +1,15 @@
 import json
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api.app import app
-from core.config import Settings
-from core.llm.adapter import EmbeddingResult, LLMAdapter
-from core.llm.cost import BudgetExceededError, BudgetGuard
-from core.llm.pricing import ModelPricing, PricingRegistry
 from core.observability import provider_health, record_provider_call
 from core.runstore import RunStore
 from scripts.run_phase8_benchmarks import run as run_benchmarks
 from simulation.debate import DebatePost
 from simulation.debate_protocol import verify_moves
-from simulation.reflection import ReflectionPolicy, reflection_benchmark
-from simulation.sources import index_run_embeddings, ingest_sources, retrieve_evidence
 from trust.benchmarks import future_calibration_metrics
 
 DSN = "postgresql://chimlang:chimlang@localhost:5432/chimlang"
@@ -67,155 +60,6 @@ def test_typed_move_verifier_keeps_raw_lineage_and_failures():
     assert report["lineage"]["edges"] == [{"from": "m1", "to": "m2", "relation": "evidence"}]
 
 
-def test_reflection_benchmark_reports_bounds_without_inventing_pass_gate():
-    policy = ReflectionPolicy(max_calls=2, max_input_chars=1200, max_output_tokens=160)
-    report = reflection_benchmark(
-        {"severity": {"error": 2, "warning": 3}},
-        {"severity": {"error": 1, "warning": 4}},
-        calls=2,
-        policy=policy,
-    )
-    assert report["error_delta"] == -1
-    assert report["warning_delta"] == 1
-    assert report["within_call_bound"] is True
-    assert "passed" not in report
-
-
-class _Embeddings:
-    def __init__(self):
-        self.calls = []
-
-    def create(self, **kwargs):
-        self.calls.append(kwargs)
-        vectors = [[1.0] + [0.0] * 127 for _ in kwargs["input"]]
-        return SimpleNamespace(
-            data=[SimpleNamespace(embedding=vector) for vector in vectors],
-            usage=SimpleNamespace(prompt_tokens=10, total_tokens=10),
-            model=kwargs["model"] + "@snapshot",
-        )
-
-
-def test_embedding_adapter_is_priced_and_guarded_before_provider_call(monkeypatch):
-    monkeypatch.setattr("core.llm.adapter.record_provider_call", lambda *args, **kwargs: None)
-    spend_rows = []
-    monkeypatch.setattr(
-        "core.llm.adapter.record_spend",
-        lambda dsn, usd, run_id="", **kwargs: spend_rows.append((usd, run_id)),
-    )
-    embeddings = _Embeddings()
-    client = SimpleNamespace(embeddings=embeddings, chat=SimpleNamespace(completions=None))
-    settings = Settings(
-        llm_base_url="https://example.invalid/v1",
-        llm_api_key="test",
-        llm_model_crowd="crowd",
-        llm_model_analyst="analyst",
-        llm_model_embedding="embed",
-        llm_embedding_dimension=128,
-        postgres_url="postgresql://invalid:invalid@127.0.0.1:1/invalid",
-        _env_file=None,
-    )
-    pricing = PricingRegistry(
-        {
-            "crowd": ModelPricing(1, 1),
-            "analyst": ModelPricing(1, 1),
-            "embed": ModelPricing(1, 0),
-        }
-    )
-    adapter = LLMAdapter(
-        settings, pricing, BudgetGuard(1), client=client, run_id="m5-embedding-ledger"
-    )
-    result = adapter.embed(["หลักฐานภาษาไทย"])
-    assert result.dimension == 128 and result.model.endswith("@snapshot")
-    assert result.cost_usd == pytest.approx(0.00001)
-    assert embeddings.calls[0]["dimensions"] == 128
-    assert spend_rows == [(pytest.approx(0.00001), "m5-embedding-ledger")]
-
-    blocked = LLMAdapter(settings, pricing, BudgetGuard(0.000001), client=client)
-    with pytest.raises(BudgetExceededError) as exc:
-        blocked.embed(["ข้อความยาวกว่างบ"])
-    assert exc.value.phase == "pre_call"
-    assert len(embeddings.calls) == 1
-    assert len(spend_rows) == 1
-
-
-class _DeterministicEmbeddingAdapter:
-    embedding_model = "test/thai-embed"
-    embedding_dimension = 1536
-
-    def supports_embeddings(self):
-        return True
-
-    def embed(self, texts):
-        vectors = []
-        for text in texts:
-            vector = [0.0] * 1536
-            if "รถติด" in text or "congestion" in text:
-                vector[0] = 1.0
-            else:
-                vector[1] = 1.0
-            vectors.append(tuple(vector))
-        return EmbeddingResult(tuple(vectors), "test/thai-embed@v1", 1536, 10, 0.0)
-
-
-@needs_pg
-def test_pgvector_hnsw_and_bm25_are_fused_with_rrf():
-    run_id = f"m5-vector-{uuid4()}"
-    ingest_sources(
-        DSN,
-        run_id,
-        [
-            {
-                "kind": "text",
-                "label": "ค่ารถติด",
-                "text": "มาตรการค่าธรรมเนียมรถติดกระทบผู้ค้ารายย่อยและการเดินทาง " * 30,
-            },
-            {
-                "kind": "text",
-                "label": "เกษตร",
-                "text": "ราคาปุ๋ยและผลผลิตข้าวของเกษตรกร " * 30,
-            },
-        ],
-    )
-    adapter = _DeterministicEmbeddingAdapter()
-    try:
-        indexed = index_run_embeddings(DSN, run_id, adapter)
-        result = retrieve_evidence(
-            DSN,
-            run_id,
-            "รถติดผู้ค้ารายย่อย",
-            mode="hybrid",
-            embedding_adapter=adapter,
-        )
-        assert indexed["index"] == "pgvector_hnsw" and indexed["indexed"] >= 2
-        assert result[0]["retrieval_mode"] == "rrf_pgvector_bm25"
-        assert result[0]["embedding_provenance"]["model_version"].endswith("@v1")
-        assert result[0]["rank_components"]["vector_rank"] == 1
-        assert result[0]["note"] == ""
-        import psycopg
-
-        with psycopg.connect(DSN) as conn:
-            conn.execute(
-                "DELETE FROM run_chunk_embeddings WHERE chunk_id = ("
-                "SELECT chunk_id FROM run_chunk_embeddings WHERE run_id = %s LIMIT 1)",
-                (run_id,),
-            )
-        fallback = retrieve_evidence(
-            DSN,
-            run_id,
-            "รถติดผู้ค้ารายย่อย",
-            mode="hybrid",
-            embedding_adapter=adapter,
-        )
-        assert fallback[0]["retrieval_mode"] == "bm25_fallback_embedding_unavailable"
-        assert fallback[0]["embedding_provenance"]["reason"] == "embedding_coverage_incomplete"
-    finally:
-        import psycopg
-
-        with psycopg.connect(DSN) as conn:
-            conn.execute("DELETE FROM run_sources WHERE run_id = %s", (run_id,))
-            conn.execute("DELETE FROM run_chunks WHERE run_id = %s", (run_id,))
-
-
 def test_thai_benchmark_suite_reports_all_raw_dimensions():
     report = run_benchmarks()
     assert report["language"] == "th"
@@ -225,8 +69,6 @@ def test_thai_benchmark_suite_reports_all_raw_dimensions():
     assert report["subgroup_fidelity"]["mean_absolute_error"] > 0
     assert report["social_desirability"]["direction_accuracy"] == 1
     assert report["future_calibration"]["sample_size"] == 4
-    assert report["reflection_smoke"]["within_call_bound"] is True
-    assert report["reflection_smoke"]["error_delta"] < 0
     assert "pass" not in report
 
 

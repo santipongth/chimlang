@@ -1,5 +1,3 @@
-from typing import Literal
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -24,11 +22,8 @@ class RunReadinessBody(BaseModel):
     due_days: int = 30
     views: list[str] = []
     live_news: bool = False
-    retrieval_mode: Literal["hybrid", "bm25", "vector"] = "hybrid"
     parent_run_id: str = ""
-    reflection: bool = False
     population_set_id: str = ""
-    population_acknowledged: bool = False
 
 
 @router.post("/runs/readiness")

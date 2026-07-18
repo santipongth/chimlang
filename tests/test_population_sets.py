@@ -59,19 +59,15 @@ def test_population_set_is_immutable_and_hash_stable_after_input_mutation():
 
 
 @needs_pg
-def test_population_api_and_run_fail_closed_without_acknowledgement():
+def test_population_set_creation_still_requires_explicit_synthetic_flag():
     from fastapi.testclient import TestClient
 
+    # ADR-0023: กล่องรับทราบใน UI ถูกถอด — run สร้างได้ทันที (auto-freeze) แต่การสร้าง
+    # PopulationSetV1 ตรงๆ ยังต้องระบุ acknowledged_synthetic ให้ถูกต้องตาม contract เดิม
     with TestClient(app) as client:
         blocked_set = client.post(
             "/population-sets",
             json={"name": "pytest blocked", "acknowledged_synthetic": False},
         )
-        blocked_run = client.post(
-            "/runs/async",
-            json={"engine": "fabric", "subject": "ทดสอบ population gate", "agents": 20},
-        )
 
     assert blocked_set.status_code == 422
-    assert blocked_run.status_code == 422
-    assert "PopulationSetV1" in blocked_run.json()["detail"]

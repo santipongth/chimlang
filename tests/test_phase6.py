@@ -539,7 +539,7 @@ def test_source_url_guard_blocks_internal_targets():
 
 
 @needs_pg
-def test_sources_rich_retrieval_duplicate_and_vector_fallback():
+def test_sources_rich_retrieval_and_duplicate_detection():
     run_id = new_run_id("debate")
     text = "congestion charge public transport household impact " * 80
     results = ingest_sources(
@@ -553,11 +553,10 @@ def test_sources_rich_retrieval_duplicate_and_vector_fallback():
     assert results[0]["quality_score"] > 0
     assert results[1]["status"] == "duplicate"
     assert results[1]["duplicate_of"] == "source-a"
-    rich = retrieve_evidence(DSN, run_id, "congestion household", mode="vector")
+    rich = retrieve_evidence(DSN, run_id, "congestion household")
     assert rich
     assert rich[0]["citation_spans"]
-    assert rich[0]["requested_mode"] == "vector"
-    assert rich[0]["note"] == "vector_unavailable_fell_back"
+    assert rich[0]["retrieval_mode"] == "bm25"
 
 
 # ---- runstore + POST /runs (M2) ----

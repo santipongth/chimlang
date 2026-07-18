@@ -19,7 +19,6 @@ def test_self_hosted_readiness_never_exposes_secrets():
     assert report["can_deploy"] is True
     assert report["secret_values_exposed"] is False
     assert "strong-postgres" not in str(report)
-    assert next(item for item in report["checks"] if item["id"] == "embedding")["status"] == "warn"
 
 
 def test_public_ga_is_fail_closed_without_external_controls():

@@ -54,27 +54,21 @@ def estimate_run_cost(body: dict, settings: Settings | None = None) -> dict:
     pricing = effective_pricing()
     from simulation.debate import ANALYST_SYNTHESIS_MAX_TOKENS, synthesis_retry_ceiling
 
-    reflection_calls = min(2, max(0, rounds - 1)) if body.get("reflection") else 0
     synthesis_tokens = int(llm_settings.llm_synthesis_max_tokens or ANALYST_SYNTHESIS_MAX_TOKENS)
     loads = [
         TierLoad(llm_settings.llm_model_crowd, agents * rounds, 900, 160),
         TierLoad(
             llm_settings.llm_model_analyst,
-            1 + reflection_calls,
+            1,
             9_000,
             synthesis_retry_ceiling(synthesis_tokens),
         ),
     ]
-    if (
-        str(body.get("retrieval_mode", "hybrid")) in {"hybrid", "vector"}
-        and llm_settings.llm_model_embedding.strip()
-    ):
-        loads.append(TierLoad(llm_settings.llm_model_embedding, 1, 12_000, 0))
     estimate = CostEstimator(pricing).estimate(loads)
     return {
         "estimated_usd": round(estimate.total_usd, 6),
         "currency": "USD",
-        "calls": agents * rounds + 1 + reflection_calls + int(len(loads) == 3),
+        "calls": agents * rounds + 1,
         "run_cap_usd": llm_settings.run_budget_usd_cap,
         "note": "preflight_estimate",
     }
@@ -121,19 +115,6 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
             else "aggregate_policy_ready",
         )
     )
-    population_ready = bool(body.get("population_set_id")) or bool(
-        body.get("population_acknowledged")
-    )
-    checks.append(
-        ReadinessCheck(
-            "population",
-            "PopulationSetV1",
-            "pass" if population_ready else "block",
-            "frozen_or_explicitly_acknowledged"
-            if population_ready
-            else "synthetic_population_requires_acknowledgement_and_freeze",
-        )
-    )
     sources = list(body.get("sources") or [])
     if sources and engine.key != "debate":
         checks.append(
@@ -159,26 +140,6 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
         )
     else:
         checks.append(ReadinessCheck("news", "News Desk", "warn", "disabled"))
-    retrieval_mode = str(body.get("retrieval_mode", "hybrid"))
-    embedding_model = effective_llm_settings().llm_model_embedding.strip()
-    if retrieval_mode in {"hybrid", "vector"} and not embedding_model:
-        checks.append(
-            ReadinessCheck(
-                "retrieval",
-                "Evidence retrieval",
-                "warn",
-                "embedding_not_configured_bm25_fallback",
-            )
-        )
-    else:
-        checks.append(
-            ReadinessCheck(
-                "retrieval",
-                "Evidence retrieval",
-                "pass",
-                f"{retrieval_mode}:{embedding_model or 'bm25'}",
-            )
-        )
     try:
         cost = estimate_run_cost(body, settings)
         run_cap = float(cost.get("run_cap_usd", settings.run_budget_usd_cap))

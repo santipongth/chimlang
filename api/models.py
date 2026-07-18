@@ -21,12 +21,9 @@ class RunBody(BaseModel):
     seed: int | None = None
     views: list[str] = Field(default_factory=list)
     live_news: bool = False
-    retrieval_mode: Literal["hybrid", "bm25", "vector"] = "hybrid"
     parent_run_id: str = ""
-    reflection: bool = False
     experiment_id: str = ""
     population_set_id: str = ""
-    population_acknowledged: bool = False
     input_mode: Literal["latest", "frozen"] = "latest"
     source_run_id: str = ""
 

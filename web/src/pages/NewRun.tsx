@@ -91,7 +91,6 @@ export default function NewRun({
   const [redTeam, setRedTeam] = useState(false);
   const [packs, setPacks] = useState<PersonaPack[]>([]);
   const [packId, setPackId] = useState<number | null>(null);
-  const [populationAcknowledged, setPopulationAcknowledged] = useState(false);
   const [packIntent, setPackIntent] = useState<PackModalIntent | null>(null);
   const [packToDelete, setPackToDelete] = useState<PersonaPack | null>(null);
   const [sources, setSources] = useState<SourceInput[]>([]);
@@ -100,11 +99,6 @@ export default function NewRun({
   const [packLimits, setPackLimits] = useState<PackLimits>(FALLBACK_PACK_LIMITS);
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [liveNews, setLiveNews] = useState(false);
-  const [retrievalMode, setRetrievalMode] = useState<"hybrid" | "bm25" | "vector">("hybrid");
-  const [reflection, setReflection] = useState(false);
-  const [claim, setClaim] = useState("");
-  const [measurement, setMeasurement] = useState("");
-  const [dueDays, setDueDays] = useState(30);
   const [readiness, setReadiness] = useState<RunReadiness | null>(null);
   const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
@@ -162,21 +156,15 @@ export default function NewRun({
       agents: Math.min(agents, cap),
       rounds,
       pack_id: packId,
-      population_acknowledged: populationAcknowledged,
       red_team: redTeam,
       sources: isDebate ? sources : [],
       views,
       live_news: isDebate && liveNews,
-      retrieval_mode: retrievalMode,
-      reflection: isDebate && reflection,
-      claim,
-      measurement,
-      due_days: dueDays,
     };
     fetchRunReadiness(body)
       .then(setReadiness)
       .catch(() => setReadiness(null));
-  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, populationAcknowledged, redTeam, sources, views, isDebate, liveNews, retrievalMode, reflection, claim, measurement, dueDays]);
+  }, [stepKey, subject, engine, domain, agents, cap, rounds, packId, redTeam, sources, views, isDebate, liveNews]);
 
   function addSource() {
     if (sources.length >= 10) return;
@@ -213,16 +201,10 @@ export default function NewRun({
         agents: Math.min(agents, cap),
         rounds,
         pack_id: packId,
-        population_acknowledged: populationAcknowledged,
         red_team: redTeam,
         sources: isDebate ? sources : [],
         views,
         live_news: isDebate && liveNews,
-        retrieval_mode: retrievalMode,
-        reflection: isDebate && reflection,
-        claim,
-        measurement,
-        due_days: dueDays,
       }, idempotencyKey);
       onCreated(job.run_id);
     } catch (e: any) {
@@ -307,7 +289,6 @@ export default function NewRun({
               </SelectCard>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">🔮 {t("wiz_engine_future")}</p>
         </div>
       )}
 
@@ -315,39 +296,6 @@ export default function NewRun({
         <div className={card + " space-y-4"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">📎 {t("wiz_src_title")}</div>
           <p className="text-xs text-muted-foreground">{t("wiz_src_desc")}</p>
-          <div className="rounded-xl border border-border bg-background p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Retrieval</div>
-            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-              {(["hybrid", "bm25", "vector"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setRetrievalMode(m)}
-                  className={`rounded-lg border px-3 py-2 ${retrievalMode === m ? "border-primary bg-primary/5 text-primary-strong" : "border-border text-muted-foreground hover:bg-muted"}`}
-                >
-                  {m === "hybrid" ? "Hybrid" : m === "bm25" ? "BM25" : "Vector"}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Hybrid ใช้ RRF ระหว่าง pgvector HNSW กับ BM25; ถ้า embedding ยังไม่ตั้งค่าจะแสดง BM25 fallback ใน provenance</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setReflection(!reflection)}
-            className={`flex w-full items-center justify-between rounded-xl border p-3 text-left text-sm transition ${
-              reflection ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted"
-            }`}
-          >
-            <span>
-              <span className="font-medium">🪞 Run-local reflection</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">เลือกใช้เท่านั้น · สูงสุด 2 ครั้ง · ไม่สร้างความจำระยะยาว · คิดต้นทุนผ่าน BudgetGuard</span>
-            </span>
-            <span className={`ml-3 rounded-full px-2.5 py-0.5 text-xs font-medium ${reflection ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
-              {reflection ? "ON" : "OFF"}
-            </span>
-          </button>
-
           {/* โต๊ะข่าวสด (P7, SIM-11) — โต๊ะข่าวกลางดึงข่าวให้ agent ตาม media diet ของกลุ่ม */}
           <button
             type="button"
@@ -622,14 +570,6 @@ export default function NewRun({
         <div className={card + " space-y-3 text-sm"}>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_review")}</div>
           <div className="rounded-xl border border-border bg-background p-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_validation_target")}</div>
-            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_110px]">
-              <input value={claim} onChange={(e) => setClaim(e.target.value)} placeholder={t("wiz_claim_ph")} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
-              <input value={measurement} onChange={(e) => setMeasurement(e.target.value)} placeholder={t("wiz_measurement_ph")} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
-              <input type="number" min={1} max={365} value={dueDays} onChange={(e) => setDueDays(Math.max(1, Math.min(365, Number(e.target.value) || 30)))} className="rounded-lg border border-border bg-card px-3 py-2 text-xs" />
-            </div>
-          </div>
-          <div className="rounded-xl border border-border bg-background p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("wiz_readiness")}</div>
@@ -650,25 +590,11 @@ export default function NewRun({
                 ))}
               </div>
             )}
-            <label className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-              <input
-                type="checkbox"
-                checked={populationAcknowledged}
-                onChange={(event) => setPopulationAcknowledged(event.target.checked)}
-                className="mt-0.5 size-4"
-              />
-              <span>
-                {lang === "th"
-                  ? "ฉันรับทราบว่า PopulationSet นี้เป็นสมมติฐานสังเคราะห์ ไม่ใช่ผลสำรวจหรือสำมะโนจริง และระบบจะ freeze ชุดนี้ก่อนรัน"
-                  : "I acknowledge that this PopulationSet contains synthetic assumptions, not survey or census results, and will be frozen before the run."}
-              </span>
-            </label>
           </div>
           <div className="grid grid-cols-[130px_1fr] gap-y-2">
             <span className="text-muted-foreground">{t("wiz_step1")}</span><span className="font-medium">{subject || "—"}</span>
             <span className="text-muted-foreground">{t("wiz_step_engine")}</span><span>{isDebate ? "🗣 Debate" : "⚙ Fabric"}{isDebate ? ` · ${rounds} ${t("wiz_rounds_unit")}` : ` · ${t("wiz_universes_short")}`}</span>
             <span className="text-muted-foreground">{t("wiz_agents")}</span><span>{formatNumber(Math.min(agents, cap))}</span>
-            {isDebate && <><span className="text-muted-foreground">{t("wiz_retrieval")}</span><span>{retrievalMode}</span></>}
             <span className="text-muted-foreground">{t("wiz_persona_title")}</span><span>{packId == null ? t("wiz_persona_default") : `★ ${packs.find((p) => p.id === packId)?.label ?? packId}`}</span>
             {isDebate && sources.length > 0 && (<><span className="text-muted-foreground">{t("wiz_src_title")}</span><span>{sources.length} {t("wiz_src_unit")}</span></>)}
             <span className="text-muted-foreground">{t("wiz_redteam_label")}</span><span>{redTeam ? (engine === "fabric" ? `🛡️ ${t("wiz_redteam_on")}` : `🛡️ ON`) : "—"}</span>
@@ -692,7 +618,7 @@ export default function NewRun({
             {t("next")}
           </button>
         ) : (
-          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy || !populationAcknowledged || readiness?.can_run === false} onClick={submit}>
+          <button className="bg-primary hover:bg-primary-strong text-white px-6 py-2.5 rounded-xl text-sm font-medium disabled:opacity-60" disabled={busy || readiness?.can_run === false} onClick={submit}>
             {busy ? `⏳ ${t("running")}` : t("run_now")}
           </button>
         )}

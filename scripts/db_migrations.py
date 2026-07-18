@@ -364,6 +364,15 @@ def _apply_population_sets_v1(conn: Connection) -> None:
 
 Migration = tuple[str, str, Callable[[Connection], None]]
 
+
+def _remove_vector_retrieval(conn: Connection) -> None:
+    """ADR-0023: ถอด vector/RRF retrieval — ลบตาราง embeddings (ตรวจแล้วไม่มีข้อมูล production
+    เพราะ embedding ไม่เคยถูกตั้งค่า ระบบใช้ BM25 fallback ตลอด)"""
+    conn.execute("DROP INDEX IF EXISTS run_chunk_embeddings_hnsw_1536")
+    conn.execute("DROP INDEX IF EXISTS run_chunk_embeddings_run")
+    conn.execute("DROP TABLE IF EXISTS run_chunk_embeddings")
+
+
 MIGRATIONS: list[Migration] = [
     (
         "2026-07-15-run-lifecycle-newsdesk-cache",
@@ -459,6 +468,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-18-remove-project-validation-rehearsal-usability-v1",
         "remove decommissioned workspace tables while retaining immutable governance ledgers",
         _remove_decommissioned_workspaces,
+    ),
+    (
+        "2026-07-18-remove-vector-retrieval-v1",
+        "drop unused pgvector embedding table after ADR-0023 retrieval simplification",
+        _remove_vector_retrieval,
     ),
 ]
 

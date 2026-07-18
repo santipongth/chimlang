@@ -16,8 +16,6 @@ ALLOWED_SWEEP_FIELDS = {
     "agents",
     "rounds",
     "red_team",
-    "retrieval_mode",
-    "reflection",
 }
 MAX_SWEEP_VARIANTS = 12
 
@@ -45,7 +43,7 @@ def expand_sweep(base: RunBody, parameters: dict[str, list]) -> list[tuple[RunBo
         if body.engine == "fabric":
             if body.red_team:
                 raise ValueError("fabric experiment ไม่รับ red_team flag; ใช้ Compare workflow แยก")
-            ignored = {"rounds", "red_team", "retrieval_mode", "reflection"} & set(parameters)
+            ignored = {"rounds", "red_team"} & set(parameters)
             if ignored:
                 raise ValueError(
                     "fabric sweep รองรับเฉพาะ seed/agents; มิติเหล่านี้ไม่มีผลจริง: "
