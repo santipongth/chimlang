@@ -23,6 +23,11 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
+- **ใหม่ (18 ก.ค. ADR-0027):** ถอด RSS ออกจาก evidence sources ต่อ run — เหลือ text/url;
+  kind rss ใหม่ = 422 ทั้ง API/engine, แถวประวัติยังอ่านได้ (CHECK เดิมคงไว้ ไม่มี migration),
+  frozen rerun ข้าม legacy rss อย่างปลอดภัย; RSS ใน codebase เหลือเฉพาะ legacy-read.
+  Tavily คงจำกัด 3 ผลลัพธ์/คำค้น (TAVILY_MAX_RESULTS) × ≤8 คำค้น/run, เพดานรวม 30 ชิ้น.
+
 - **ใหม่ (18 ก.ค. ADR-0026):** ถอด RSS ออกจากโต๊ะข่าวสดทั้งหมดตามมติผู้ใช้ — News Desk เหลือ
   Tavily search อย่างเดียว (general mode); ลบ parser/pubDate/age filter/UI/config/keys + migration
   drop published_at และล้าง rss cache; snapshot ประวัติ provider=rss ยังอ่านได้; near-dup/TTL/

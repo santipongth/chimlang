@@ -884,6 +884,7 @@ export default function RunDetail({
                             <StatusIcon status={n.status} /> {n.title || n.url}
                           </span>
                           <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {/* "📡 RSS" = ป้ายอ่านอย่างเดียวสำหรับแถว snapshot ก่อน ADR-0026/0027 */}
                             {n.provider === "search" ? "🔎 search" : "📡 RSS"} · {String(n.fetched_at).slice(0, 16).replace("T", " ")}
                           </span>
                         </div>

@@ -1,10 +1,11 @@
 """Sources ต่อ run (P6-M3) — เอกสารอ้างอิงจริงป้อนเข้า debate engine (แนว GraphRAG Swarm)
 
 ต่างจาก SwarmSight ต้นแบบ:
-- **PII gate ทุกเอกสารก่อนเข้าระบบ** (GOV-01/ADR-0010) — URL/RSS redact และสแกนซ้ำ
+- **PII gate ทุกเอกสารก่อนเข้าระบบ** (GOV-01/ADR-0010) — URL redact และสแกนซ้ำ
   ก่อน persist; direct text, PII URL หรือ verification failure ถูก block
 - retrieval ใช้ BM25 ภาษาไทย + lexical scoring แบบ deterministic (ADR-0023: ถอด vector path แล้ว)
 - จำกัด ≤ 10 sources/run, เนื้อหา ≤ 2MB/ชิ้น (กัน DoS ตัวเอง)
+- kind รับเฉพาะ 'text' และ 'url' (ADR-0027 ถอด 'rss') — แถวประวัติ kind='rss' ยังอ่านได้
 """
 
 import hashlib
@@ -20,6 +21,9 @@ from core.observability import observe_retrieval
 from core.safe_fetch import SafeOutboundFetcher
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
 
+# ADR-0027: evidence source รับเฉพาะ text/url — 'rss' ถูกถอดจากทางเข้าใหม่ทุกทาง
+# (CHECK constraint ใน _SCHEMA ยังคง 'rss' ไว้เพื่อให้แถวประวัติ valid — ดู ADR-0027)
+ALLOWED_SOURCE_KINDS = ("text", "url")
 MAX_SOURCES = 10
 MAX_TEXT_CHARS = 2_000_000
 CHUNK_SIZE = 800
@@ -31,6 +35,8 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS run_sources (
     id BIGSERIAL PRIMARY KEY,
     run_id TEXT NOT NULL,
+    -- 'rss' คงไว้ใน CHECK เพื่อให้แถวประวัติก่อน ADR-0027 valid เหมือนกันทุก deployment;
+    -- ทางเข้าใหม่ถูกปฏิเสธที่ API (422) และ ingest_sources (ALLOWED_SOURCE_KINDS)
     kind TEXT NOT NULL CHECK (kind IN ('text', 'url', 'rss')),
     label TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -70,22 +76,6 @@ def _strip_html(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _parse_rss(xml: str) -> str:
-    items = re.findall(r"<item[\s\S]*?</item>|<entry[\s\S]*?</entry>", xml, flags=re.IGNORECASE)
-    parts = []
-    for chunk in items[:15]:
-        title = re.search(r"<title[^>]*>([\s\S]*?)</title>", chunk, flags=re.IGNORECASE)
-        desc = re.search(
-            r"<description[^>]*>([\s\S]*?)</description>|<summary[^>]*>([\s\S]*?)</summary>",
-            chunk,
-            flags=re.IGNORECASE,
-        )
-        t = re.sub(r"<!\[CDATA\[|\]\]>", "", title.group(1)) if title else ""
-        d = re.sub(r"<!\[CDATA\[|\]\]>", "", (desc.group(1) or desc.group(2))) if desc else ""
-        parts.append(f"{_strip_html(t)}\n{_strip_html(d)}")
-    return "\n\n".join(parts)
-
-
 def _chunk(text: str) -> list[str]:
     clean = re.sub(r"\s+", " ", text).strip()
     if not clean:
@@ -103,7 +93,7 @@ def _chunk(text: str) -> list[str]:
 def _quality_score(kind: str, text: str, chunks: int) -> float:
     length_score = min(1.0, len(text.strip()) / 2000)
     structure_score = 0.15 if re.search(r"https?://|^#{1,3}\s|\n[-*]\s", text, re.M) else 0.0
-    kind_score = {"text": 0.75, "url": 0.85, "rss": 0.8}.get(kind, 0.65)
+    kind_score = {"text": 0.75, "url": 0.85}.get(kind, 0.65)
     chunk_score = min(1.0, chunks / 4) * 0.15
     return round(
         max(0.0, min(1.0, kind_score * 0.55 + length_score * 0.3 + structure_score + chunk_score)),
@@ -140,7 +130,7 @@ def _fetch_text(kind: str, label: str, url: str | None, text: str | None) -> str
         .fetch(safe_url)
         .text[:MAX_TEXT_CHARS]
     )
-    return _parse_rss(raw) if kind == "rss" else _strip_html(raw)
+    return _strip_html(raw)
 
 
 def _fetch_text_cached(
@@ -192,13 +182,17 @@ def _fetch_text_cached(
 def ingest_sources(dsn: str, run_id: str, sources: list[dict]) -> list[dict]:
     """นำเข้าเอกสารทั้งชุดของ run — คืนสถานะราย source
 
-    URL/RSS redact-and-verify ก่อน persist; direct text ที่พบ PII ยัง block ตาม ADR-0010.
+    URL redact-and-verify ก่อน persist; direct text ที่พบ PII ยัง block ตาม ADR-0010.
+    kind รับเฉพาะ text/url (ADR-0027) — kind อื่นถูกปฏิเสธก่อนแตะ network/DB.
     """
     settings = get_settings()
     if not settings.pii_detector_enabled:
         raise ValueError("PII detector ถูกปิด — ปฏิเสธการนำเข้าเอกสาร (GOV-01 fail-closed)")
     if len(sources) > MAX_SOURCES:
         raise ValueError(f"จำกัด {MAX_SOURCES} sources ต่อ run")
+    for src in sources:
+        if str(src.get("kind", "text")) not in ALLOWED_SOURCE_KINDS:
+            raise ValueError("source kind ต้องเป็น text หรือ url เท่านั้น (ADR-0027 ถอด rss ออกแล้ว)")
     detector = PIIDetector(load_allowlist())
     results: list[dict] = []
     with connection(dsn) as conn:

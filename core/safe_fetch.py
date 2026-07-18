@@ -1,4 +1,4 @@
-"""Fail-closed outbound HTTP fetcher for user-controlled URL/RSS (ADR-0014)."""
+"""Fail-closed outbound HTTP fetcher for user-controlled URLs (ADR-0014)."""
 
 from __future__ import annotations
 
@@ -20,8 +20,6 @@ DEFAULT_CONTENT_TYPES = frozenset(
         "application/xhtml+xml",
         "application/xml",
         "text/xml",
-        "application/rss+xml",
-        "application/atom+xml",
     }
 )
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})

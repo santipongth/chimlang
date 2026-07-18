@@ -529,6 +529,50 @@ def test_sources_detector_disabled_fails_closed(monkeypatch):
         ingest_sources(DSN, "x", [{"kind": "text", "label": "a", "text": "b"}])
 
 
+def test_sources_rss_kind_rejected(monkeypatch):
+    """ADR-0027: kind='rss' ไม่มีทางเข้าใหม่ — ingest ปฏิเสธก่อนแตะ network/DB"""
+    import simulation.sources as src
+
+    monkeypatch.setattr(
+        src,
+        "_fetch_text",
+        lambda *args: (_ for _ in ()).throw(AssertionError("rss source must not be fetched")),
+    )
+    with pytest.raises(ValueError, match="ADR-0027"):
+        ingest_sources(
+            DSN,
+            new_run_id("debate"),
+            [{"kind": "rss", "label": "feed", "url": "https://example.com/feed"}],
+        )
+
+
+@needs_pg
+def test_legacy_rss_source_rows_still_readable():
+    """แถวประวัติ kind='rss' (ก่อน ADR-0027) ต้อง insert ผ่าน CHECK เดิมและอ่านผ่าน retrieval ได้"""
+    import psycopg
+
+    run_id = new_run_id("debate")
+    with psycopg.connect(DSN) as conn:
+        conn.execute(
+            "INSERT INTO run_sources (run_id, kind, label, status, chunks, quality_score) "
+            "VALUES (%s, 'rss', 'ฟีดข่าวเก่า', 'ready', 1, 0.8)",
+            (run_id,),
+        )
+        conn.execute(
+            "INSERT INTO run_chunks (run_id, source_label, seq, content) "
+            "VALUES (%s, 'ฟีดข่าวเก่า', 0, 'ข่าวเก่าเรื่องค่าธรรมเนียมรถติดในเขตเมือง')",
+            (run_id,),
+        )
+    try:
+        rich = retrieve_evidence(DSN, run_id, "ค่าธรรมเนียมรถติด", k=3)
+        assert rich and rich[0]["kind"] == "rss"
+        assert rich[0]["source_label"] == "ฟีดข่าวเก่า"
+    finally:
+        with psycopg.connect(DSN) as conn:
+            conn.execute("DELETE FROM run_chunks WHERE run_id = %s", (run_id,))
+            conn.execute("DELETE FROM run_sources WHERE run_id = %s", (run_id,))
+
+
 def test_source_url_guard_blocks_internal_targets():
     from simulation.sources import validate_external_url
 
@@ -781,6 +825,15 @@ def test_post_runs_guards(client):
         ).status_code
         == 422
     )
+    # ADR-0027: kind='rss' ถูกถอด — ทางเข้าใหม่ทุกทางต้อง 422 (ทั้ง /runs และ readiness)
+    rss_body = {
+        "engine": "debate",
+        "subject": "ทดสอบ rss ถูกถอด",
+        "sources": [{"kind": "rss", "label": "feed", "url": "https://example.com/feed"}],
+    }
+    assert client.post("/runs", json=rss_body).status_code == 422
+    assert client.post("/runs/async", json=rss_body).status_code == 422
+    assert client.post("/runs/readiness", json=rss_body).status_code == 422
 
 
 def test_api_rejects_too_few_agents_before_db(client):

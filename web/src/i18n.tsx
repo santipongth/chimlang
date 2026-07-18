@@ -181,8 +181,8 @@ export const DICT: Record<string, { th: string; en: string }> = {
   },
   wiz_src_title: { th: "เอกสารอ้างอิง", en: "Reference sources" },
   wiz_src_desc: {
-    th: "ป้อนเอกสาร ลิงก์ข่าว หรือฟีดข่าว (RSS) ให้ตัวแทนจำลอง (agent) ใช้อ้างอิงระหว่างการถกเถียง (ไม่ใส่ก็ได้ — ตัวแทนจะโต้แย้งจากมุมมองพื้นฐานของกลุ่มตัวเองล้วนๆ)",
-    en: "Feed documents, news links or RSS feeds for the agents to cite during the debate (optional — otherwise they argue purely from their persona priors).",
+    th: "ป้อนเอกสารหรือลิงก์ข่าวให้ตัวแทนจำลอง (agent) ใช้อ้างอิงระหว่างการถกเถียง (ไม่ใส่ก็ได้ — ตัวแทนจะโต้แย้งจากมุมมองพื้นฐานของกลุ่มตัวเองล้วนๆ)",
+    en: "Feed documents or news links for the agents to cite during the debate (optional — otherwise they argue purely from their persona priors).",
   },
   wiz_src_text: { th: "วางข้อความ", en: "Paste text" },
   wiz_src_label_ph: { th: "ชื่อเรียกเอกสาร (ไม่บังคับ)", en: "Source label (optional)" },
@@ -191,8 +191,8 @@ export const DICT: Record<string, { th: string; en: string }> = {
   wiz_src_need_url: { th: "ต้องเป็นลิงก์ที่ขึ้นต้นด้วย http หรือ https", en: "Must be an http(s) URL" },
   wiz_src_unit: { th: "รายการ", en: "items" },
   wiz_src_pii_note: {
-    th: "ลิงก์เว็บ/RSS จะถูกลบข้อมูลส่วนบุคคล (PII) และตรวจซ้ำก่อนใช้เสมอ; ส่วนข้อความที่วางเองโดยตรงและลิงก์ที่มีข้อมูลส่วนบุคคลจะถูกปิดกั้นตามกติกา GOV-01",
-    en: "Web/RSS evidence has personal data (PII) removed and re-verified before use; directly pasted text and URLs containing PII remain blocked under GOV-01.",
+    th: "ลิงก์เว็บจะถูกลบข้อมูลส่วนบุคคล (PII) และตรวจซ้ำก่อนใช้เสมอ; ส่วนข้อความที่วางเองโดยตรงและลิงก์ที่มีข้อมูลส่วนบุคคลจะถูกปิดกั้นตามกติกา GOV-01",
+    en: "Web evidence has personal data (PII) removed and re-verified before use; directly pasted text and URLs containing PII remain blocked under GOV-01.",
   },
   wiz_rounds: { th: "จำนวนรอบการถกเถียง (debate rounds)", en: "Debate rounds" },
   wiz_rounds_unit: { th: "รอบ", en: "rounds" },
@@ -406,8 +406,8 @@ export const DICT: Record<string, { th: string; en: string }> = {
     en: "Not set — live news will fetch nothing (recorded as skipped evidence). Get a free key at tavily.com to enable topic-targeted search.",
   },
   wiz_src_need_value: {
-    th: "กรอกลิงก์ (URL/RSS) หรือวางเนื้อหาก่อน จึงจะกดเพิ่มได้",
-    en: "Enter a URL/RSS link or paste text first, then press add",
+    th: "กรอกลิงก์ (URL) หรือวางเนื้อหาก่อน จึงจะกดเพิ่มได้",
+    en: "Enter a URL or paste text first, then press add",
   },
   set_system: { th: "สถานะระบบ", en: "System status" },
   set_health: { th: "สถานะบริการที่ระบบพึ่งพา (dependency)", en: "Dependency health" },

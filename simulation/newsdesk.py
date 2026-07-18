@@ -28,6 +28,9 @@ from simulation.sources import _strip_html, _trigrams
 MAX_ITEMS_PER_RUN = 30
 MAX_SEARCH_QUERIES_PER_RUN = 8
 MAX_CONTENT_CHARS = 4_000
+# จำนวนผลลัพธ์ต่อคำค้นจาก Tavily — คุมทั้ง latency และปริมาณเนื้อหาที่ต้องผ่าน PII gate;
+# ค่าคงที่โดยเจตนา (ไม่เป็น setting) เพราะ caps ต่อ run ข้างบนเป็นด่านคุมปริมาณจริงอยู่แล้ว
+TAVILY_MAX_RESULTS = 3
 NEWS_CACHE_TTL_HOURS = 6  # default — ปรับได้จากหน้า Settings (news_cache_ttl_hours)
 # ตัดซ้ำแบบใกล้เคียงด้วย containment coefficient (|A∩B| / min(|A|,|B|)) แทน Jaccard —
 # ข่าวเรื่องเดียวกันคนละสำนักมักเป็น "เนื้อเดิม + พาดหัว/รายละเอียดต่างกัน" ซึ่ง Jaccard เจือจาง
@@ -95,7 +98,9 @@ def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:32]
 
 
-def _tavily_search(query: str, api_key: str, *, max_results: int = 3) -> list[tuple[str, str, str]]:
+def _tavily_search(
+    query: str, api_key: str, *, max_results: int = TAVILY_MAX_RESULTS
+) -> list[tuple[str, str, str]]:
     """คืน [(title, url, content)] — เรียก Tavily REST (คุณภาพไทยยังไม่ benchmark — ดู brief)"""
     resp = httpx.post(
         "https://api.tavily.com/search",

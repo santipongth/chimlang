@@ -94,7 +94,7 @@ export async function fetchRunReadiness(body: CreateRunBody): Promise<RunReadine
 }
 
 export interface SourceInput {
-  kind: "text" | "url" | "rss";
+  kind: "text" | "url"; // ADR-0027: ถอด "rss" — แถวประวัติ kind='rss' อ่านได้ผ่าน run payload เท่านั้น
   label: string;
   url?: string;
   text?: string;

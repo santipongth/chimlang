@@ -2,7 +2,18 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def validate_source_kinds(sources: list[dict]) -> list[dict]:
+    """ADR-0027: evidence source รับเฉพาะ kind text/url — kind อื่น (รวม rss เดิม) = 422"""
+    from simulation.sources import ALLOWED_SOURCE_KINDS
+
+    for source in sources:
+        kind = str(source.get("kind", "text"))
+        if kind not in ALLOWED_SOURCE_KINDS:
+            raise ValueError(f"source kind '{kind}' ไม่รองรับ — ใช้ได้เฉพาะ text หรือ url (ADR-0027)")
+    return sources
 
 
 class RunBody(BaseModel):
@@ -26,6 +37,11 @@ class RunBody(BaseModel):
     population_set_id: str = ""
     input_mode: Literal["latest", "frozen"] = "latest"
     source_run_id: str = ""
+
+    @field_validator("sources")
+    @classmethod
+    def _sources_kind_allowed(cls, v: list[dict]) -> list[dict]:
+        return validate_source_kinds(v)
 
 
 class ApiError(BaseModel):

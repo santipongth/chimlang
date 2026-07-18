@@ -100,7 +100,7 @@ export default function NewRun({
   const [views, setViews] = useState<string[]>(["overview", "debate", "canvas", "evidence"]);
   const [liveNews, setLiveNews] = useState(false);
   const [readiness, setReadiness] = useState<RunReadiness | null>(null);
-  const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "rss" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
+  const [srcDraft, setSrcDraft] = useState<{ kind: "url" | "text"; label: string; value: string }>({ kind: "url", label: "", value: "" });
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
@@ -313,13 +313,13 @@ export default function NewRun({
             </span>
           </button>
           <div className="flex flex-wrap gap-2">
-            {(["url", "rss", "text"] as const).map((k) => (
+            {(["url", "text"] as const).map((k) => (
               <button
                 key={k}
                 onClick={() => setSrcDraft({ ...srcDraft, kind: k })}
                 className={`rounded-full border px-3 py-1 text-xs ${srcDraft.kind === k ? "border-primary bg-primary/5 text-primary-strong font-medium" : "border-border text-muted-foreground"}`}
               >
-                {k === "url" ? "🔗 URL" : k === "rss" ? "📰 RSS" : `📄 ${t("wiz_src_text")}`}
+                {k === "url" ? "🔗 URL" : `📄 ${t("wiz_src_text")}`}
               </button>
             ))}
           </div>
@@ -362,7 +362,7 @@ export default function NewRun({
             <ul className="space-y-1 text-sm">
               {sources.map((s, i) => (
                 <li key={i} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
-                  <span className="truncate">{s.kind === "url" ? "🔗" : s.kind === "rss" ? "📰" : "📄"} {s.label}</span>
+                  <span className="truncate">{s.kind === "url" ? "🔗" : "📄"} {s.label}</span>
                   <button onClick={() => setSources(sources.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-600">✕</button>
                 </li>
               ))}

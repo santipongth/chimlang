@@ -17,6 +17,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from pydantic import ValidationError as PydanticValidationError
 
 from api.auth import get_principal, require, require_election
 from api.dashboard import (
@@ -925,6 +926,8 @@ def _run_create_impl(
                     _stage(35, "กำลังเปิด frozen news snapshot")
                     all_items = [
                         NewsItem(
+                            # legacy snapshot ก่อน ADR-0026 อาจไม่มี provider — คง 'rss'
+                            # เป็นป้าย legacy (อ่านอย่างเดียว ไม่มีทางเข้าใหม่ — ADR-0027)
                             provider=str(item.get("provider") or "rss"),
                             url=str(item.get("url") or ""),
                             title=str(item.get("title") or ""),
@@ -1425,7 +1428,25 @@ def run_rerun(
             "input_mode": body.input_mode,
         }
     )
-    rerun_body = RunBody.model_validate(request_snapshot)
+    if body.input_mode == "frozen":
+        # frozen rerun อ่านหลักฐานจาก evidence snapshot ที่ freeze แล้ว ไม่ refetch —
+        # ตัด source kind ที่ถูกถอด (rss, ADR-0027) ออกจาก request เดิมได้อย่างปลอดภัย
+        from simulation.sources import ALLOWED_SOURCE_KINDS
+
+        request_snapshot["sources"] = [
+            s
+            for s in (request_snapshot.get("sources") or [])
+            if str(s.get("kind", "text")) in ALLOWED_SOURCE_KINDS
+        ]
+    try:
+        rerun_body = RunBody.model_validate(request_snapshot)
+    except PydanticValidationError as exc:
+        # เช่น legacy run ที่มี source kind='rss' รันซ้ำแบบ latest — ต้อง refetch แต่ทางเข้าถูกถอดแล้ว
+        raise HTTPException(
+            status_code=422,
+            detail="request เดิมของ run นี้มี field ที่ contract ปัจจุบันไม่รองรับ "
+            "(เช่น source kind 'rss' ที่ถูกถอดตาม ADR-0027) — ใช้ frozen rerun แทน",
+        ) from exc
     key_value = idempotency_key if isinstance(idempotency_key, str) else ""
     return _enqueue_persistent_run(
         rerun_body,

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from api.auth import get_principal, require
+from api.models import validate_source_kinds
 from core.run_quality import build_readiness
 from governance.rbac import Permission, Principal
 
@@ -24,6 +25,11 @@ class RunReadinessBody(BaseModel):
     live_news: bool = False
     parent_run_id: str = ""
     population_set_id: str = ""
+
+    @field_validator("sources")
+    @classmethod
+    def _sources_kind_allowed(cls, v: list[dict]) -> list[dict]:
+        return validate_source_kinds(v)
 
 
 @router.post("/runs/readiness")
