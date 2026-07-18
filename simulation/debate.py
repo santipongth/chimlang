@@ -132,6 +132,9 @@ class DebatePost:
     move_type: str = MoveType.CLAIM
     parent_move_id: str = ""
     evidence_refs: tuple[str, ...] = ()
+    # TRUST-07 ในดีเบต (ADR-0022): expressed=False = agent คิด/อัปเดตจุดยืนแต่ไม่โพสต์
+    # (silent majority) — โพสต์เงียบไม่เข้าฟีดคนอื่น; วัด voice share vs population share ได้
+    expressed: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -147,6 +150,7 @@ class DebatePost:
             "parser_mode": self.parser_mode,
             "move_id": self.move_id,
             "move_type": str(self.move_type),
+            "expressed": self.expressed,
             "parent_move_id": self.parent_move_id,
             "evidence_refs": list(self.evidence_refs),
         }
@@ -232,8 +236,25 @@ def _initial_stance(p: Persona) -> float:
 
 
 def _persona_system(p: Persona) -> str:
+    # Red Team แบบ devil's advocate เต็มรูป (ADR-0022) — งานวิจัยพบว่า "soft framing"
+    # (แค่บอกบทบาทเบาๆ) ไม่ต่างจาก baseline; ต้องสั่งโจมตีข้อสรุปเสียงข้างมากอย่างเป็นระบบ
+    # และห้ามคล้อยตาม ถึงจะ induce disagreement ได้จริง (IUI'24 devil's advocate;
+    # OpenReview mxBmj5LYU2 "Only the Devil's Advocate Works")
     role = ""
-    if "redteam" in p.traits:
+    if "contrarian" in p.traits:
+        role = (
+            " บทบาทของคุณ: devil's advocate ประจำวง — อ่านโพสต์ทั้งหมดแล้วระบุข้อสรุปที่"
+            "เสียงข้างมากกำลังเห็นพ้อง จากนั้นโจมตีข้อสรุปนั้นด้วยข้อโต้แย้งที่แรงและมีเหตุผลที่สุด"
+            " ห้ามคล้อยตามเสียงข้างมาก ห้ามยอมแพ้ ห้ามใช้ move 'concession'"
+            " และจุดยืนของคุณต้องไม่เป็นบวก"
+        )
+    elif "auditor" in p.traits:
+        role = (
+            " บทบาทของคุณ: ผู้ตรวจสอบหลักฐาน — ไล่ชี้ claim ในวงที่ไม่มีหลักฐานอ้างอิง"
+            " ตั้งคำถามบังคับให้ผู้โพสต์แสดง evidence อย่ายอมรับข้อสรุปที่ยังไม่มีหลักฐานรองรับ"
+            " ใช้ move 'question' หรือ 'counterclaim' เป็นหลัก"
+        )
+    elif "redteam" in p.traits:
         role = " บทบาทพิเศษของคุณ: ตั้งคำถามกับฉันทามติที่กำลังก่อตัว หาจุดอ่อนของข้อสรุป"
     return (
         f"คุณคือคนไทยกลุ่ม '{p.segment_name}' "
@@ -243,6 +264,42 @@ def _persona_system(p: Persona) -> str:
         "ตอบภาษาไทยเท่านั้น ห้ามกุชื่อ/ตัวเลข — จำไม่ได้ให้บอกว่าไม่แน่ใจ เรียกคนด้วยบทบาท "
         "ตอบเป็น JSON ล้วนเท่านั้น (ไม่มี markdown)"
     )
+
+
+def _feed_weight(reader: Persona, author: Persona) -> float:
+    """น้ำหนักที่ผู้อ่านจะเห็นโพสต์ของผู้เขียน — selective exposure ตาม media diet (ADR-0022)
+
+    ใช้ overlap ของ channel_mix (อยู่ช่องทางเดียวกัน = เจอกันบ่อย) + ฐาน 0.25 กัน echo
+    chamber สมบูรณ์ (ยังมีโอกาสเห็นข้ามกลุ่มเสมอ) — แทน uniform sampling เดิมที่ทุกคน
+    เห็นทุกคนเท่ากัน ซึ่งขัดกับ media diet ที่ Fabric/News Desk ทำแล้ว
+    """
+    channels = set(reader.channel_mix) | set(author.channel_mix)
+    overlap = sum(
+        min(reader.channel_mix.get(c, 0.0), author.channel_mix.get(c, 0.0)) for c in channels
+    )
+    return 0.25 + 0.75 * overlap
+
+
+def _weighted_sample(rng: Random, pool: list, weights: list[float], k: int) -> list:
+    """weighted sampling without replacement — deterministic ตามลำดับ draw ของ rng"""
+    pool = list(pool)
+    weights = list(weights)
+    chosen = []
+    for _ in range(min(k, len(pool))):
+        total = sum(weights)
+        if total <= 0:
+            break
+        r = rng.random() * total
+        acc = 0.0
+        pick = len(pool) - 1
+        for i, w in enumerate(weights):
+            acc += w
+            if r <= acc:
+                pick = i
+                break
+        chosen.append(pool.pop(pick))
+        weights.pop(pick)
+    return chosen
 
 
 def _parse_post(text: str) -> tuple[str, float, float, str]:
@@ -316,16 +373,18 @@ def _failure_reason(exc: Exception) -> str:
 def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> dict:
     ok = [p for p in posts if not p.failed]
     per_round_avg: list[float] = []
+    per_round_dispersion: list[float] = []
     for r in range(rounds):
         rs = [p.stance for p in ok if p.round_no == r]
         per_round_avg.append(sum(rs) / len(rs) if rs else 0.0)
+        per_round_dispersion.append(statistics.pstdev(rs) if len(rs) > 1 else 0.0)
     last = [p.stance for p in ok if p.round_no == rounds - 1]
     dispersion = statistics.pstdev(last) if len(last) > 1 else 0.0
     # tipping: map stance [-1,1] → [0,1] แล้วใช้ detector เดิม (threshold 0.15 ของ share
     # = 0.30 บนสเกล stance — สอดคล้อง SwarmSight ที่ใช้ 0.25)
     series = [(s + 1) / 2 for s in per_round_avg]
     tipping = [tp.to_dict() for tp in detect_tipping_points(series)] if len(series) > 1 else []
-    return {
+    metrics = {
         "per_round_avg_stance": [round(s, 4) for s in per_round_avg],
         "final_dispersion": round(dispersion, 4),
         "tipping_points": tipping,
@@ -335,6 +394,109 @@ def _compute_metrics(posts: list[DebatePost], rounds: int, agent_count: int) -> 
         "parser_fallback_posts": sum(
             1 for p in ok if p.parser_mode == "parser_fallback_unsupported"
         ),
+    }
+    metrics.update(_conformity_metrics(ok, rounds, per_round_avg, per_round_dispersion))
+    metrics.update(_voice_metrics(ok, rounds))
+    red_team = _red_team_pressure(ok)
+    if red_team:
+        metrics["red_team_pressure"] = red_team
+    return metrics
+
+
+def _conformity_metrics(
+    ok: list[DebatePost],
+    rounds: int,
+    per_round_avg: list[float],
+    per_round_dispersion: list[float],
+) -> dict:
+    """วัดความเสี่ยง "ฉันทามติปลอม" (ADR-0022) — วงดีเบต LLM มีแนวโน้ม sycophancy/conformity
+    สูงจนหุบเข้า consensus เร็วผิดจริง (arXiv:2509.23055, 2604.02668) และการพลิกจุดยืน
+    ต้องแยก "คล้อยตามเสียงข้างมาก" ออกจาก "ถูกโน้มน้าวด้วยหลักฐาน" (arXiv:2606.00820)
+
+    ใช้ค่าเฉลี่ยรอบก่อนหน้าเป็น proxy ของเสียงข้างมากที่ agent เห็น (ฟีดคือ sample ของรอบก่อน)
+    """
+    convergence_rate = (
+        (per_round_dispersion[-1] - per_round_dispersion[0]) / max(1, rounds - 1)
+        if rounds > 1
+        else 0.0
+    )
+    prev_stance: dict[int, float] = {}
+    flips_total = 0
+    flips_conforming = 0
+    flips_evidenced = 0
+    moved_toward_majority = 0
+    movable = 0
+    for r in range(rounds):
+        majority = per_round_avg[r - 1] if r > 0 else 0.0
+        for p in sorted((q for q in ok if q.round_no == r), key=lambda q: q.agent_idx):
+            before = prev_stance.get(p.agent_idx)
+            if r > 0 and before is not None:
+                movable += 1
+                if abs(p.stance - majority) < abs(before - majority) - 1e-9:
+                    moved_toward_majority += 1
+                flipped = before * p.stance < 0 and abs(p.stance - before) >= 0.4
+                if flipped:
+                    flips_total += 1
+                    if p.evidence_refs or p.move_type in {
+                        MoveType.EVIDENCE,
+                        MoveType.COUNTERCLAIM,
+                    }:
+                        flips_evidenced += 1
+                    elif abs(p.stance - majority) < abs(before - majority):
+                        flips_conforming += 1
+            prev_stance[p.agent_idx] = p.stance
+    final_dispersion = per_round_dispersion[-1] if per_round_dispersion else 0.0
+    return {
+        "per_round_dispersion": [round(d, 4) for d in per_round_dispersion],
+        "convergence_rate": round(convergence_rate, 4),
+        "majority_alignment": round(moved_toward_majority / movable, 4) if movable else None,
+        "stance_flips": {
+            "total": flips_total,
+            "conforming_without_evidence": flips_conforming,
+            "evidenced_or_argued": flips_evidenced,
+        },
+        # ธงเตือน: วงหุบเข้าฉันทามติเร็วและแคบ — ต้องอ่านผลอย่างระวัง (Honesty over impressiveness)
+        "consensus_warning": bool(final_dispersion < 0.15 and convergence_rate <= -0.1),
+    }
+
+
+def _voice_metrics(ok: list[DebatePost], rounds: int) -> dict:
+    """voice share vs population share ในดีเบต (TRUST-07) — เสียงที่ปรากฏ ≠ ความเห็นประชากร"""
+    if not ok:
+        return {}
+    expressed = [p for p in ok if p.expressed]
+    last_all = [p.stance for p in ok if p.round_no == rounds - 1]
+    last_expressed = [p.stance for p in ok if p.round_no == rounds - 1 and p.expressed]
+    gap = (
+        (sum(last_expressed) / len(last_expressed)) - (sum(last_all) / len(last_all))
+        if last_expressed and last_all
+        else 0.0
+    )
+    return {
+        "voice_share": round(len(expressed) / len(ok), 4),
+        # บวก = เสียงที่ปรากฏเอนไปทางเห็นด้วยมากกว่าความเห็นจริงของประชากร (say-do gap ระดับวง)
+        "voice_population_stance_gap": round(gap, 4),
+    }
+
+
+def _red_team_pressure(ok: list[DebatePost]) -> dict | None:
+    """วัดว่า red team สร้างแรงเสียดทานจริงแค่ไหน — คำนวณได้จากโพสต์ที่เก็บ (retroactive)"""
+    from simulation.redteam_population import RED_TEAM_SEGMENT
+
+    red_posts = [p for p in ok if p.segment == RED_TEAM_SEGMENT]
+    if not red_posts:
+        return None
+    red_move_ids = {p.move_id for p in red_posts}
+    others = [p for p in ok if p.segment != RED_TEAM_SEGMENT]
+    replies = [p for p in others if p.parent_move_id in red_move_ids]
+    return {
+        "red_posts": len(red_posts),
+        "red_avg_stance": round(sum(p.stance for p in red_posts) / len(red_posts), 4),
+        "replies_from_others": len(replies),
+        "counterclaims_from_others": sum(
+            1 for p in replies if p.move_type == MoveType.COUNTERCLAIM
+        ),
+        "engagement_rate": round(len(replies) / max(1, len(others)), 4),
     }
 
 
@@ -429,6 +591,9 @@ def synthesize_snapshot(posts: list[dict], *, subject: str, rounds: int) -> dict
             move_type=normalize_move_type(p.get("move_type")),
             parent_move_id=str(p.get("parent_move_id", "")),
             evidence_refs=normalize_evidence_refs(p.get("evidence_refs", [])),
+            # posts จาก DB ไม่มี expressed (คอลัมน์คงที่) → default True; voice metrics
+            # ที่แม่นอยู่ใน payload ของ run จริงเท่านั้น
+            expressed=bool(p.get("expressed", True)),
         )
         for p in posts
     ]
@@ -484,12 +649,29 @@ def run_debate(
     spent_before = adapter._guard.spent_usd if hasattr(adapter, "_guard") else 0.0
 
     for r in range(rounds):
-        prev = [p for p in all_posts if p.round_no == r - 1 and not p.failed]
+        # ฟีดเห็นเฉพาะโพสต์ที่ "แสดงออก" (TRUST-07 — โพสต์เงียบมีจุดยืนแต่ไม่มีเสียง)
+        prev = [p for p in all_posts if p.round_no == r - 1 and not p.failed and p.expressed]
+        prev_mean = sum(p.stance for p in prev) / len(prev) if prev else 0.0
+        # voice draw ต่อ agent ใน main thread (deterministic) — red team เสียงดังเสมอ
+        expressed_flags = [
+            ("redteam" in personas[idx].traits) or rng.random() < personas[idx].voice_activity
+            for idx in range(len(personas))
+        ]
         # sample feed ต่อ agent แบบ deterministic — draw ทั้งหมดใน main thread ตามลำดับ agent
         feeds: list[str] = []
         for idx in range(len(personas)):
             pool = [p for p in prev if p.agent_idx != idx]
-            chosen = pool if len(pool) <= REPLY_SAMPLE else rng.sample(pool, REPLY_SAMPLE)
+            if "redteam" in personas[idx].traits:
+                # devil's advocate เห็นโพสต์ที่ align กับเสียงข้างมากที่สุด — มีเป้าโจมตีชัด
+                chosen = sorted(pool, key=lambda p: (abs(p.stance - prev_mean), p.agent_idx))[
+                    :REPLY_SAMPLE
+                ]
+            elif len(pool) <= REPLY_SAMPLE:
+                chosen = pool
+            else:
+                # selective exposure (ADR-0022): น้ำหนักตาม overlap ของ media diet
+                weights = [_feed_weight(personas[idx], personas[p.agent_idx]) for p in pool]
+                chosen = _weighted_sample(rng, pool, weights, REPLY_SAMPLE)
             feeds.append(
                 "\n".join(
                     f"- [{p.move_id} | {p.segment} | {p.move_type} | จุดยืน {p.stance:+.2f}]: "
@@ -503,7 +685,11 @@ def run_debate(
         news_snapshot = dict(news)  # freeze ต่อรอบ ให้ทุก thread เห็นชุดเดียวกัน
 
         def ask(
-            idx: int, r: int = r, feeds: list[str] = feeds, news_now: dict = news_snapshot
+            idx: int,
+            r: int = r,
+            feeds: list[str] = feeds,
+            news_now: dict = news_snapshot,
+            expressed_flags: list[bool] = expressed_flags,
         ) -> DebatePost:  # bind ค่าปัจจุบันของ loop
             p = personas[idx]
             seg_news = news_now.get(p.segment_name, ())
@@ -555,6 +741,12 @@ def run_debate(
                 )
                 content, stance, sentiment, want = _parse_post(result.text)
                 move_type, parent_move_id, refs = _parse_move_metadata(result.text)
+                if "contrarian" in p.traits:
+                    # persistent dissent (ADR-0022): devil's advocate ห้ามลอยตามเสียงข้างมาก
+                    # — จุดยืนไม่เป็นบวก และไม่ยอมแพ้ (concession → counterclaim)
+                    stance = min(stance, 0.0)
+                    if move_type == MoveType.CONCESSION:
+                        move_type = MoveType.COUNTERCLAIM
                 return DebatePost(
                     r,
                     idx,
@@ -568,6 +760,7 @@ def run_debate(
                     move_type=move_type,
                     parent_move_id=parent_move_id,
                     evidence_refs=refs,
+                    expressed=expressed_flags[idx],
                 )
             except Exception as exc:
                 # fail-closed: ติดธง ไม่ปนใน metrics — จุดยืนเดิมคงไว้

@@ -9,6 +9,7 @@
   agent เกรงใจสูงจะเชื่อแต่ไม่แชร์ในที่สาธารณะ แต่กล้าส่งต่อในกลุ่มปิดมากกว่า
 """
 
+import hashlib
 import uuid
 from dataclasses import dataclass, field
 from random import Random
@@ -17,6 +18,30 @@ from simulation.channels import CHANNELS, spread_pressure
 from simulation.persona import Persona
 
 GROUP_SIZE = 4  # ขนาดกลุ่ม LINE ต่อกลุ่ม (แบ่งตาม segment)
+
+# ---- ค่าคงที่พฤติกรรมวัฒนธรรม (FAB-02) — สังเคราะห์ รอ calibrate (ADR-0022) ----
+SAY_DO_CLOSED_BOOST = 0.4  # say-do gap เพิ่มโอกาสส่งต่อในกลุ่มปิด
+KRENG_JAI_PUBLIC_SUPPRESS = 0.5  # เกรงใจกดการแชร์สาธารณะ
+KRENG_JAI_CORRECTION_SUPPRESS = 0.5  # เกรงใจลดการเชื่อข่าวแก้ในกลุ่มปิด (เกรงใจผู้ส่งเดิม)
+
+# ---- Re-exposure / complex contagion (ADR-0022) ----
+# ของจริง: คนที่ได้ยินแล้วยังไม่เชื่อ ถูกโน้มน้าวซ้ำได้เมื่อแรงกดดันรอบข้างสูงขึ้น —
+# engine v1 ตัดสินครั้งเดียวตลอดชีพซึ่งกดการแพร่แบบ complex contagion หายทั้งชั้น
+# ทำแบบ conservative: โอกาสพิจารณาใหม่ลดลงครึ่งหนึ่งทุกครั้ง และไม่เกิน 3 ครั้ง/ข้อความ
+RECONSIDER_MAX = 3
+RECONSIDER_DECAY = 0.5
+
+# ---- Common random numbers (ADR-0022) ----
+# เดิม engine ใช้ RNG เส้นเดียวทั้งระบบ: การ inject ข้อความที่สองเปลี่ยนลำดับ draw ของ
+# ข้อความแรกด้วย → คู่เทียบ A/B seed เดียวกัน (SIM-04 fork, compare, red team) ปน RNG noise
+# ที่ไม่ใช่ผลเชิงสาเหตุ (calibration harness จับได้: delta คำชี้แจงพลิกเป็นบวก)
+# แก้ด้วย hashed uniform ต่อ (seed, เหตุการณ์, msg, agent, ...) — draw อิสระต่อกันโดยสิ้นเชิง
+# จึงเป็น common random numbers: ตัวแปรที่ไม่เกี่ยวกับ intervention ได้ draw เดิมทุก variant
+
+
+def _hashed_uniform(seed: int, *key) -> float:
+    digest = hashlib.blake2b(repr((seed, *key)).encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big") / 2**64
 
 
 @dataclass(frozen=True)
@@ -40,6 +65,7 @@ class AgentState:
     believed: dict[str, bool] = field(default_factory=dict)
     sharing: dict[str, bool] = field(default_factory=dict)  # ยังแชร์ต่ออยู่ไหม
     mutated: set[str] = field(default_factory=set)  # msg ที่ได้รับมาแบบเพี้ยน (FAB-04)
+    reconsidered: dict[str, int] = field(default_factory=dict)  # msg_id -> ครั้งที่ถูกโน้มน้าวซ้ำ
 
 
 @dataclass(frozen=True)
@@ -105,7 +131,6 @@ class FabricSimulation:
         if not 0.0 <= rumor_mutation_rate <= 1.0:
             raise ValueError("rumor_mutation_rate ต้องอยู่ในช่วง 0-1")
         self._mutation_rate = rumor_mutation_rate
-        self._rng = Random(seed)
         self._seed = seed
         self._states = {p.agent_id: AgentState(persona=p) for p in personas}
         self._order = sorted(self._states)  # ลำดับ deterministic
@@ -141,6 +166,21 @@ class FabricSimulation:
                 grp = shuffled[gi : gi + GROUP_SIZE]
                 for m in grp:
                     self._closed_contacts[m] |= set(grp) - {m}
+        # เครือข่าย offline word-of-mouth (ADR-0022): ring แบบสุ่ม seeded แทนการใช้ลำดับ
+        # agent_id ที่ sort แล้ว — ของเดิมเป็น artifact (เพื่อนบ้าน = id ติดกัน จึงเกาะ segment
+        # เดียวกันเป็นสายยาว); ไม่มีข้อมูลภูมิศาสตร์จริงจึงใช้ ring สุ่มที่ผสมข้าม segment
+        wom_order = list(self._order)
+        Random(seed ^ 0x0FF11E).shuffle(wom_order)
+        self._wom_neighbors: dict[str, tuple[str, ...]] = {}
+        n_agents = len(wom_order)
+        for i, aid in enumerate(wom_order):
+            if n_agents <= 1:
+                self._wom_neighbors[aid] = ()
+            else:
+                self._wom_neighbors[aid] = (
+                    wom_order[(i - 1) % n_agents],
+                    wom_order[(i + 1) % n_agents],
+                )
 
     def inject(self, message: Message) -> None:
         self._messages.append(message)
@@ -159,13 +199,14 @@ class FabricSimulation:
             st.heard[message.msg_id] = 0
             st.heard_via[message.msg_id] = message.seed_channel
             st.believed[message.msg_id] = True
-            st.sharing[message.msg_id] = self._rng.random() < st.persona.voice_activity
+            st.sharing[message.msg_id] = (
+                _hashed_uniform(self._seed, "preshare", message.msg_id, aid)
+                < st.persona.voice_activity
+            )
             self._log(0, aid, message, message.seed_channel, "preseeded")
 
-    def _neighbors(self, agent_id: str) -> list[str]:
-        # index map แทน list.index — จำเป็นเมื่อ scale ถึง 1,000 agents (เดิม O(n) ต่อ call)
-        i = self._index[agent_id]
-        return [self._order[j] for j in (i - 1, i + 1) if 0 <= j < len(self._order)]
+    def _neighbors(self, agent_id: str) -> tuple[str, ...]:
+        return self._wom_neighbors[agent_id]
 
     def _log(self, round_no: int, agent_id: str, msg: Message, channel: str, action: str) -> None:
         self._trail.append(
@@ -185,20 +226,29 @@ class FabricSimulation:
         if (
             msg.kind == "rumor"
             and channel == "line_closed_group"
-            and self._rng.random() < self._mutation_rate
+            and _hashed_uniform(self._seed, "mut", msg.msg_id, st.persona.agent_id)
+            < self._mutation_rate
         ):
             # FAB-04: ข่าวลือเพี้ยนระหว่างส่งต่อในกลุ่มปิด (ตรวจสอบ/แก้ยากที่สุด)
             st.mutated.add(msg.msg_id)
             self._log(round_no, st.persona.agent_id, msg, channel, "heard_mutated")
+        self._belief_draw(round_no, st, msg, channel, attempt=0)
+
+    def _belief_draw(
+        self, round_no: int, st: AgentState, msg: Message, channel: str, *, attempt: int
+    ) -> None:
+        """ตัดสินเชื่อ/แชร์ — ใช้ทั้งการได้ยินครั้งแรก (attempt=0) และการโน้มน้าวซ้ำ (1..3)"""
         p = st.persona
         believe_prob = CHANNELS[channel].trust
         if msg.kind == "correction" and channel == "line_closed_group":
             # ข่าวแก้ในกลุ่มปิดถูกลดทอนด้วยความเกรงใจผู้ส่งเดิม (corpus 2026-06-08)
-            believe_prob *= 1.0 - 0.5 * p.kreng_jai
+            believe_prob *= 1.0 - KRENG_JAI_CORRECTION_SUPPRESS * p.kreng_jai
         if msg.kind == "correction":
             # P5-M4: adversarial agent ต้านคำชี้แจงทางการ (default 1.0 = เดิมเป๊ะ)
             believe_prob *= p.correction_receptivity
-        believed = self._rng.random() < believe_prob
+        believed = (
+            _hashed_uniform(self._seed, "bel", msg.msg_id, p.agent_id, attempt) < believe_prob
+        )
         st.believed[msg.msg_id] = believed
         if believed:
             self._log(round_no, p.agent_id, msg, channel, "believed")
@@ -210,10 +260,10 @@ class FabricSimulation:
             share_prob = p.voice_activity
             if channel == "line_closed_group":
                 # เกรงใจกดการแสดงออกสาธารณะ แต่ในกลุ่มปิดกล้าส่งต่อมากขึ้น (say-do gap)
-                share_prob = min(1.0, share_prob + 0.4 * p.say_do_gap)
+                share_prob = min(1.0, share_prob + SAY_DO_CLOSED_BOOST * p.say_do_gap)
             else:
-                share_prob *= 1.0 - 0.5 * p.kreng_jai
-            if self._rng.random() < share_prob:
+                share_prob *= 1.0 - KRENG_JAI_PUBLIC_SUPPRESS * p.kreng_jai
+            if _hashed_uniform(self._seed, "share", msg.msg_id, p.agent_id, attempt) < share_prob:
                 st.sharing[msg.msg_id] = True
                 self._log(round_no, p.agent_id, msg, channel, "shared")
 
@@ -225,9 +275,10 @@ class FabricSimulation:
                     continue
                 if round_no == msg.start_round:
                     if msg.broadcast_share > 0:
-                        # โหมดสื่อมวลชน: ถึงสัดส่วนประชากรทันที (สุ่ม deterministic ต่อ seed)
+                        # โหมดสื่อมวลชน: ถึงสัดส่วนประชากรทันที — RNG แยกต่อข้อความ
+                        # (common random numbers: ไม่กวน draw ของข้อความอื่น)
                         k = max(1, round(msg.broadcast_share * n))
-                        reached = self._rng.sample(self._order, k)
+                        reached = Random(f"{self._seed}:bcast:{msg.msg_id}").sample(self._order, k)
                         for aid in sorted(reached):
                             self._expose(round_no, self._states[aid], msg, msg.seed_channel)
                         continue
@@ -249,7 +300,12 @@ class FabricSimulation:
                 global_ratio = len(sharers) / n
                 for aid in self._order:
                     st = self._states[aid]
-                    if msg.msg_id in st.heard:
+                    already_heard = msg.msg_id in st.heard
+                    if already_heard and (
+                        st.believed.get(msg.msg_id)
+                        or st.reconsidered.get(msg.msg_id, 0) >= RECONSIDER_MAX
+                    ):
+                        # เชื่อแล้ว หรือถูกโน้มน้าวซ้ำครบโควตา — จบสำหรับข้อความนี้
                         continue
                     contacts = self._closed_contacts[aid]
                     sharers_in_group = len(contacts & sharers)
@@ -265,9 +321,22 @@ class FabricSimulation:
                         rate = params.base_rate * self._mix[aid][channel] * pressure
                         if msg.kind == "correction":
                             rate *= params.correction_factor
-                        if rate > 0 and self._rng.random() < rate:
-                            self._expose(round_no, st, msg, channel)
-                            break  # ได้ยินครั้งแรกจากช่องเดียวต่อ round
+                        if already_heard:
+                            # re-exposure (ADR-0022): ได้ยินแล้วแต่ยังไม่เชื่อ — โอกาสพิจารณา
+                            # ใหม่ลดครึ่งหนึ่งต่อครั้ง (complex contagion แบบ conservative)
+                            rate *= RECONSIDER_DECAY ** (st.reconsidered.get(msg.msg_id, 0) + 1)
+                        draw = _hashed_uniform(
+                            self._seed, "exp", msg.msg_id, aid, round_no, channel
+                        )
+                        if rate > 0 and draw < rate:
+                            if already_heard:
+                                attempt = st.reconsidered.get(msg.msg_id, 0) + 1
+                                st.reconsidered[msg.msg_id] = attempt
+                                self._log(round_no, aid, msg, channel, "reexposed")
+                                self._belief_draw(round_no, st, msg, channel, attempt=attempt)
+                            else:
+                                self._expose(round_no, st, msg, channel)
+                            break  # ช่องเดียวต่อ round ต่อข้อความ
         return RunResult(
             run_id=f"run-{uuid.uuid4().hex[:8]}",
             seed=self._seed,

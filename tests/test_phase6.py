@@ -254,6 +254,88 @@ def test_debate_uses_user_configured_synthesis_ceiling():
     assert adapter.analyst_max_tokens == [4000, synthesis_retry_ceiling(4000)]
 
 
+def test_debate_red_team_is_devils_advocate_with_pinned_dissent():
+    # ADR-0022: red team ต้องเป็น devil's advocate จริง — prompt โจมตีเสียงข้างมาก,
+    # contrarian จุดยืนไม่เป็นบวก (แม้ LLM ตอบบวก) และ metrics วัดแรงเสียดทานได้
+    from simulation.redteam_population import RED_TEAM_SEGMENT, inject_red_team
+
+    class RecordingAdapter(_FakeAdapter):
+        def __init__(self):
+            super().__init__(stance=0.5)
+            self.system_prompts: list[str] = []
+
+        def chat(self, tier, messages, **kw):
+            self.system_prompts.append(messages[0]["content"])
+            return super().chat(tier, messages, **kw)
+
+    adapter = RecordingAdapter()
+    personas = inject_red_team(_personas(6))
+    result = run_debate(personas, subject="ทดสอบ red team", rounds=2, seed=5, adapter=adapter)
+
+    red_posts = [p for p in result.ok_posts if p.segment == RED_TEAM_SEGMENT]
+    assert len(red_posts) == 4  # 2 agents × 2 rounds
+    contrarian_posts = [p for p in red_posts if p.agent_idx == len(personas) - 2]
+    # FakeAdapter ตอบ stance 0.5 แต่ contrarian ต้องถูก cap ไม่ให้เป็นบวก
+    assert all(p.stance <= 0.0 for p in contrarian_posts)
+    assert any("devil's advocate" in s for s in adapter.system_prompts)
+    assert any("ผู้ตรวจสอบหลักฐาน" in s for s in adapter.system_prompts)
+    pressure = result.metrics["red_team_pressure"]
+    assert pressure["red_posts"] == 4
+    assert 0.0 <= pressure["engagement_rate"] <= 1.0
+
+
+def test_debate_voice_layer_separates_expression_from_belief():
+    # TRUST-07 ในดีเบต: voice_activity=0 → คิด/มีจุดยืนแต่ไม่โพสต์ (ยกเว้น red team)
+    from dataclasses import replace as dc_replace
+
+    silent = [dc_replace(p, voice_activity=0.0) for p in _personas(6)]
+    result = run_debate(silent, subject="ทดสอบ voice", rounds=1, seed=3, adapter=_FakeAdapter())
+
+    assert all(not p.expressed for p in result.ok_posts)
+    assert result.metrics["voice_share"] == 0.0
+    # จุดยืนยังถูกเก็บครบทุกคน (ประชากรมีความเห็นแม้ไม่มีเสียง)
+    assert result.metrics["posts_ok"] == 6
+
+
+def test_debate_conformity_metrics_decompose_flips():
+    from simulation.debate import _compute_metrics
+
+    def post(r, idx, stance, move_type="claim", refs=(), expressed=True):
+        return DebatePost(
+            r,
+            idx,
+            f"seg{idx}",
+            "x",
+            stance,
+            0.0,
+            move_id=f"m-r{r + 1}-a{idx + 1}",
+            move_type=move_type,
+            evidence_refs=tuple(refs),
+            expressed=expressed,
+        )
+
+    posts = [
+        # รอบ 0: สองเสียงบวก หนึ่งเสียงลบ (majority proxy รอบถัดไป = ค่าเฉลี่ย +0.2)
+        post(0, 0, 0.8),
+        post(0, 1, 0.7),
+        post(0, 2, -0.9),
+        # รอบ 1: agent 2 พลิกลบ→บวกเข้าหาเสียงข้างมากโดยไม่มีหลักฐาน = conforming flip
+        post(1, 0, 0.8),
+        post(1, 1, 0.7),
+        post(1, 2, 0.6),
+    ]
+    metrics = _compute_metrics(posts, rounds=2, agent_count=3)
+    assert metrics["stance_flips"]["total"] == 1
+    assert metrics["stance_flips"]["conforming_without_evidence"] == 1
+    assert metrics["stance_flips"]["evidenced_or_argued"] == 0
+    assert metrics["convergence_rate"] < 0  # dispersion หุบลง
+    # พลิกแบบเดียวกันแต่มี evidence ref = evidenced ไม่ใช่ conforming
+    posts[-1] = post(1, 2, 0.6, move_type="evidence", refs=("E1",))
+    metrics2 = _compute_metrics(posts, rounds=2, agent_count=3)
+    assert metrics2["stance_flips"]["evidenced_or_argued"] == 1
+    assert metrics2["stance_flips"]["conforming_without_evidence"] == 0
+
+
 def test_debate_classifies_truncated_analyst_after_both_attempts():
     class AlwaysTruncatedAnalystAdapter(_FakeAdapter):
         def chat(self, tier, messages, **kw):
