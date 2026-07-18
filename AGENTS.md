@@ -30,7 +30,10 @@
 ## วิธีทำงาน
 
 - Setup: `uv sync` | Dev stack: `docker compose up -d` | Test: `uv run pytest -q` | Lint: `uv run ruff check . && uv run ruff format --check .`
-- **test ต้องเขียวทั้งหมดก่อน commit ทุกครั้ง** — เขียน unit test คู่ทุก module ใหม่
+- **นโยบายทดสอบช่วง pilot (มติผู้ใช้ 18 ก.ค. 2026 — ADR-0021)**: mock/stubbed tests เป็น
+  informational ไม่ใช่ gate; ผู้ใช้ทดสอบจริงเองและแจ้งปัญหา — ยังเขียน unit test คู่ module ใหม่
+  และรัน suite ที่เกี่ยวข้องก่อน commit (จับ regression) แต่ไม่ block การส่งมอบด้วย full matrix;
+  CI gate ที่ block เหลือเฉพาะ live integration
 - ไฟล์ชั่วคราว/ผลรัน → `.tmp/` (disposable) | secrets bootstrap (DB/master key/auth) → `.env` เท่านั้น ห้าม log/commit; LLM API key ตั้งจาก UI ได้แต่ต้องเข้ารหัส (ADR-0007)
 - milestone gate (เช่น M1) : รายงานผลแล้ว**หยุดรอผู้ใช้ตัดสิน** ไม่เดินต่อเอง
 

@@ -90,6 +90,9 @@ def effective_llm_settings() -> Settings:
             pass  # ถอดรหัสพัง (master key เปลี่ยน) = ใช้ .env ตามเดิม (fail-safe ไม่ล้ม)
     if float(app.get("run_budget_usd_cap") or 0) > 0:
         overrides["run_budget_usd_cap"] = float(app["run_budget_usd_cap"])
+    # เพดาน token ของ synthesis — 0 = ใช้ default (มติผู้ใช้ 18 ก.ค. 2026)
+    if int(app.get("llm_synthesis_max_tokens") or 0) > 0:
+        overrides["llm_synthesis_max_tokens"] = int(app["llm_synthesis_max_tokens"])
     return get_settings(**overrides) if overrides else base
 
 

@@ -1017,6 +1017,8 @@ def _run_create_impl(
                     ],
                 }
             _stage(55, "กำลังรัน debate agents")
+            from core.llm.userconfig import effective_llm_settings
+
             result = run_debate(
                 personas,
                 subject=subject,
@@ -1028,6 +1030,7 @@ def _run_create_impl(
                 segment_news=segment_news,
                 news_fetcher=news_fetcher,
                 reflection_policy=ReflectionPolicy() if body.reflection else None,
+                synthesis_max_tokens=effective_llm_settings().llm_synthesis_max_tokens,
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
             if result.synthesis.get("status") == "analyst_failed":

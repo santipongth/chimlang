@@ -346,6 +346,11 @@ export const DICT: Record<string, { th: string; en: string }> = {
   set_llm_base_url: { th: "ที่อยู่บริการ (Base URL)", en: "Base URL" },
   set_llm_crowd: { th: "โมเดลตัวแทนจำลอง (crowd)", en: "Crowd model" },
   set_llm_analyst: { th: "โมเดลนักวิเคราะห์ (analyst)", en: "Analyst model" },
+  set_synth_tokens: { th: "เพดาน token บทสรุป (synthesis)", en: "Synthesis max tokens" },
+  set_synth_tokens_note: {
+    th: "0 = ค่ามาตรฐาน (2,000) — retry อัตโนมัติได้เพดาน 1.5 เท่า",
+    en: "0 = default (2,000) — the retry automatically gets a 1.5× ceiling",
+  },
   set_llm_key: { th: "กุญแจ (API Key)", en: "API key" },
   set_key_db: { th: "ตั้งจากหน้านี้ เก็บแบบเข้ารหัส", en: "set here, stored encrypted" },
   set_key_env: { th: "ใช้ค่าจากไฟล์ .env", en: "from .env file" },

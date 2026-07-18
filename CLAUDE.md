@@ -24,7 +24,7 @@ Multi-agent social simulation สำหรับ "ซ้อมอนาคต" (
 
 - Setup: `make setup` = `uv sync`
 - Run dev: `make dev` = `docker compose up -d` (postgres+pgvector, neo4j, redis)
-- Test: `make test` = `uv run pytest -q` — ต้องผ่านก่อน commit ทุกครั้ง
+- Test: `make test` = `uv run pytest -q` — ช่วง pilot: mock test เป็น informational ไม่ใช่ gate (ADR-0021 มติผู้ใช้ 18 ก.ค. 2026); รัน suite ที่เกี่ยวข้องเพื่อจับ regression ก็พอ
 - Lint/format: `make lint` = `uv run ruff check . && uv run ruff format --check .`
 - เครื่อง Windows ที่ไม่มี `make`: รันคำสั่งฝั่งขวาโดยตรง (Makefile เป็น canonical สำหรับ CI/Linux)
 

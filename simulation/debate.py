@@ -103,8 +103,13 @@ SYNTHESIS_SCHEMA = _SynthesisContract.model_json_schema()
 # วัดจริง 18 ก.ค. 2026 (run a00d908f): synthesis ไทยครบ contract ที่ 40 agents ใช้เกิน 900 tokens
 # ทั้งสอง attempt โดนตัดที่เพดานพอดี (output = max_tokens, finish_reason=length) → run fail ทั้งที่
 # โพสต์สำเร็จ 120/120 — เพดานต้องเผื่อพอ และ retry ต้องได้เพดานสูงกว่าเดิม
+# ค่านี้เป็น default; ผู้ใช้ทับได้จากหน้า Settings (llm_synthesis_max_tokens — มติผู้ใช้ 18 ก.ค.)
 ANALYST_SYNTHESIS_MAX_TOKENS = 2000
-ANALYST_SYNTHESIS_RETRY_MAX_TOKENS = 3000
+
+
+def synthesis_retry_ceiling(base_tokens: int) -> int:
+    """เพดานของ bounded retry — สูงกว่ารอบแรกเสมอเผื่อกรณีคำตอบถูกตัด"""
+    return max(base_tokens + 500, int(base_tokens * 1.5))
 
 
 class DebateUnavailableError(RuntimeError):
@@ -182,6 +187,7 @@ def make_debate_adapter(
 
     settings = effective_llm_settings()
     pricing = effective_pricing()
+    synthesis_tokens = int(settings.llm_synthesis_max_tokens or ANALYST_SYNTHESIS_MAX_TOKENS)
     loads = [
         TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
         # Reserve one bounded contract-repair retry for the Executive Readout.
@@ -191,7 +197,7 @@ def make_debate_adapter(
             settings.llm_model_analyst,
             2 + max(0, reflection_calls),
             9_000,
-            ANALYST_SYNTHESIS_RETRY_MAX_TOKENS,
+            synthesis_retry_ceiling(synthesis_tokens),
         ),
     ]
     if include_embedding and settings.llm_model_embedding.strip():
@@ -454,6 +460,7 @@ def run_debate(
     news_fetcher=None,  # callable(list[str]) -> dict[segment, tuple[str,...]] — โต๊ะข่าวค้นตาม intent
     on_round=None,
     reflection_policy: ReflectionPolicy | None = None,
+    synthesis_max_tokens: int | None = None,  # None/0 = ใช้ default; ผู้ใช้ตั้งจากหน้า Settings
 ) -> DebateResult:
     settings = get_settings()
     if len(personas) > settings.max_agents_per_debate:
@@ -664,11 +671,12 @@ def run_debate(
                 '"unsupported_claims": ["..."], "notes": ["..."]}}',
             },
         ]
+        base_max_tokens = int(synthesis_max_tokens or 0) or ANALYST_SYNTHESIS_MAX_TOKENS
         analyst_attempts = 1
         result = adapter.chat(
             ModelTier.ANALYST,
             analyst_messages,
-            max_tokens=ANALYST_SYNTHESIS_MAX_TOKENS,
+            max_tokens=base_max_tokens,
             temperature=0,
             seed=seed,
             **structured_kwargs,
@@ -699,7 +707,7 @@ def run_debate(
             result = adapter.chat(
                 ModelTier.ANALYST,
                 retry_messages,
-                max_tokens=ANALYST_SYNTHESIS_RETRY_MAX_TOKENS,
+                max_tokens=synthesis_retry_ceiling(base_max_tokens),
                 temperature=0,
                 seed=seed + 1,
             )

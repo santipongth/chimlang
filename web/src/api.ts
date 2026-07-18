@@ -588,6 +588,7 @@ export interface AppSettings {
   llm_model_analyst: string;
   llm_model_embedding: string;
   llm_embedding_dimension: number;
+  llm_synthesis_max_tokens?: number;
   llm_prices: Record<string, { input_usd_per_m: number; output_usd_per_m: number }>;
   run_budget_usd_cap: number;
   monthly_budget_usd_cap: number;

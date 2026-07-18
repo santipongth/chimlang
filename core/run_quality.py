@@ -52,10 +52,18 @@ def estimate_run_cost(body: dict, settings: Settings | None = None) -> dict:
         return {"estimated_usd": 0.0, "currency": "USD", "calls": 0, "note": "fabric_engine_no_llm"}
     llm_settings = effective_llm_settings()
     pricing = effective_pricing()
+    from simulation.debate import ANALYST_SYNTHESIS_MAX_TOKENS, synthesis_retry_ceiling
+
     reflection_calls = min(2, max(0, rounds - 1)) if body.get("reflection") else 0
+    synthesis_tokens = int(llm_settings.llm_synthesis_max_tokens or ANALYST_SYNTHESIS_MAX_TOKENS)
     loads = [
         TierLoad(llm_settings.llm_model_crowd, agents * rounds, 900, 160),
-        TierLoad(llm_settings.llm_model_analyst, 1 + reflection_calls, 1500, 800),
+        TierLoad(
+            llm_settings.llm_model_analyst,
+            1 + reflection_calls,
+            9_000,
+            synthesis_retry_ceiling(synthesis_tokens),
+        ),
     ]
     if (
         str(body.get("retrieval_mode", "hybrid")) in {"hybrid", "vector"}

@@ -9,6 +9,9 @@ jobs:
   backend-unit-mocked:
     name: Backend unit / mocked contracts
     runs-on: ubuntu-latest
+    # มติผู้ใช้ 18 ก.ค. 2026 (ADR-0021): ช่วง pilot ใช้งานจริง mock/unit tests เป็น informational
+    # ไม่ใช่ gate — ผู้ใช้ทดสอบเองและแจ้งปัญหา; gate เดียวที่ block คือ live integration
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -30,6 +33,8 @@ jobs:
   browser-stubbed:
     name: Browser stubbed / accessibility
     runs-on: ubuntu-latest
+    # มติผู้ใช้ 18 ก.ค. 2026 (ADR-0021): stubbed browser tests เป็น informational ไม่ใช่ gate
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

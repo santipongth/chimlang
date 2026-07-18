@@ -274,6 +274,23 @@ export default function Settings() {
                   className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
                 />
               </label>
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_synth_tokens")}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={16000}
+                  step={500}
+                  value={data.llm_synthesis_max_tokens ?? 0}
+                  onChange={(e) => setData({ ...data, llm_synthesis_max_tokens: parseInt(e.target.value) || 0 })}
+                  onBlur={() => patch({ llm_synthesis_max_tokens: data.llm_synthesis_max_tokens ?? 0 } as any)}
+                  placeholder="0"
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">{t("set_synth_tokens_note")}</span>
+              </label>
             </div>
             {/* API key — เก็บเข้ารหัสใน DB (ADR-0007), แสดงแค่มาสก์ */}
             <div className="rounded-xl border border-border bg-background p-3 space-y-2">
@@ -335,6 +352,7 @@ export default function Settings() {
                   llm_model_analyst: "",
                   llm_model_embedding: "",
                   llm_embedding_dimension: 1536,
+                  llm_synthesis_max_tokens: 0,
                 } as any)
               }
               className="rounded-xl border border-border px-4 py-2 text-xs text-muted-foreground hover:bg-muted"
