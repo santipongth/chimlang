@@ -716,7 +716,7 @@ export interface paths {
         put?: never;
         /**
          * Validate Run
-         * @description Queue exactly three child seeds after a fresh aggregate BudgetGuard check.
+         * @description Queue the missing validation child seeds (สูงสุด 3) after a fresh BudgetGuard check.
          */
         post: operations["validate_run_runs__run_id__validate_post"];
         delete?: never;

@@ -56,15 +56,10 @@ class Settings(BaseSettings):
     # งบรวมต่อเดือน (USD) — LLM spend สะสมทั้งเดือนเกินค่านี้ = block ก่อนรัน (P6-M5)
     monthly_budget_usd_cap: float = 50.0
 
-    # --- News Desk (P7, SIM-11) ---
-    # รายการ RSS feed ข่าวไทย (คั่นด้วย ,) — โต๊ะข่าวกลางดึงให้ agent ไม่ให้ agent แตะเน็ตเอง
-    news_rss_feeds: str = ""
-    tavily_api_key: str = ""  # search API (optional) — ไม่มี = โหมด RSS อย่างเดียว
-    news_cache_ttl_hours: int = 6  # cache ผลดึงข่าวต่อ (provider, คำค้น/feed) — ปรับจาก Settings ได้
-    news_max_age_days: int = 14  # ข่าว RSS ที่มี timestamp เก่ากว่านี้ถูกกรองทิ้ง
-
-    def news_rss_feeds_list(self) -> list[str]:
-        return [f.strip() for f in self.news_rss_feeds.split(",") if f.strip()]
+    # --- News Desk (P7, SIM-11 / ADR-0026: Tavily search อย่างเดียว) ---
+    # โต๊ะข่าวกลางดึงข่าวให้ agent ไม่ให้ agent แตะเน็ตเอง — ไม่มี key = skip พร้อมบันทึก evidence
+    tavily_api_key: str = ""
+    news_cache_ttl_hours: int = 6  # cache ผลดึงข่าวต่อ (provider, คำค้น) — ปรับจาก Settings ได้
 
 
 def get_settings(**overrides) -> Settings:

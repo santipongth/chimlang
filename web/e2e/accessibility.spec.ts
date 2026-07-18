@@ -43,10 +43,7 @@ const emptySettings = {
     env_run_cap: 5,
     env_monthly_cap: 50,
   },
-  news_rss_feeds: "",
   news: {
-    feeds: [],
-    feeds_source: "none",
     tavily_present: false,
     tavily_masked: "",
     tavily_source: "none",

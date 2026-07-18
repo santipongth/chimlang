@@ -23,6 +23,11 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
+- **ใหม่ (18 ก.ค. ADR-0026):** ถอด RSS ออกจากโต๊ะข่าวสดทั้งหมดตามมติผู้ใช้ — News Desk เหลือ
+  Tavily search อย่างเดียว (general mode); ลบ parser/pubDate/age filter/UI/config/keys + migration
+  drop published_at และล้าง rss cache; snapshot ประวัติ provider=rss ยังอ่านได้; near-dup/TTL/
+  PII gate/hindcast gate คงเดิม; evidence sources แบบ rss ต่อ run เป็นคนละฟีเจอร์ ยังอยู่.
+
 - **ใหม่ (18 ก.ค. แก้ 3-seed validation ให้ทำงานจริง):** กล่อง "ความเสถียรของผลจำลอง" ว่างเพราะ
   บั๊กจริง 4 จุด — ตัวหลักคือ validate 500 เสมอสำหรับ fabric (stored rounds=20 ชน RunBody ≤10),
   UI ไม่ดึงรายงานเก่า, ลูก retry/rerun ปนรายงาน (แก้ด้วย run_kind tag), partial enqueue ค้างถาวร

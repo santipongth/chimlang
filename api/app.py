@@ -948,7 +948,7 @@ def _run_create_impl(
 
                     def news_fetcher(queries: list[str]) -> dict[str, tuple[str, ...]]:
                         # intent ระหว่างรอบ: ค้นเพิ่มผ่าน governance แล้ว snapshot
-                        gather(settings.postgres_url, ctx, feeds=[], queries=queries)
+                        gather(settings.postgres_url, ctx, queries=queries)
                         return _diet(load_items(settings.postgres_url, run_id))
 
                 news_status = {
@@ -965,7 +965,6 @@ def _run_create_impl(
                             "error": it.error,
                             "content": it.content,
                             "pii_redactions": it.pii_redactions,
-                            "published_at": it.published_at,
                         }
                         for it in all_items
                     ],
@@ -1011,7 +1010,6 @@ def _run_create_impl(
                         "channel_tags": it.channel_tags,
                         "status": it.status,
                         "error": it.error,
-                        "published_at": it.published_at,
                     }
                     for it in _reload_news(settings.postgres_url, run_id)
                 ]

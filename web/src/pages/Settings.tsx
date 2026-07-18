@@ -469,27 +469,11 @@ export default function Settings() {
             </section>
           )}
 
-          {/* News Desk (P7) — feeds + Tavily key ตั้งจากหน้านี้ (DB ทับ .env) */}
+          {/* News Desk (P7/ADR-0026) — Tavily search อย่างเดียว ตั้งจากหน้านี้ (DB ทับ .env) */}
           {data.news && (
           <section className={card + " space-y-3"}>
             <h2 className="font-semibold">🌐 {t("set_news_title")}</h2>
             <p className="text-xs text-muted-foreground">{t("set_news_desc")}</p>
-            <label className="block text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {t("set_news_feeds")}
-              </span>
-              <textarea
-                value={data.news_rss_feeds}
-                onChange={(e) => setData({ ...data, news_rss_feeds: e.target.value })}
-                onBlur={() => patch({ news_rss_feeds: data.news_rss_feeds } as any)}
-                placeholder="https://www.thairath.co.th/rss/news, https://..."
-                rows={2}
-                className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
-              />
-              <span className="text-[11px] text-muted-foreground">
-                {t("set_news_feeds_active")}: {data.news.feeds.length} feeds ({data.news.feeds_source === "db" ? t("set_key_db_short") : data.news.feeds_source === "env" ? t("set_key_env_short") : "—"})
-              </span>
-            </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -505,24 +489,7 @@ export default function Settings() {
                   className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
                 />
                 <span className="mt-1 block text-[11px] text-muted-foreground">
-                  {t("set_news_ttl_note")} · {t("set_news_feeds_active")}: {data.news.cache_ttl_hours ?? 6} {t("set_news_hours_unit")}
-                </span>
-              </label>
-              <label className="text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("set_news_max_age")}
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={365}
-                  value={data.news_max_age_days ?? 0}
-                  onChange={(e) => setData({ ...data, news_max_age_days: parseInt(e.target.value) || 0 })}
-                  onBlur={() => patch({ news_max_age_days: data.news_max_age_days ?? 0 } as any)}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
-                />
-                <span className="mt-1 block text-[11px] text-muted-foreground">
-                  {t("set_news_max_age_note")} · {t("set_news_feeds_active")}: {data.news.max_age_days ?? 14} {t("set_news_days_unit")}
+                  {t("set_news_ttl_note")} · {t("set_news_active")}: {data.news.cache_ttl_hours ?? 6} {t("set_news_hours_unit")}
                 </span>
               </label>
             </div>

@@ -568,14 +568,9 @@ export interface AppSettings {
     env_run_cap: number;
     env_monthly_cap: number;
   };
-  news_rss_feeds: string;
   news_cache_ttl_hours?: number;
-  news_max_age_days?: number;
   news: {
-    feeds: string[];
     cache_ttl_hours?: number;
-    max_age_days?: number;
-    feeds_source: "db" | "env" | "none";
     tavily_present: boolean;
     tavily_masked: string;
     tavily_source: "db" | "env" | "none";

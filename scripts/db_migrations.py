@@ -387,6 +387,28 @@ def _news_published_at(conn: Connection) -> None:
     )
 
 
+def _remove_news_rss(conn: Connection) -> None:
+    """ADR-0026: ถอด RSS ออกจากโต๊ะข่าวสด — เหลือ Tavily search อย่างเดียว
+
+    ตรวจก่อนลบ 18 ก.ค. 2026: news_items ที่ published_at <> '' มี 91 แถวใน 13 run
+    (10 run เป็น `news-age-*` จาก test suite + 3 debate run ของวันเดียวกันที่เพิ่ม column;
+    ไม่มีข้อมูล production ก่อนหน้า เพราะ column เพิ่งเพิ่มเช้าวันเดียวกัน) — ลบ column ได้.
+    **ห้าม**แก้ CHECK constraint provider ('rss','search') — แถวเก่า provider='rss'
+    เป็น snapshot ประวัติ (1,087 แถว ณ วันลบ) ต้องอ่านได้ต่อ (NFR-07).
+    news_fetch_cache ของ provider='rss' เป็น operational cache ที่ code ใหม่ไม่มีทางอ่านถึง
+    (cache key ผูกกับ provider) — ลบทิ้งได้ (190 แถว ณ วันลบ; cache disposable ตามนิยาม).
+    ค่า app_settings ของ RSS ที่เลิกใช้ถูกถอดออกจาก JSONB เพื่อไม่ให้รั่วกลับใน GET /settings.json
+    """
+    count = conn.execute("SELECT count(*) FROM news_items WHERE published_at <> ''").fetchone()[0]
+    print(f"remove-news-rss: dropping news_items.published_at ({count} non-empty rows)")
+    conn.execute("ALTER TABLE news_items DROP COLUMN IF EXISTS published_at")
+    conn.execute("DELETE FROM news_fetch_cache WHERE provider = 'rss'")
+    conn.execute(
+        "UPDATE app_settings SET data = (data - 'news_rss_feeds') - 'news_max_age_days' "
+        "WHERE id = 1"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     (
         "2026-07-15-run-lifecycle-newsdesk-cache",
@@ -497,6 +519,11 @@ MIGRATIONS: list[Migration] = [
         "2026-07-18-remove-watchlists-v1",
         "drop watchlist/alert operational tables after ADR-0024 feature decommission",
         _remove_watchlists,
+    ),
+    (
+        "2026-07-18-remove-news-rss-v1",
+        "drop RSS from the live news desk (ADR-0026) — Tavily search only",
+        _remove_news_rss,
     ),
 ]
 

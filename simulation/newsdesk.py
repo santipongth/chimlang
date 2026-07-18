@@ -1,13 +1,13 @@
 """News Desk กลาง (P7-M1/M2, SIM-11) — agent ได้ข้อมูลสดจากเน็ตผ่านโต๊ะข่าวเดียว ไม่ยิงเน็ตเอง
 
-หลักออกแบบ (PHASE7-BRIEF):
+หลักออกแบบ (PHASE7-BRIEF + ADR-0026):
 - ทุก fetch ผ่าน gate hindcast (`ensure_external_retrieval_allowed`) — กฎเหล็กข้อ 2
 - PII gate ทุกชิ้นแบบ fail-closed (GOV-01/ADR-0010) — body/title redact+ตรวจซ้ำก่อน persist;
   URL PII หรือ verification failure ถูก block
 - snapshot-first (NFR-07): เก็บลง DB ก่อนใช้ — replay อ่านจาก `load_items` เท่านั้น ไม่แตะเน็ต
 - media diet (M2): แต่ละ segment เห็นข่าวถ่วงด้วย channel_mix ของกลุ่มตัวเอง = selective exposure
-- Tavily search: key จาก .env/Settings (`TAVILY_API_KEY`) — ไม่มี key =
-  บันทึก skipped evidence แล้วใช้ RSS ต่อ
+- provider เดียว: Tavily search (ADR-0026 ถอด RSS ออกทั้งหมด) — key จาก .env/Settings
+  (`TAVILY_API_KEY`); ไม่มี key = บันทึก skipped evidence (ไม่มีข่าวเข้า run)
 """
 
 import hashlib
@@ -16,30 +16,28 @@ import random
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from email.utils import parsedate_to_datetime
 
 import httpx
 
 from core.config import get_settings
 from core.db import connection, require_schema
 from core.run_context import RunContext, ensure_external_retrieval_allowed
-from core.safe_fetch import SafeOutboundFetcher
 from governance.pii import PIIDetector, PIIRedactionError, load_allowlist
-from simulation.sources import _bm25_scores, _strip_html, _trigrams, validate_external_url
+from simulation.sources import _strip_html, _trigrams
 
 MAX_ITEMS_PER_RUN = 30
 MAX_SEARCH_QUERIES_PER_RUN = 8
 MAX_CONTENT_CHARS = 4_000
 NEWS_CACHE_TTL_HOURS = 6  # default — ปรับได้จากหน้า Settings (news_cache_ttl_hours)
-NEWS_MAX_AGE_DAYS = 14  # default — ข่าว RSS เก่ากว่านี้ถูกกรองทิ้ง (ปรับได้จาก Settings)
 # ตัดซ้ำแบบใกล้เคียงด้วย containment coefficient (|A∩B| / min(|A|,|B|)) แทน Jaccard —
 # ข่าวเรื่องเดียวกันคนละสำนักมักเป็น "เนื้อเดิม + พาดหัว/รายละเอียดต่างกัน" ซึ่ง Jaccard เจือจาง
 NEAR_DUP_CONTAINMENT = 0.7
 
 # heuristic การกระจายข่าวเข้าช่องทาง (บันทึกตรงๆ ว่าเป็น heuristic จาก provider —
 # ไม่ใช่ข้อมูลจริงว่าข่าวชิ้นนั้นแพร่ช่องไหน; refine ภายหลังได้โดยแก้ mapping นี้จุดเดียว)
+# หมายเหตุ ADR-0026: เหลือ provider 'search' เท่านั้น — แถวเก่า provider 'rss' ใน DB
+# ยังอ่านได้ตามเดิม (load_items คืน channel_tags ที่ snapshot ไว้กับแถว ไม่พึ่งตารางนี้)
 CHANNEL_TAGS = {
-    "rss": {"public_feed": 0.45, "line_closed_group": 0.25, "algo_feed": 0.20, "offline_wom": 0.10},
     "search": {
         "algo_feed": 0.45,
         "public_feed": 0.35,
@@ -48,6 +46,8 @@ CHANNEL_TAGS = {
     },
 }
 
+# CHECK (provider IN ('rss', 'search')) คงไว้ทั้งสองตาราง — แถวเก่า provider='rss'
+# เป็น snapshot ประวัติที่ต้องอ่านได้ต่อ (ADR-0026)
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news_items (
     id BIGSERIAL PRIMARY KEY,
@@ -62,12 +62,10 @@ CREATE TABLE IF NOT EXISTS news_items (
     channel_tags JSONB NOT NULL DEFAULT '{}',
     status TEXT NOT NULL,
     error TEXT NOT NULL DEFAULT '',
-    pii_redactions JSONB NOT NULL DEFAULT '{}',
-    published_at TEXT NOT NULL DEFAULT ''
+    pii_redactions JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS news_items_run ON news_items (run_id);
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS pii_redactions JSONB NOT NULL DEFAULT '{}'::jsonb;
-ALTER TABLE news_items ADD COLUMN IF NOT EXISTS published_at TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS news_fetch_cache (
     cache_key TEXT PRIMARY KEY,
     provider TEXT NOT NULL CHECK (provider IN ('rss', 'search')),
@@ -91,71 +89,10 @@ class NewsItem:
     status: str  # ready | redacted | blocked | error | skipped
     error: str = ""
     pii_redactions: dict[str, int] = field(default_factory=dict)
-    published_at: str = ""  # ISO timestamp จริงของข่าว (จาก pubDate/published) — "" = ไม่ทราบ
 
 
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:32]
-
-
-def _parse_pub_date(value: str) -> str:
-    """แปลง timestamp ของ feed เป็น ISO string — รับทั้ง RFC 822 (RSS) และ ISO 8601 (Atom)
-
-    แปลงไม่ได้ = "" (ไม่ทราบอายุข่าว — ไม่ถูกกรองทิ้ง เพราะไม่มีหลักฐานว่าเก่า)
-    """
-    value = value.strip()
-    if not value:
-        return ""
-    try:
-        parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return ""
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC).isoformat()
-
-
-def _parse_rss_entries(xml: str) -> list[tuple[str, str, str]]:
-    """คืน [(title, content, published_iso)] ราย item — เก็บ timestamp จริงลง provenance"""
-    blocks = re.findall(r"<item[\s\S]*?</item>|<entry[\s\S]*?</entry>", xml, flags=re.IGNORECASE)
-    out: list[tuple[str, str, str]] = []
-    for chunk in blocks[:15]:
-        title_m = re.search(r"<title[^>]*>([\s\S]*?)</title>", chunk, flags=re.IGNORECASE)
-        desc_m = re.search(
-            r"<description[^>]*>([\s\S]*?)</description>|<summary[^>]*>([\s\S]*?)</summary>",
-            chunk,
-            flags=re.IGNORECASE,
-        )
-        date_m = re.search(
-            r"<pubDate[^>]*>([\s\S]*?)</pubDate>|<published[^>]*>([\s\S]*?)</published>"
-            r"|<updated[^>]*>([\s\S]*?)</updated>|<dc:date[^>]*>([\s\S]*?)</dc:date>",
-            chunk,
-            flags=re.IGNORECASE,
-        )
-        strip_cdata = lambda s: re.sub(r"<!\[CDATA\[|\]\]>", "", s or "")  # noqa: E731
-        title = _strip_html(strip_cdata(title_m.group(1))) if title_m else ""
-        desc = (
-            _strip_html(strip_cdata(next((g for g in desc_m.groups() if g), ""))) if desc_m else ""
-        )
-        published = (
-            _parse_pub_date(strip_cdata(next((g for g in date_m.groups() if g), "")))
-            if date_m
-            else ""
-        )
-        if title:
-            content = f"{title}\n{desc}".strip()[:MAX_CONTENT_CHARS]
-            out.append((title[:200], content, published))
-    return out
-
-
-def _fetch_rss_items(feed_url: str) -> list[tuple[str, str, str]]:
-    """คืน [(title, content, published_iso)] จาก feed — แยกราย item เพื่อ PII gate เป็นชิ้นๆ"""
-    safe_url = validate_external_url(feed_url)
-    text = SafeOutboundFetcher().fetch(safe_url).text
-    return _parse_rss_entries(text)
 
 
 def _tavily_search(query: str, api_key: str, *, max_results: int = 3) -> list[tuple[str, str, str]]:
@@ -191,16 +128,11 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
             title = str(raw.get("title", ""))[:200]
             url = str(raw.get("url", ""))
             content = str(raw.get("content", ""))[:MAX_CONTENT_CHARS]
-            published_at = str(raw.get("published_at", ""))
             prior_counts = {str(k): int(v) for k, v in (raw.get("pii_redactions") or {}).items()}
             prior_status = str(raw.get("status", "ready"))
-        elif provider == "search":
-            title, url, content = (str(x) for x in raw[:3])
-            published_at, prior_counts, prior_status = "", {}, "ready"
         else:
-            title, content = (str(x) for x in raw[:2])
-            published_at = str(raw[2]) if len(raw) > 2 else ""
-            url, prior_counts, prior_status = "", {}, "ready"
+            title, url, content = (str(x) for x in raw[:3])
+            prior_counts, prior_status = {}, "ready"
 
         if url and detector.check(url).blocked:
             prepared.append(
@@ -211,7 +143,6 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
                     "status": "blocked",
                     "error": "พบ PII ใน URL (GOV-01)",
                     "pii_redactions": {},
-                    "published_at": "",
                 }
             )
             continue
@@ -227,7 +158,6 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
                     "status": "blocked",
                     "error": "พบ PII ที่ redact อย่างปลอดภัยไม่ได้ (GOV-01)",
                     "pii_redactions": {},
-                    "published_at": "",
                 }
             )
             continue
@@ -247,7 +177,6 @@ def _prepare_news_payload(provider: str, payload: list, detector: PIIDetector) -
                 "status": status,
                 "error": str(raw.get("error", ""))[:500] if isinstance(raw, dict) else "",
                 "pii_redactions": counts,
-                "published_at": published_at,
             }
         )
     return prepared
@@ -285,51 +214,43 @@ def _cached_fetch(
     return list(payload)
 
 
-def effective_news_config(settings) -> tuple[list[str], str]:
-    """feeds + Tavily key ที่ใช้จริง — ค่าจากหน้า Settings (DB) ทับ .env; DB ไม่พร้อม = .env"""
-    feeds = settings.news_rss_feeds_list()
+def effective_news_config(settings) -> str:
+    """Tavily key ที่ใช้จริง — ค่าจากหน้า Settings (DB) ทับ .env; DB ไม่พร้อม = .env"""
     key = settings.tavily_api_key.strip()
     try:
-        from core.appsettings import get_app_settings, get_tavily_api_key
+        from core.appsettings import get_tavily_api_key
 
-        data = get_app_settings(settings.postgres_url)
-        db_feeds = [f.strip() for f in str(data.get("news_rss_feeds", "")).split(",") if f.strip()]
-        if db_feeds:
-            feeds = db_feeds
         db_key = get_tavily_api_key(settings.postgres_url)
         if db_key:
             key = db_key
     except Exception:
         pass  # fail-safe: DB/ถอดรหัสพัง = ใช้ .env ต่อ (ไม่ block งาน)
-    return feeds, key
+    return key
 
 
-def effective_news_tuning(settings) -> tuple[int, int]:
-    """(cache_ttl_hours, max_age_days) ที่ใช้จริง — ค่าจาก Settings (DB, 0 = default) ทับ .env"""
+def effective_news_tuning(settings) -> int:
+    """cache_ttl_hours ที่ใช้จริง — ค่าจาก Settings (DB, 0 = default) ทับ .env"""
     ttl = int(settings.news_cache_ttl_hours)
-    max_age = int(settings.news_max_age_days)
     try:
         from core.appsettings import get_app_settings
 
         data = get_app_settings(settings.postgres_url)
         if int(data.get("news_cache_ttl_hours") or 0) > 0:
             ttl = int(data["news_cache_ttl_hours"])
-        if int(data.get("news_max_age_days") or 0) > 0:
-            max_age = int(data["news_max_age_days"])
     except Exception:
         pass  # fail-safe: DB พัง = ใช้ .env ต่อ
-    return max(1, ttl), max(1, max_age)
+    return max(1, ttl)
 
 
 def gather(
     dsn: str,
     ctx: RunContext,
     *,
-    feeds: list[str] | None = None,
     queries: list[str] | None = None,
 ) -> list[NewsItem]:
     """ดึงข่าวเข้าโต๊ะ + snapshot ลง DB — จุดเดียวที่แตะเน็ต (gate + PII ทุกชิ้น)
 
+    Tavily search เท่านั้น (ADR-0026) — จัดอันดับตามคำค้นโดย provider อยู่แล้ว.
     Body/title redact-and-verify ก่อน persist; URL PII หรือ verification fail = block.
     """
     ensure_external_retrieval_allowed(ctx)  # กฎเหล็กข้อ 2 — ก่อน I/O ใดๆ
@@ -337,16 +258,12 @@ def gather(
     if not settings.pii_detector_enabled:
         raise ValueError("PII detector ถูกปิด — ปฏิเสธการดึงข่าว (GOV-01 fail-closed)")
     detector = PIIDetector(load_allowlist())
-    eff_feeds, tavily_key = effective_news_config(settings)
-    ttl_hours, max_age_days = effective_news_tuning(settings)
-    feeds = feeds if feeds is not None else eff_feeds
+    tavily_key = effective_news_config(settings)
+    ttl_hours = effective_news_tuning(settings)
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
-    subject = queries[0] if queries else ""
 
     raw: list[dict] = []
     failures: list[tuple[str, str, str, str]] = []  # (provider, query, url, error)
-    # ผลค้น (ตรงหัวข้อ) เข้าคิวก่อน RSS (ข่าวแวดล้อม) — กัน RSS ท่วมจนชน cap แล้วผลค้นตกขบวน
-    # (บั๊กที่ smoke จริงจับได้ 12 ก.ค.: 3 feeds × 10 = 30 ชน MAX_ITEMS ก่อนถึงคิว search)
     if queries and tavily_key:
         for q in queries:
             try:
@@ -368,51 +285,6 @@ def gather(
     elif queries and not tavily_key:
         for q in queries:
             failures.append(("search", q, "", "Tavily skipped: TAVILY_API_KEY ยังไม่ได้ตั้งค่า"))
-    age_cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
-    rss_candidates: list[dict] = []
-    for feed in feeds[:10]:
-        try:
-            results = _cached_fetch(
-                dsn,
-                provider="rss",
-                query=feed,
-                url=feed,
-                fetcher=lambda feed=feed: _fetch_rss_items(feed),
-                detector=detector,
-                ttl_hours=ttl_hours,
-            )
-            for item in results:
-                entry = {**item, "provider": "rss", "query": feed, "url": feed}
-                if entry.get("status") in ("blocked", "error", "skipped"):
-                    # หลักฐาน governance/ความล้มเหลว — เข้า snapshot ทันที ไม่เข้าคิวจัดอันดับ
-                    raw.append(entry)
-                    continue
-                published = str(entry.get("published_at", ""))
-                if published:
-                    try:
-                        if datetime.fromisoformat(published) < age_cutoff:
-                            continue  # เก่าเกิน max_age_days — กรองทิ้ง (ไม่ทราบอายุ = คงไว้)
-                    except ValueError:
-                        pass
-                rss_candidates.append(entry)
-        except PIIRedactionError:
-            failures.append(("rss", "", "", "พบ PII ใน RSS URL (GOV-01)"))
-        except Exception as e:
-            failures.append(("rss", feed, feed, f"RSS fetch failed: {type(e).__name__}: {e}"))
-    # จัดอันดับ RSS ด้วย BM25 กับหัวข้อ run แทน "มาก่อนได้ก่อน" — คุณภาพต่อโควตา 30 ชิ้น
-    if subject.strip() and rss_candidates:
-        rows = [
-            (idx, "", 0, f"{c.get('title', '')} {c.get('content', '')}")
-            for idx, c in enumerate(rss_candidates)
-        ]
-        scores = _bm25_scores(rows, subject)
-        rss_candidates = [
-            c
-            for _, c in sorted(
-                enumerate(rss_candidates), key=lambda pair: (-scores.get(pair[0], 0.0), pair[0])
-            )
-        ]
-    raw.extend(rss_candidates)
 
     items: list[NewsItem] = []
     seen: set[str] = set()
@@ -430,7 +302,7 @@ def gather(
                 error = "เกิดข้อผิดพลาดที่มี PII และไม่สามารถบันทึกรายละเอียดได้"
                 pii_redactions = {}
             tags = CHANNEL_TAGS[provider]
-            title = "ค้นหาข่าวไม่สำเร็จ" if provider == "search" else "อ่าน RSS ไม่สำเร็จ"
+            title = "ค้นหาข่าวไม่สำเร็จ"
             h = _hash(provider + query + url + error)
             status = (
                 "blocked"
@@ -469,7 +341,6 @@ def gather(
             status = raw_item["status"]
             error = raw_item["error"]
             pii_redactions = raw_item["pii_redactions"]
-            published_at = str(raw_item.get("published_at", ""))
             h = _hash(title + content)
             if h in seen or (status in ("ready", "redacted") and not content.strip()):
                 continue
@@ -488,8 +359,8 @@ def gather(
             tags = CHANNEL_TAGS[provider]
             conn.execute(
                 "INSERT INTO news_items (run_id, provider, query, url, title, content, "
-                "content_hash, channel_tags, status, error, pii_redactions, published_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb, %s)",
+                "content_hash, channel_tags, status, error, pii_redactions) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)",
                 (
                     ctx.run_id,
                     provider,
@@ -502,7 +373,6 @@ def gather(
                     status,
                     error,
                     json.dumps(pii_redactions),
-                    published_at,
                 ),
             )
             items.append(
@@ -516,24 +386,25 @@ def gather(
                     status,
                     error,
                     pii_redactions,
-                    published_at,
                 )
             )
     return items
 
 
 def load_items(dsn: str, run_id: str) -> list[NewsItem]:
-    """อ่าน snapshot จาก DB เท่านั้น — path สำหรับ replay/แสดงผล ไม่แตะเน็ต (NFR-07)"""
+    """อ่าน snapshot จาก DB เท่านั้น — path สำหรับ replay/แสดงผล ไม่แตะเน็ต (NFR-07)
+
+    แถวเก่า provider='rss' (ก่อน ADR-0026) ยังอ่านได้ตามเดิม — channel_tags มากับแถว
+    """
     with connection(dsn) as conn:
         rows = conn.execute(
             "SELECT provider, url, title, content, fetched_at::text, channel_tags, status, error, "
-            "pii_redactions, published_at "
+            "pii_redactions "
             "FROM news_items WHERE run_id = %s ORDER BY id",
             (run_id,),
         ).fetchall()
     return [
-        NewsItem(r[0], r[1], r[2], r[3], r[4], dict(r[5]), r[6], r[7], dict(r[8]), r[9])
-        for r in rows
+        NewsItem(r[0], r[1], r[2], r[3], r[4], dict(r[5]), r[6], r[7], dict(r[8])) for r in rows
     ]
 
 

@@ -136,7 +136,7 @@ def build_readiness(body: dict, *, election_verified: bool = False) -> dict:
         )
     elif live_news:
         checks.append(
-            ReadinessCheck("news", "News Desk", "pass", "rss_or_tavily_will_be_checked_at_run_time")
+            ReadinessCheck("news", "News Desk", "pass", "tavily_will_be_checked_at_run_time")
         )
     else:
         checks.append(ReadinessCheck("news", "News Desk", "warn", "disabled"))
