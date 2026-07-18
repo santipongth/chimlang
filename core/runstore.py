@@ -610,13 +610,20 @@ class RunStore:
             "request_hash": row[3],
         }
 
-    def children(self, parent_run_id: str) -> list[dict]:
+    def children(self, parent_run_id: str, kind: str | None = None) -> list[dict]:
+        """ลูกของ run — parent_run_id ถูกใช้ทั้ง retry/rerun และ 3-seed validation
+        จึงรับ `kind` (config.run_kind) เพื่อกรองเฉพาะลูกที่สร้างเพื่อจุดประสงค์นั้นจริง"""
+        query = (
+            "SELECT run_id, engine, seed, status, payload, error, agents, rounds "
+            "FROM sim_runs WHERE parent_run_id = %s"
+        )
+        params: tuple = (parent_run_id,)
+        if kind is not None:
+            query += " AND config->>'run_kind' = %s"
+            params = (parent_run_id, kind)
+        query += " ORDER BY created_at, id"
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT run_id, engine, seed, status, payload, error, agents, rounds "
-                "FROM sim_runs WHERE parent_run_id = %s ORDER BY created_at, id",
-                (parent_run_id,),
-            ).fetchall()
+            rows = conn.execute(query, params).fetchall()
         return [
             {
                 "run_id": r[0],

@@ -1098,6 +1098,7 @@ def _enqueue_persistent_run(
     *,
     preallocated_run_id: str | None = None,
     idempotency_key: str = "",
+    run_kind: str = "",
 ) -> dict:
     """ส่ง persistent run เข้า queue — ใช้ code path เดียวกับ /runs ใน worker แล้ว poll ด้วย job id"""
     require(principal, Permission.RUN)
@@ -1181,6 +1182,7 @@ def _enqueue_persistent_run(
                 "views": views,
                 "live_news": body.live_news,
                 "parent_run_id": body.parent_run_id,
+                "run_kind": run_kind,
                 "seed": run_seed,
                 "experiment_id": body.experiment_id,
                 "population_set_id": body.population_set_id,
@@ -1648,7 +1650,7 @@ def _validation_report(parent_run_id: str, children: list[dict]) -> dict:
 
 @app.post("/runs/{run_id}/validate")
 def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> dict:
-    """Queue exactly three child seeds after a fresh aggregate BudgetGuard check."""
+    """Queue the missing validation child seeds (สูงสุด 3) after a fresh BudgetGuard check."""
     require(principal, Permission.RUN)
     from core.llm.budget import release_budget_reservation, reserve_monthly_budget
     from core.llm.userconfig import effective_monthly_cap
@@ -1663,17 +1665,28 @@ def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> 
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if parent["status"] != "complete":
         raise HTTPException(status_code=409, detail="validate ได้เมื่อ parent run complete แล้ว")
-    existing = store.children(run_id)
-    if existing:
-        return _validation_report(run_id, existing)
+    # กรองเฉพาะลูกที่เกิดจาก 3-seed validation จริง — retry/rerun ก็ตั้ง parent_run_id
+    # เหมือนกัน ถ้าไม่กรองจะ return รายงานปลอมจากลูก rerun แล้วไม่ queue validation เลย
+    existing = store.children(run_id, kind="three_seed_validation")
     base_seed = int(parent["seed"])
+    # ถ้า enqueue รอบก่อนล้มกลางคัน (เช่น worker หลุดหลังลูกแรก) ให้ queue เฉพาะ seed
+    # ที่ยังขาด — ไม่ใช่ return รายงาน incomplete ค้างตลอดไป
+    existing_seeds = {int(child["seed"]) for child in existing}
+    missing_offsets = [offset for offset in (1, 2, 3) if base_seed + offset not in existing_seeds]
+    if not missing_offsets:
+        return _validation_report(run_id, existing)
+    # Fabric เก็บ effective 20 rounds ใน DB แต่ contract ของ RunBody คือ <= 10
+    # (เหมือน rerun) — ไม่ clamp จะ ValidationError เป็น 500 ทุกครั้งสำหรับ fabric run
+    child_rounds = (
+        int(parent["rounds"]) if parent["engine"] == "debate" else min(int(parent["rounds"]), 10)
+    )
     bodies = [
         RunBody(
             engine=parent["engine"],
             subject=parent["subject"],
             domain=parent["domain"],
             agents=parent["agents"],
-            rounds=parent["rounds"],
+            rounds=child_rounds,
             pack_id=parent["config"].get("pack_id"),
             red_team=bool(parent["config"].get("red_team")),
             views=list(parent["config"].get("views") or []),
@@ -1681,7 +1694,7 @@ def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> 
             parent_run_id=run_id,
             seed=base_seed + offset,
         )
-        for offset in (1, 2, 3)
+        for offset in missing_offsets
     ]
     estimates = [estimate_run_cost(body.model_dump()) for body in bodies]
     for estimate in estimates:
@@ -1712,6 +1725,7 @@ def validate_run(run_id: str, principal: Principal = Depends(get_principal)) -> 
                     body,
                     principal,
                     preallocated_run_id=child_ids[index],
+                    run_kind="three_seed_validation",
                 )
             )
         except Exception:
@@ -1726,7 +1740,7 @@ def get_run_validation(run_id: str, principal: Principal = Depends(get_principal
     require(principal, Permission.RUN)
     from core.runstore import RunStore
 
-    children = RunStore(get_settings().postgres_url).children(run_id)
+    children = RunStore(get_settings().postgres_url).children(run_id, kind="three_seed_validation")
     return _validation_report(run_id, children)
 
 

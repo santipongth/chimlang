@@ -445,12 +445,13 @@ export interface ValidationReport {
   note: string;
 }
 
-export async function validateRun(runId: string): Promise<ValidationReport> {
+// POST คืน ack ว่า queue ลูก 3 seed แล้ว (หรือรายงานเดิมถ้ามีอยู่แล้ว) — ไม่ใช่ ValidationReport เสมอ
+export async function validateRun(runId: string): Promise<{ parent_run_id: string; status: string }> {
   const { data, error, response } = await apiClient.POST("/runs/{run_id}/validate", {
     params: { path: { run_id: runId } },
   });
   if (!response.ok || !data) throw openApiError(error, response.status);
-  return data as unknown as ValidationReport;
+  return data as unknown as { parent_run_id: string; status: string };
 }
 
 export async function fetchValidation(runId: string): Promise<ValidationReport> {

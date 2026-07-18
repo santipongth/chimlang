@@ -25,6 +25,21 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture()
+def eager_client() -> TestClient:
+    """TestClient ที่รัน Celery task แบบ eager — จำเป็นสำหรับเส้นทาง enqueue จริง"""
+    from core.tasks import celery_app
+
+    old_eager = celery_app.conf.task_always_eager
+    old_propagates = celery_app.conf.task_eager_propagates
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+    with TestClient(app) as test_client:
+        yield test_client
+    celery_app.conf.task_always_eager = old_eager
+    celery_app.conf.task_eager_propagates = old_propagates
+
+
 def _complete_run() -> str:
     run_id = f"prediction-experience-{uuid4()}"
     store = RunStore(DSN)
@@ -183,3 +198,115 @@ def test_validation_report_separates_stability_from_confidence():
     assert report["agent_failure_rate"] == pytest.approx(0.1)
     assert [child["value"] for child in report["children"]] == [0.2, 0.3, -0.1]
     assert "analyst confidence" in report["note"]
+
+
+def test_three_seed_validation_completes_for_fabric_run_with_stored_20_rounds(eager_client):
+    """Regression: fabric เก็บ rounds=20 ใน DB แต่ RunBody จำกัด <= 10 —
+    เดิม POST /runs/{id}/validate จึง 500 ทุกครั้งสำหรับ fabric run"""
+    body = {
+        "engine": "fabric",
+        "subject": f"ตรวจซ้ำความเสถียรผลจำลอง {uuid4().hex[:8]}",
+        "agents": 12,
+    }
+    created = eager_client.post(
+        "/runs/async", json=body, headers={"Idempotency-Key": f"validate-{uuid4().hex[:12]}"}
+    )
+    assert created.status_code == 202
+    run_id = created.json()["run_id"]
+    child_ids: list[str] = []
+    try:
+        parent = eager_client.get(f"/runs/{run_id}.json").json()
+        assert parent["status"] == "complete"
+        queued = eager_client.post(f"/runs/{run_id}/validate")
+        assert queued.status_code == 200, queued.text
+        report = eager_client.get(f"/runs/{run_id}/validation").json()
+        child_ids = [c["run_id"] for c in report["children"]]
+        assert report["completed"] == 3
+        assert report["status"] == "complete"
+        base_seed = int(parent["seed"])
+        assert sorted(c["seed"] for c in report["children"]) == [
+            base_seed + 1,
+            base_seed + 2,
+            base_seed + 3,
+        ]
+        assert all(c["value"] is not None for c in report["children"])
+        assert report["sign_agreement"] is not None
+        # เรียก validate ซ้ำ = คืนรายงานเดิม ไม่ queue ลูกเพิ่ม
+        again = eager_client.post(f"/runs/{run_id}/validate").json()
+        assert {c["run_id"] for c in again["children"]} == set(child_ids)
+    finally:
+        store = RunStore(DSN)
+        for child_id in child_ids:
+            store.delete(child_id)
+        store.delete(run_id)
+
+
+def test_rerun_children_do_not_pollute_three_seed_validation(eager_client):
+    """Regression: retry/rerun ก็ตั้ง parent_run_id เหมือนกัน — เดิมลูก rerun ถูกนับเป็น
+    รายงาน validation ปลอม และทำให้ validate ไม่ queue ลูก 3 seed จริงเลย"""
+    parent_id = _complete_run()
+    store = RunStore(DSN)
+    rerun_child = f"prediction-experience-{uuid4()}"
+    store.create(
+        run_id=rerun_child,
+        engine="fabric",
+        subject="ลูกที่เกิดจาก rerun ไม่ใช่ validation",
+        domain="ทดสอบ",
+        agents=20,
+        rounds=20,
+        seed=18,
+        config={"parent_run_id": parent_id},
+        parent_run_id=parent_id,
+    )
+    store.finish(rerun_child, {"result_kind": "simulation_finding", "cost_usd": 0})
+    child_ids: list[str] = []
+    try:
+        # ลูก rerun ต้องไม่โผล่ในรายงาน validation
+        empty = eager_client.get(f"/runs/{parent_id}/validation").json()
+        assert empty["children"] == []
+        # และต้องไม่ block การ queue ลูก validation จริง 3 ชุด
+        queued = eager_client.post(f"/runs/{parent_id}/validate")
+        assert queued.status_code == 200, queued.text
+        report = eager_client.get(f"/runs/{parent_id}/validation").json()
+        child_ids = [c["run_id"] for c in report["children"]]
+        assert report["completed"] == 3
+        assert rerun_child not in child_ids
+    finally:
+        for child_id in child_ids:
+            store.delete(child_id)
+        store.delete(rerun_child)
+        store.delete(parent_id)
+
+
+def test_validate_requeues_only_missing_seeds_after_partial_enqueue(eager_client):
+    """Regression: ถ้า enqueue ล้มกลางคัน (เช่น worker หลุดหลังลูกแรก) การกด validate ซ้ำ
+    ต้อง queue เฉพาะ seed ที่ขาด ไม่ใช่คืนรายงาน incomplete ค้างตลอดไป"""
+    parent_id = _complete_run()  # seed 17
+    store = RunStore(DSN)
+    partial_child = f"prediction-experience-{uuid4()}"
+    store.create(
+        run_id=partial_child,
+        engine="fabric",
+        subject="ลูก validation ที่รอดจากรอบ enqueue ที่ล้ม",
+        domain="ทดสอบ",
+        agents=20,
+        rounds=20,
+        seed=18,  # base 17 + offset 1
+        config={"parent_run_id": parent_id, "run_kind": "three_seed_validation"},
+        parent_run_id=parent_id,
+    )
+    store.finish(partial_child, {"brief": {"headline_range": [-0.1, 0.1]}, "cost_usd": 0})
+    new_children: list[str] = []
+    try:
+        queued = eager_client.post(f"/runs/{parent_id}/validate")
+        assert queued.status_code == 200, queued.text
+        report = eager_client.get(f"/runs/{parent_id}/validation").json()
+        new_children = [c["run_id"] for c in report["children"] if c["run_id"] != partial_child]
+        assert report["completed"] == 3
+        assert sorted(int(c["seed"]) for c in report["children"]) == [18, 19, 20]
+        assert partial_child in {c["run_id"] for c in report["children"]}
+    finally:
+        for child_id in new_children:
+            store.delete(child_id)
+        store.delete(partial_child)
+        store.delete(parent_id)

@@ -461,17 +461,24 @@ export default function RunDetail({
   const [actionErr, setActionErr] = useState("");
   const [contractBusy, setContractBusy] = useState(false);
   const [runActionBusy, setRunActionBusy] = useState("");
-  const [validationEnabled, setValidationEnabled] = useState(false);
+  const runComplete = runQuery.data?.status === "complete";
+  // ดึงรายงาน validation อัตโนมัติเมื่อ run เสร็จ — ไม่งั้นผู้ใช้ที่เคยรันตรวจซ้ำไว้แล้ว
+  // กลับมาเปิดหน้าใหม่จะเจอกล่องว่างทั้งที่รายงานมีอยู่จริงใน DB
   const validationQuery = useQuery({
     queryKey: ["validation", runId],
     queryFn: () => getValidationTyped(runId),
-    enabled: validationEnabled,
+    enabled: runComplete,
     refetchInterval: (query) => {
       const report = query.state.data;
       return report?.children?.some((child) => child.status === "queued" || child.status === "running") ? 5_000 : false;
     },
   });
   const validation: ValidationReport | null = validationQuery.data ?? null;
+  const validationChildren = validation?.children ?? [];
+  const hasValidation = validationChildren.length > 0;
+  const validationRunning = validationChildren.some(
+    (child) => child.status === "queued" || child.status === "running",
+  );
 
   const stream = useRunEvents(
     runId,
@@ -516,7 +523,6 @@ export default function RunDetail({
     setActionErr("");
     try {
       await validateRun(runId);
-      setValidationEnabled(true);
       await queryClient.invalidateQueries({ queryKey: ["validation", runId] });
     } catch (e: any) {
       setActionErr(String(e.message ?? e));
@@ -971,14 +977,14 @@ export default function RunDetail({
                 </div>
                 <button
                   type="button"
-                  disabled={contractBusy || validationQuery.isFetching}
+                  disabled={contractBusy || validationQuery.isFetching || validationRunning || !runComplete}
                   onClick={startValidation}
                   className="rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
                 >
-                  {validationQuery.isFetching ? t("rd_validating") : t("rd_validate_seeds")}
+                  {contractBusy || validationRunning ? t("rd_validating") : t("rd_validate_seeds")}
                 </button>
               </div>
-              {!validation && !validationQuery.isFetching && (
+              {!hasValidation && !validationQuery.isFetching && !contractBusy && (
                 <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">
                   {t("rd_no_validation")}
                 </p>
@@ -988,14 +994,20 @@ export default function RunDetail({
                   {String((validationQuery.error as Error).message ?? validationQuery.error)}
                 </p>
               )}
-              {validation && (
+              {hasValidation && validation && (
                 <>
-                  <div className="grid gap-2 text-xs sm:grid-cols-4">
-                    <div>{t("rd_sign_agreement")} {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
-                    <div>{t("rd_dispersion")} {validation.between_run_dispersion.toFixed(3)}</div>
-                    <div>{t("rd_failure_rate")} {pct(validation.failure_rate)}</div>
-                    <div>{t("rd_cost")} ${validation.total_cost_usd.toFixed(4)}</div>
-                  </div>
+                  {validationRunning ? (
+                    <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground" role="status">
+                      {t("rd_validation_running")}
+                    </p>
+                  ) : (
+                    <div className="grid gap-2 text-xs sm:grid-cols-4">
+                      <div>{t("rd_sign_agreement")} {validation.sign_agreement == null ? "—" : pct(validation.sign_agreement)}</div>
+                      <div>{t("rd_dispersion")} {validation.between_run_dispersion.toFixed(3)}</div>
+                      <div>{t("rd_failure_rate")} {pct(validation.failure_rate)}</div>
+                      <div>{t("rd_cost")} ${validation.total_cost_usd.toFixed(4)}</div>
+                    </div>
+                  )}
                   <StabilityMatrix report={validation} />
                 </>
               )}

@@ -23,6 +23,13 @@
 
 ## สถานะปัจจุบัน (TL;DR)
 
+- **ใหม่ (18 ก.ค. แก้ 3-seed validation ให้ทำงานจริง):** กล่อง "ความเสถียรของผลจำลอง" ว่างเพราะ
+  บั๊กจริง 4 จุด — ตัวหลักคือ validate 500 เสมอสำหรับ fabric (stored rounds=20 ชน RunBody ≤10),
+  UI ไม่ดึงรายงานเก่า, ลูก retry/rerun ปนรายงาน (แก้ด้วย run_kind tag), partial enqueue ค้างถาวร
+  (แก้ requeue เฉพาะ seed ที่ขาด). พิสูจน์ end-to-end จริงบน Compose: fabric → validate →
+  sign_agreement 1.0 / dispersion 0.0 / $0 และหน้าเว็บแสดงครบ. Backend 416 tests, Vitest 11,
+  Playwright 20 ผ่าน.
+
 - **ใหม่ (18 ก.ค. ADR-0025):** ลบกล่อง Simulation finding ใน Run Detail (เฉพาะ UI — registry
   append-only คงเดิมตามกฎเหล็กข้อ 3) + ลบ Run repair ทั้งฟีเจอร์ (endpoints/engine helpers/UI;
   ไม่มีตาราง DB เฉพาะ) + **แก้บั๊ก Trust Scorecard 2 ตัว**: budget check ที่ pass เสมอ และ

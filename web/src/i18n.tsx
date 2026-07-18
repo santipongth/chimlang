@@ -771,7 +771,14 @@ export const DICT: Record<string, { th: string; en: string }> = {
     en: "Compares fresh runs across seeds; this is not real-world accuracy.",
   },
   rd_validating: { th: "กำลังตรวจสอบ…", en: "Validating…" },
-  rd_no_validation: { th: "ยังไม่มีรายงานการตรวจสอบ (validation) สำหรับการรันนี้", en: "No validation report exists for this run yet." },
+  rd_no_validation: {
+    th: "ยังไม่ได้รันตรวจซ้ำสำหรับการรันนี้ — กดปุ่ม “ตรวจซ้ำ 3 ชุดสุ่ม (seeds)” เพื่อรันเรื่องเดิมซ้ำด้วยชุดสุ่มใหม่ 3 ชุด แล้วดูว่าข้อสรุปยังออกมาทิศทางเดิมหรือไม่",
+    en: "No repeat validation has been run yet — press “Validate 3 seeds” to rerun this subject with three fresh seeds and see whether the conclusion stays stable.",
+  },
+  rd_validation_running: {
+    th: "กำลังรันตรวจซ้ำ 3 ชุดสุ่ม… สถานะรายชุดอยู่ในตารางด้านล่าง ผลสรุปจะแสดงอัตโนมัติเมื่อครบทุกชุด",
+    en: "Running the 3-seed validation… per-seed status is shown below; the summary appears automatically once all seeds finish.",
+  },
   rd_sign_agreement: { th: "ทิศทางตรงกัน (Sign agreement)", en: "Sign agreement" },
   rd_dispersion: { th: "การกระจายระหว่างรัน (Dispersion)", en: "Dispersion" },
   rd_failure_rate: { th: "อัตราล้มเหลว", en: "Failure" },
