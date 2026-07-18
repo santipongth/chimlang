@@ -1031,8 +1031,11 @@ def _run_create_impl(
             )
             rstore.add_posts(run_id, [p.to_dict() for p in result.posts])
             if result.synthesis.get("status") == "analyst_failed":
+                reason = str(result.synthesis.get("failure_reason") or "unknown")
+                attempts = int(result.synthesis.get("analyst_attempts") or 0)
                 raise DebateUnavailableError(
-                    "analyst LLM สรุปผลไม่สำเร็จ — run ถูก fail โดยไม่ใช้ mechanical fallback"
+                    f"analyst LLM สรุปผลไม่สำเร็จ ({reason}, attempts={attempts}) "
+                    "— run ถูก fail โดยไม่ใช้ mechanical fallback"
                 )
             total_cost = (
                 float(debate_adapter._guard.spent_usd)

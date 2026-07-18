@@ -80,6 +80,7 @@ def test_engine_registry_caps():
 @dataclass
 class _R:
     text: str
+    finish_reason: str = ""
 
 
 class _FakeAdapter:
@@ -203,6 +204,59 @@ def test_debate_repairs_valid_json_with_wrong_analyst_schema_once():
     assert result.synthesis["analyst_attempts"] == 2
     assert result.synthesis["parser_mode"] == "contract_retry_parser"
     assert result.synthesis["fallback"] is False
+
+
+def test_debate_recovers_from_truncated_analyst_with_higher_retry_ceiling():
+    # run จริง a00d908f: analyst โดนตัดที่ max_tokens ทั้งสอง attempt → ต้อง retry ด้วยเพดานสูงขึ้น
+    from simulation.debate import (
+        ANALYST_SYNTHESIS_MAX_TOKENS,
+        ANALYST_SYNTHESIS_RETRY_MAX_TOKENS,
+    )
+
+    class TruncatedOnceAnalystAdapter(_FakeAdapter):
+        def __init__(self):
+            super().__init__()
+            self.analyst_max_tokens: list[int] = []
+
+        def chat(self, tier, messages, **kw):
+            response = super().chat(tier, messages, **kw)
+            if "นักวิเคราะห์" in messages[0]["content"]:
+                self.analyst_max_tokens.append(kw.get("max_tokens", 0))
+                if len(self.analyst_max_tokens) == 1:
+                    # JSON ขาดกลางคันเพราะชนเพดาน token
+                    return _R('{"summary": "สรุปที่ถูกตัดกลา', finish_reason="length")
+            return response
+
+    adapter = TruncatedOnceAnalystAdapter()
+    result = run_debate(_personas(), subject="ทดสอบ truncation", rounds=1, seed=3, adapter=adapter)
+
+    assert result.synthesis["summary"] == "สรุปทดสอบ"
+    assert result.synthesis["analyst_attempts"] == 2
+    assert adapter.analyst_max_tokens == [
+        ANALYST_SYNTHESIS_MAX_TOKENS,
+        ANALYST_SYNTHESIS_RETRY_MAX_TOKENS,
+    ]
+
+
+def test_debate_classifies_truncated_analyst_after_both_attempts():
+    class AlwaysTruncatedAnalystAdapter(_FakeAdapter):
+        def chat(self, tier, messages, **kw):
+            response = super().chat(tier, messages, **kw)
+            if "นักวิเคราะห์" in messages[0]["content"]:
+                return _R('{"summary": "สรุปที่ถูกตัดกลา', finish_reason="length")
+            return response
+
+    result = run_debate(
+        _personas(),
+        subject="ทดสอบ truncation ซ้ำ",
+        rounds=1,
+        seed=3,
+        adapter=AlwaysTruncatedAnalystAdapter(),
+    )
+
+    assert result.synthesis["status"] == "analyst_failed"
+    assert result.synthesis["failure_reason"] == "llm_truncated"
+    assert result.synthesis["analyst_attempts"] == 2
 
 
 def test_debate_rejects_wrong_analyst_schema_after_bounded_retry():

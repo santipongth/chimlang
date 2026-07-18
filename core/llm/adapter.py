@@ -35,6 +35,7 @@ class LLMResult:
     output_tokens: int
     cost_usd: float
     structured_mode: str = "none"
+    finish_reason: str = ""  # "length" = โดนตัดที่ max_tokens — caller ใช้แยก truncation จาก schema พัง
 
 
 @dataclass(frozen=True)
@@ -222,6 +223,7 @@ class LLMAdapter:
             output_tokens=output_tokens,
             cost_usd=cost_usd,
             structured_mode=structured_mode,
+            finish_reason=str(getattr(response.choices[0], "finish_reason", "") or ""),
         )
 
     def embed(self, texts: list[str]) -> EmbeddingResult:

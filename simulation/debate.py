@@ -100,6 +100,12 @@ class _SynthesisContract(BaseModel):
 
 SYNTHESIS_SCHEMA = _SynthesisContract.model_json_schema()
 
+# วัดจริง 18 ก.ค. 2026 (run a00d908f): synthesis ไทยครบ contract ที่ 40 agents ใช้เกิน 900 tokens
+# ทั้งสอง attempt โดนตัดที่เพดานพอดี (output = max_tokens, finish_reason=length) → run fail ทั้งที่
+# โพสต์สำเร็จ 120/120 — เพดานต้องเผื่อพอ และ retry ต้องได้เพดานสูงกว่าเดิม
+ANALYST_SYNTHESIS_MAX_TOKENS = 2000
+ANALYST_SYNTHESIS_RETRY_MAX_TOKENS = 3000
+
 
 class DebateUnavailableError(RuntimeError):
     """Raised when no agent response is usable, so no prediction can be trusted."""
@@ -179,7 +185,14 @@ def make_debate_adapter(
     loads = [
         TierLoad(settings.llm_model_crowd, agents * rounds, 900, 160),
         # Reserve one bounded contract-repair retry for the Executive Readout.
-        TierLoad(settings.llm_model_analyst, 2 + max(0, reflection_calls), 1500, 800),
+        # Input จริงโตตาม digest รอบสุดท้าย (วัดจริง ~7,000 tokens ที่ 40 agents) และ output
+        # ต้องเผื่อถึงเพดาน retry — ประเมินต่ำกว่าจริงทำให้ BudgetGuard เช็คงบไม่ตรงความเป็นจริง
+        TierLoad(
+            settings.llm_model_analyst,
+            2 + max(0, reflection_calls),
+            9_000,
+            ANALYST_SYNTHESIS_RETRY_MAX_TOKENS,
+        ),
     ]
     if include_embedding and settings.llm_model_embedding.strip():
         # One bounded document batch plus one query. Conservative Thai char/token estimate.
@@ -622,6 +635,7 @@ def run_debate(
         compact_verifier_report(verifier), ensure_ascii=False, separators=(",", ":")
     )
     analyst_attempts = 0
+    result = None
     try:
         structured_kwargs = (
             {"response_schema": SYNTHESIS_SCHEMA, "schema_name": "debate_synthesis"}
@@ -654,7 +668,7 @@ def run_debate(
         result = adapter.chat(
             ModelTier.ANALYST,
             analyst_messages,
-            max_tokens=900,
+            max_tokens=ANALYST_SYNTHESIS_MAX_TOKENS,
             temperature=0,
             seed=seed,
             **structured_kwargs,
@@ -665,21 +679,27 @@ def run_debate(
             ).model_dump()
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             # Some provider/model combinations acknowledge json_schema but return a nested
-            # fragment. Retry once without provider-side structured output, then apply the
-            # exact same local contract. This remains fail-closed and BudgetGuard-metered.
+            # fragment, or the response hits max_tokens and truncates mid-object. Retry once
+            # without provider-side structured output and with a higher token ceiling, then
+            # apply the exact same local contract. Fail-closed and BudgetGuard-metered.
             analyst_attempts = 2
+            truncated = getattr(result, "finish_reason", "") == "length"
+            retry_note = (
+                " คำตอบก่อนหน้าถูกตัดกลางคันเพราะยาวเกิน กรุณาตอบกระชับลงและส่ง JSON ให้จบสมบูรณ์"
+                if truncated
+                else " คำตอบก่อนหน้าไม่ครบ contract กรุณาส่ง object หลักให้ครบทุก field"
+            )
             retry_messages = [
                 {
                     "role": "system",
-                    "content": analyst_messages[0]["content"]
-                    + " คำตอบก่อนหน้าไม่ครบ contract กรุณาส่ง object หลักให้ครบทุก field",
+                    "content": analyst_messages[0]["content"] + retry_note,
                 },
                 analyst_messages[1],
             ]
             result = adapter.chat(
                 ModelTier.ANALYST,
                 retry_messages,
-                max_tokens=900,
+                max_tokens=ANALYST_SYNTHESIS_RETRY_MAX_TOKENS,
                 temperature=0,
                 seed=seed + 1,
             )
@@ -715,6 +735,13 @@ def run_debate(
     except Exception as exc:
         # Production runs must not substitute a deterministic summary for a failed analyst.
         # Return the posts/metrics so the caller can persist audit evidence, then fail the run.
+        failure_reason = _failure_reason(exc)
+        if (
+            failure_reason in {"json_parse_error", "schema_missing_field", "schema_value_error"}
+            and getattr(result, "finish_reason", "") == "length"
+        ):
+            # คำตอบชน max_tokens แล้วขาดกลางคัน — คนละสาเหตุกับ model ส่ง schema ผิด
+            failure_reason = "llm_truncated"
         synthesis = {
             "status": "analyst_failed",
             "summary": "",
@@ -724,7 +751,7 @@ def run_debate(
             "risks": ["analyst model ไม่พร้อม; ไม่มีการสร้าง mechanical fallback"],
             "fallback": False,
             "parser_mode": "analyst_failed",
-            "failure_reason": _failure_reason(exc),
+            "failure_reason": failure_reason,
             "analyst_attempts": analyst_attempts,
         }
         synthesis["judge"] = {
