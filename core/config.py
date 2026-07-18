@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # โต๊ะข่าวกลางดึงข่าวให้ agent ไม่ให้ agent แตะเน็ตเอง — ไม่มี key = skip พร้อมบันทึก evidence
     tavily_api_key: str = ""
     news_cache_ttl_hours: int = 6  # cache ผลดึงข่าวต่อ (provider, คำค้น) — ปรับจาก Settings ได้
+    tavily_max_results: int = 3  # จำนวนผลลัพธ์ Tavily ต่อคำค้น — ปรับจาก Settings ได้
 
 
 def get_settings(**overrides) -> Settings:

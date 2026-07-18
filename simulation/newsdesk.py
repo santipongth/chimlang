@@ -233,18 +233,21 @@ def effective_news_config(settings) -> str:
     return key
 
 
-def effective_news_tuning(settings) -> int:
-    """cache_ttl_hours ที่ใช้จริง — ค่าจาก Settings (DB, 0 = default) ทับ .env"""
+def effective_news_tuning(settings) -> tuple[int, int]:
+    """(cache_ttl_hours, tavily_max_results) ที่ใช้จริง — ค่าจาก Settings (DB, 0 = default) ทับ .env"""
     ttl = int(settings.news_cache_ttl_hours)
+    max_results = int(settings.tavily_max_results)
     try:
         from core.appsettings import get_app_settings
 
         data = get_app_settings(settings.postgres_url)
         if int(data.get("news_cache_ttl_hours") or 0) > 0:
             ttl = int(data["news_cache_ttl_hours"])
+        if int(data.get("tavily_max_results") or 0) > 0:
+            max_results = int(data["tavily_max_results"])
     except Exception:
         pass  # fail-safe: DB พัง = ใช้ .env ต่อ
-    return max(1, ttl)
+    return max(1, ttl), max(1, max_results)
 
 
 def gather(
@@ -264,7 +267,7 @@ def gather(
         raise ValueError("PII detector ถูกปิด — ปฏิเสธการดึงข่าว (GOV-01 fail-closed)")
     detector = PIIDetector(load_allowlist())
     tavily_key = effective_news_config(settings)
-    ttl_hours = effective_news_tuning(settings)
+    ttl_hours, max_results = effective_news_tuning(settings)
     queries = list(queries or [])[:MAX_SEARCH_QUERIES_PER_RUN]
 
     raw: list[dict] = []
@@ -277,7 +280,7 @@ def gather(
                     provider="search",
                     query=q,
                     url="https://api.tavily.com/search",
-                    fetcher=lambda q=q: _tavily_search(q, tavily_key),
+                    fetcher=lambda q=q: _tavily_search(q, tavily_key, max_results=max_results),
                     detector=detector,
                     ttl_hours=ttl_hours,
                 )

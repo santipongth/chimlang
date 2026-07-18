@@ -401,6 +401,9 @@ export const DICT: Record<string, { th: string; en: string }> = {
   set_news_ttl: { th: "เก็บผลดึงข่าวไว้ใช้ซ้ำ (cache) นานกี่ชั่วโมง", en: "News fetch cache (hours)" },
   set_news_ttl_note: { th: "0 = ใช้ค่ามาตรฐาน 6 ชั่วโมง — ภายในช่วงเวลานี้ คำค้นเดิมจะใช้ผลจากที่เก็บไว้ (cache) แทนการดึงใหม่", en: "0 = the 6-hour default — within this window, identical queries reuse the cached results instead of refetching." },
   set_news_hours_unit: { th: "ชม.", en: "h" },
+  set_news_max_results: { th: "จำนวนผลลัพธ์ต่อคำค้น (Tavily)", en: "Results per query (Tavily)" },
+  set_news_max_results_note: { th: "0 = ใช้ค่ามาตรฐาน 3 ผลลัพธ์ — จำนวนข่าว/ข้อมูลที่ดึงต่อหนึ่งคำค้น (ยิ่งมากยิ่งครอบคลุมแต่กินโควตารวม 30 ชิ้น/รอบเร็วขึ้น)", en: "0 = the default of 3 — how many results Tavily returns per query (higher covers more but fills the 30-item-per-run quota faster)." },
+  set_news_results_unit: { th: "ผลลัพธ์", en: "results" },
   set_tavily_none: {
     th: "ยังไม่ตั้งกุญแจ — โหมดข่าวสดจะไม่มีข่าวเข้า (บันทึกเป็นหลักฐานว่าข้ามการค้น) — สมัครฟรีที่ tavily.com เพื่อเปิดการค้นข่าวตรงหัวข้อ",
     en: "Not set — live news will fetch nothing (recorded as skipped evidence). Get a free key at tavily.com to enable topic-targeted search.",

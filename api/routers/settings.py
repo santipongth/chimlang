@@ -51,9 +51,10 @@ def settings_json(principal: Principal = Depends(get_principal)) -> dict:
     from simulation.newsdesk import effective_news_config, effective_news_tuning
 
     effective_tavily = effective_news_config(settings)
-    effective_ttl = effective_news_tuning(settings)
+    effective_ttl, effective_max_results = effective_news_tuning(settings)
     news_config = {
         "cache_ttl_hours": effective_ttl,
+        "tavily_max_results": effective_max_results,
         "tavily_present": bool(effective_tavily),
         "tavily_masked": mask(effective_tavily) if effective_tavily else "",
         "tavily_source": "db"

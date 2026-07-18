@@ -36,8 +36,9 @@ DEFAULTS: dict = {
     "monthly_budget_usd_cap": 0.0,
     # News Desk (P7/ADR-0026: Tavily อย่างเดียว) — Tavily key เก็บ ciphertext (ADR-0007)
     "tavily_api_key_enc": "",
-    # 0 = ใช้ค่า .env (default 6 ชม.)
+    # 0 = ใช้ค่า .env (default 6 ชม. / 3 ผลลัพธ์)
     "news_cache_ttl_hours": 0,
+    "tavily_max_results": 0,
 }
 _ALLOWED_KEYS = set(DEFAULTS)
 # key ที่ห้ามแก้ผ่าน PUT /settings.json ปกติ (มี endpoint แยกที่จัดการเข้ารหัส/มาสก์)
@@ -78,6 +79,10 @@ def put_app_settings(dsn: str, patch: dict) -> dict:
         value = int(patch["news_cache_ttl_hours"])
         if value != 0 and not (1 <= value <= 168):
             raise ValueError("news_cache_ttl_hours ต้องเป็น 0 (ใช้ค่า default) หรืออยู่ใน 1-168")
+    if "tavily_max_results" in patch:
+        value = int(patch["tavily_max_results"])
+        if value != 0 and not (1 <= value <= 20):
+            raise ValueError("tavily_max_results ต้องเป็น 0 (ใช้ค่า default) หรืออยู่ใน 1-20")
     if "llm_synthesis_max_tokens" in patch:
         value = int(patch["llm_synthesis_max_tokens"])
         if value != 0 and not (500 <= value <= 16000):

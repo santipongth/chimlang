@@ -474,12 +474,17 @@ def test_news_tuning_settings_validation_and_effective_values():
     settings = get_settings()
     snapshot = get_app_settings(DSN)
     try:
-        put_app_settings(DSN, {"news_cache_ttl_hours": 2})
-        assert effective_news_tuning(settings) == 2
-        put_app_settings(DSN, {"news_cache_ttl_hours": 0})
-        assert effective_news_tuning(settings) == settings.news_cache_ttl_hours
+        put_app_settings(DSN, {"news_cache_ttl_hours": 2, "tavily_max_results": 7})
+        assert effective_news_tuning(settings) == (2, 7)
+        put_app_settings(DSN, {"news_cache_ttl_hours": 0, "tavily_max_results": 0})
+        assert effective_news_tuning(settings) == (
+            settings.news_cache_ttl_hours,
+            settings.tavily_max_results,
+        )
         with pytest.raises(ValueError):
             put_app_settings(DSN, {"news_cache_ttl_hours": 999})
+        with pytest.raises(ValueError):
+            put_app_settings(DSN, {"tavily_max_results": 99})
         # key ของ RSS ที่ถูกถอด (ADR-0026) ต้องถูกปฏิเสธเป็น unknown key
         with pytest.raises(ValueError):
             put_app_settings(DSN, {"news_max_age_days": 3})
@@ -488,5 +493,8 @@ def test_news_tuning_settings_validation_and_effective_values():
     finally:
         put_app_settings(
             DSN,
-            {"news_cache_ttl_hours": snapshot.get("news_cache_ttl_hours", 0)},
+            {
+                "news_cache_ttl_hours": snapshot.get("news_cache_ttl_hours", 0),
+                "tavily_max_results": snapshot.get("tavily_max_results", 0),
+            },
         )

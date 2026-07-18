@@ -492,6 +492,23 @@ export default function Settings() {
                   {t("set_news_ttl_note")} · {t("set_news_active")}: {data.news.cache_ttl_hours ?? 6} {t("set_news_hours_unit")}
                 </span>
               </label>
+              <label className="text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("set_news_max_results")}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={data.tavily_max_results ?? 0}
+                  onChange={(e) => setData({ ...data, tavily_max_results: parseInt(e.target.value) || 0 })}
+                  onBlur={() => patch({ tavily_max_results: data.tavily_max_results ?? 0 } as any)}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 font-mono text-xs"
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {t("set_news_max_results_note")} · {t("set_news_active")}: {data.news.tavily_max_results ?? 3} {t("set_news_results_unit")}
+                </span>
+              </label>
             </div>
             <div className="rounded-xl border border-border bg-background p-3 space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

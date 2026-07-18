@@ -569,8 +569,10 @@ export interface AppSettings {
     env_monthly_cap: number;
   };
   news_cache_ttl_hours?: number;
+  tavily_max_results?: number;
   news: {
     cache_ttl_hours?: number;
+    tavily_max_results?: number;
     tavily_present: boolean;
     tavily_masked: string;
     tavily_source: "db" | "env" | "none";
